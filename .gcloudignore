@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.venv
+venv
+__pycache__
+.pytest_cache
+.terraform
+*.tfstate
+*.tfstate.backup
+tfplan
+dist
+build
+*.egg-info
