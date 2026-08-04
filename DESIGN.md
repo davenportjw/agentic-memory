@@ -89,6 +89,16 @@ All user interfaces MUST strictly adhere to the light-mode color tokens defined 
   1. `.app-bar-content` in `index.html` and `how-it-works.html` contains `<nav class="app-nav">` inside `.app-title-group`.
   2. Both `index.html` and `how-it-works.html` contain `<main class="app-body-layout">` with `<aside class="left-nav">` and `<section class="single-pane-container">`.
   3. Clicking or loading any tab never produces broken anchors or missing target IDs.
+  4. Modals use native `<dialog id="githubModal">` with Top Layer semantics, and multi-stage architecture diagrams use responsive 4-column `.arch-pipeline-grid` layout.
+
+### 3.1.4 Native HTML5 `<dialog>` Modal Architecture Standard (Zero Bottom-of-Page Regression)
+- **Problem statement**: When modals or popouts (such as the `#githubModal` Repository & QR Code popout) are implemented using generic `<div class="modal-backdrop">` wrappers and CSS `position: fixed; opacity: 0; visibility: hidden;` hacks, browser layout engines or CSS cascade fallbacks can render the modal inline at the bottom of the document flow. Furthermore, flex wrapping in modal headers can push close buttons (`✕`) onto an awkward second line.
+- **Required DOM & Native API Structure**:
+  1. All modal popouts MUST use native HTML5 `<dialog>` elements (e.g., `<dialog id="githubModal" class="github-modal-dialog">`).
+  2. Modals MUST be invoked via `dialog.showModal()` and dismissed via `dialog.close()` (with fallback attributes for older environments) to ensure rendering in the browser's **Top Layer** above all DOM elements and `z-index` stacks.
+  3. Modals MUST style the native backdrop using `::backdrop` with glassmorphic blur (`backdrop-filter: blur(12px)`).
+  4. Modal headers (`.modal-header`) MUST specify `display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 16px;` to guarantee the title group and close button never wrap.
+- **Why this works**: By default, `<dialog>` elements have `display: none` in the browser user-agent stylesheet when closed, making it impossible for them to appear inline at the bottom of the page. When `.showModal()` is called, they render in the Top Layer with native focus traps and Escape key dismissal.
 
 ### 3.2 Split Navigation / Stage Progression Layout (`.app-body-layout`)
 The control center follows a responsive split-pane architecture:
@@ -132,6 +142,15 @@ The control center follows a responsive split-pane architecture:
 - **Main Single-Pane Container (`section.single-pane-container`)**:
   - Contains all 5 stage cards arranged vertically with generous gap spacing (`32px`).
   - Employs `scroll-behavior: smooth` so clicking left navigation items smoothly scrolls to the target stage.
+
+### 3.3 Architecture Lifecycle Slide & Pipeline Layout Standard (`.arch-pipeline-grid`)
+- **Problem statement**: Multi-stage architectural flow slides (such as the ADK 2.0 Lifecycle Data Flow diagram in `how-it-works.html`) must present complex end-to-end data flows without horizontal crowding, text squishing, or lopsided arrow wrapping. Placing multiple stage boxes and standalone arrow elements in a single horizontal flexbox (`.arch-pipeline-container`) causes cards to compress into unreadable vertical columns on standard viewports.
+- **Required Layout & Component Structure**:
+  1. **Responsive 4-Column CSS Grid (`.arch-pipeline-grid`)**: The architectural pipeline MUST use `display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;`, allocating equal 25% columns to each stage card (`STEP 1 • WAKING LIFE`, `STEP 2 • REM SLEEP`, `STEP 3 • CONSOLIDATION`, `STEP 4 • AGENT RECALL`).
+  2. **Integrated Flow Transition Tags (`.arch-stage-flow-tag`)**: Instead of standalone arrow sibling elements between columns, flow transitions (`→ Nightly SQL`, `→ ACID Upsert`, `→ < 10ms Cache`, `✓ Live SLA`) MUST be rendered inside each card's top header row (`.arch-stage-top`), preserving grid column widths.
+  3. **Stage Accent Borders**: Each `.arch-stage-box` MUST incorporate a 4px top accent indicator (`::before`) colored by stage role (Blue for BigQuery Episodic Traces, Indigo for Vertex AI REM Synthesis, Emerald for Spanner ACID Crystalline Memory, and Primary Blue for Sub-10ms Cache SLA).
+  4. **Responsive Collapse**: At viewports `max-width: 1050px`, the grid MUST collapse to `repeat(2, 1fr)`, and at `max-width: 640px` to `1fr`.
+- **Why this works**: CSS Grid gives every architectural stage a clean, predictable card width, while embedded flow tags eliminate visual clutter and ensure executive-grade readability across all screen sizes.
 
 ---
 

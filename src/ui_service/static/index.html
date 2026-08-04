@@ -572,7 +572,7 @@ transaction.insert_or_update(
   </main>
 
   <!-- GitHub Repository & QR Code Popout Modal -->
-  <div id="githubModal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-labelledby="githubModalTitle" aria-modal="true">
+  <dialog id="githubModal" class="github-modal-dialog" aria-labelledby="githubModalTitle">
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title-group">
@@ -612,7 +612,7 @@ transaction.insert_or_update(
         <button type="button" class="btn btn-outlined" id="githubModalDismissBtn">Close</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <script src="app.js"></script>
 </body>

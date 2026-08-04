@@ -162,7 +162,7 @@ def test_ui_service_topbar_and_layout_integrity():
         session_idx = html.find('class="session-info"')
         assert title_idx < nav_idx < session_idx, f"Layout order violated on {path}"
         assert 'id="githubPopoutBtn"' in html, f"Missing githubPopoutBtn on {path}"
-        assert 'id="githubModal"' in html, f"Missing githubModal on {path}"
+        assert '<dialog id="githubModal"' in html, f"Missing native <dialog> githubModal on {path}"
 
         # 2. Verify page-to-page structural consistency (.app-body-layout + .left-nav + .single-pane-container)
         assert 'class="app-body-layout"' in html, f"Missing app-body-layout on {path}"
@@ -173,6 +173,7 @@ def test_ui_service_topbar_and_layout_integrity():
     how_html = client.get("/how-it-works.html").text
     for sec in ("section-hero", "section-flowchart", "section-philosophy", "section-sandbox", "section-code"):
         assert f'id="{sec}"' in how_html, f"Missing section id {sec} in how-it-works.html"
+    assert "arch-pipeline-grid" in how_html, "Missing 4-column arch-pipeline-grid in how-it-works.html per Section 3.3"
 
 
 def test_ui_service_auth_endpoints_and_login_protection():

@@ -35,17 +35,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function openGithubModal() {
     if (githubModal) {
-      githubModal.classList.add("open");
+      if (typeof githubModal.showModal === "function") {
+        githubModal.showModal();
+      } else {
+        githubModal.setAttribute("open", "");
+      }
       githubModal.setAttribute("aria-hidden", "false");
-      document.body.style.overflow = "hidden";
     }
   }
 
   function closeGithubModal() {
     if (githubModal) {
-      githubModal.classList.remove("open");
+      if (typeof githubModal.close === "function" && githubModal.open) {
+        githubModal.close();
+      } else {
+        githubModal.removeAttribute("open");
+      }
       githubModal.setAttribute("aria-hidden", "true");
-      document.body.style.overflow = "";
     }
   }
 
@@ -60,14 +66,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (githubModal) {
     githubModal.addEventListener("click", (e) => {
-      if (e.target === githubModal) {
+      const rect = githubModal.getBoundingClientRect();
+      const isInDialog = (
+        rect.top <= e.clientY &&
+        e.clientY <= rect.top + rect.height &&
+        rect.left <= e.clientX &&
+        e.clientX <= rect.left + rect.width
+      );
+      if (!isInDialog && e.target === githubModal) {
         closeGithubModal();
       }
     });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && githubModal.classList.contains("open")) {
-        closeGithubModal();
-      }
+    githubModal.addEventListener("close", () => {
+      githubModal.setAttribute("aria-hidden", "true");
     });
   }
 

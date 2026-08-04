@@ -155,12 +155,15 @@
             </div>
           </div>
 
-          <!-- Interactive 4-Stage Architectural Pipeline Flow -->
-          <div class="arch-pipeline-container" role="tablist" aria-label="Architecture Lifecycle Stages">
+          <!-- Interactive 4-Stage Architectural Pipeline Flow Grid -->
+          <div class="arch-pipeline-grid arch-pipeline-container" role="tablist" aria-label="Architecture Lifecycle Stages">
             
             <!-- Stage 1: Store Telemetry -->
             <button type="button" class="arch-stage-box active" data-arch-step="1" role="tab" aria-selected="true" aria-controls="archStepDetail1">
-              <div class="arch-stage-badge">STEP 1 • WAKING LIFE</div>
+              <div class="arch-stage-top">
+                <span class="arch-stage-badge">STEP 1 • WAKING LIFE</span>
+                <span class="arch-stage-flow-tag">→ Nightly SQL</span>
+              </div>
               <div class="arch-stage-icon">📊</div>
               <div class="arch-stage-title">Context Telemetry Stored</div>
               <div class="arch-stage-tech">Google BigQuery (agent_logs)</div>
@@ -170,17 +173,12 @@
               </div>
             </button>
 
-            <!-- Arrow 1 -> 2 -->
-            <div class="arch-pipeline-arrow" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
-              </svg>
-              <span class="arrow-label">Nightly SQL Query</span>
-            </div>
-
             <!-- Stage 2: Dreams Run -->
             <button type="button" class="arch-stage-box" data-arch-step="2" role="tab" aria-selected="false" aria-controls="archStepDetail2">
-              <div class="arch-stage-badge">STEP 2 • REM SLEEP</div>
+              <div class="arch-stage-top">
+                <span class="arch-stage-badge">STEP 2 • REM SLEEP</span>
+                <span class="arch-stage-flow-tag">→ ACID Upsert</span>
+              </div>
               <div class="arch-stage-icon">🧠</div>
               <div class="arch-stage-title">Dreams Run &amp; Synthesize</div>
               <div class="arch-stage-tech">Vertex AI (ML.GENERATE_TEXT)</div>
@@ -190,17 +188,12 @@
               </div>
             </button>
 
-            <!-- Arrow 2 -> 3 -->
-            <div class="arch-pipeline-arrow" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
-              </svg>
-              <span class="arrow-label">ACID Upsert</span>
-            </div>
-
             <!-- Stage 3: Crystalline Memory Saved -->
             <button type="button" class="arch-stage-box" data-arch-step="3" role="tab" aria-selected="false" aria-controls="archStepDetail3">
-              <div class="arch-stage-badge">STEP 3 • CONSOLIDATION</div>
+              <div class="arch-stage-top">
+                <span class="arch-stage-badge">STEP 3 • CONSOLIDATION</span>
+                <span class="arch-stage-flow-tag">→ &lt; 10ms Fast-Path</span>
+              </div>
               <div class="arch-stage-icon">💎</div>
               <div class="arch-stage-title">Crystalline Memory Saved</div>
               <div class="arch-stage-tech">Google Cloud Spanner (UserPreferences)</div>
@@ -210,17 +203,12 @@
               </div>
             </button>
 
-            <!-- Arrow 3 -> 4 -->
-            <div class="arch-pipeline-arrow" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
-              </svg>
-              <span class="arrow-label">&lt; 10ms Fast-Path</span>
-            </div>
-
             <!-- Stage 4: Agent Retrieves -->
             <button type="button" class="arch-stage-box" data-arch-step="4" role="tab" aria-selected="false" aria-controls="archStepDetail4">
-              <div class="arch-stage-badge">STEP 4 • AGENT RECALL</div>
+              <div class="arch-stage-top">
+                <span class="arch-stage-badge">STEP 4 • AGENT RECALL</span>
+                <span class="arch-stage-flow-tag flow-ready">✓ Live SLA</span>
+              </div>
               <div class="arch-stage-icon">⚡</div>
               <div class="arch-stage-title">Agent Fast Retrieval</div>
               <div class="arch-stage-tech">PreferenceAgent (Spanner Intercept)</div>
@@ -800,7 +788,7 @@ OPTIONS (distance_type='COSINE');
   </main>
 
   <!-- GitHub Repository & QR Code Popout Modal -->
-  <div id="githubModal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-labelledby="githubModalTitle" aria-modal="true">
+  <dialog id="githubModal" class="github-modal-dialog" aria-labelledby="githubModalTitle">
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title-group">
@@ -840,7 +828,7 @@ OPTIONS (distance_type='COSINE');
         <button type="button" class="btn btn-outlined" id="githubModalDismissBtn">Close</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <script src="how-it-works.js"></script>
 </body>
