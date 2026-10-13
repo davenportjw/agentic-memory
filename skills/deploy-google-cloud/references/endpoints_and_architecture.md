@@ -69,7 +69,7 @@ All endpoints return JSON and can be tested via `curl`, Python, or the automated
   ```
 
 ### `/api/harvest` (`POST`)
-- **Description**: Triggers asynchronous REM Memory Consolidation ("Dream Harvest"). Summarizes BigQuery session logs using Vertex AI Gemini (`gemini-3.5-flash-lite`) and synchronizes structured preferences into Cloud Spanner.
+- **Description**: Triggers asynchronous REM Memory Consolidation ("Dream Harvest"). Summarizes BigQuery session logs using Vertex AI Gemini (`gemini-3.8-flash`) and synchronizes structured preferences into Cloud Spanner.
 - **Request Payload**:
   ```json
   {

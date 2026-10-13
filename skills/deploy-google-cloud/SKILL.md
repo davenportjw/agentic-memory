@@ -138,7 +138,7 @@ You can override deployment parameters using shell environment variables before 
 ```bash
 export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
 export GOOGLE_CLOUD_REGION="us-central1"
-export MODEL_NAME="gemini-3.5-flash-lite"
+export MODEL_NAME="gemini-3.8-flash"
 export BQ_DATASET_ID="adk_agent_telemetry"
 export SPANNER_INSTANCE_ID="adk-spanner-instance"
 export SPANNER_DATABASE_ID="agent_memory_db"

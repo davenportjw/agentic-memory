@@ -8,7 +8,7 @@ export GOOGLE_CLOUD_PROJECT="my-custom-gcp-project"
 export GOOGLE_CLOUD_REGION="us-central1"
 
 # 2. Configure AI Model & Infrastructure IDs
-export MODEL_NAME="gemini-3.5-flash-lite"
+export MODEL_NAME="gemini-3.8-flash"
 export BQ_DATASET_ID="adk_agent_telemetry"
 export BQ_TABLE_ID="agent_logs"
 export SPANNER_INSTANCE_ID="adk-spanner-instance"

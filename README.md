@@ -106,14 +106,14 @@ When interacting with `InterviewAgent` or `PreferenceAgent`, all prompts, respon
 {
   "user_id": "demo-user-42",
   "session_id": "session-ui-001",
-  "prompt": "My favorite programming language is Python and my job role is Principal Cloud Architect.\n\nHere is a snippet of my preferred Python agent code:\n```python\nfrom google.adk.agents import Agent\n\nagent = Agent(name=\"DemoAgent\", model=\"gemini-3.5-flash-lite\")\n```"
+  "prompt": "My favorite programming language is Python and my job role is Principal Cloud Architect.\n\nHere is a snippet of my preferred Python agent code:\n```python\nfrom google.adk.agents import Agent\n\nagent = Agent(name=\"DemoAgent\", model=\"gemini-3.8-flash\")\n```"
 }
 ```
 
 **Agent Response Payload (`AGENT_RESPONSE`):**
 ```json
 {
-  "response": "Hello Alex! I've recorded **Python** as your favorite programming language and **Principal Cloud Architect** as your job role.\n\nYour Python agent configuration snippet:\n```python\nfrom google.adk.agents import Agent\nagent = Agent(name=\"DemoAgent\", model=\"gemini-3.5-flash-lite\")\n```\nWill be logged to BigQuery and crystallized into Spanner during REM synthesis.",
+  "response": "Hello Alex! I've recorded **Python** as your favorite programming language and **Principal Cloud Architect** as your job role.\n\nYour Python agent configuration snippet:\n```python\nfrom google.adk.agents import Agent\nagent = Agent(name=\"DemoAgent\", model=\"gemini-3.8-flash\")\n```\nWill be logged to BigQuery and crystallized into Spanner during REM synthesis.",
   "user_id": "demo-user-42",
   "session_id": "session-ui-001",
   "agent_name": "InterviewAgent",
