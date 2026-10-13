@@ -171,11 +171,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const loadPresetDockerBtn = document.getElementById("loadPresetDockerBtn");
   const loadPresetTerraformBtn = document.getElementById("loadPresetTerraformBtn");
 
+  function setActivePreset(activeBtn) {
+    [loadPresetPythonBtn, loadPresetDockerBtn, loadPresetTerraformBtn].forEach((btn) => {
+      if (btn) btn.classList.remove("active");
+    });
+    if (activeBtn) activeBtn.classList.add("active");
+  }
+
   if (loadPresetPythonBtn) {
     loadPresetPythonBtn.addEventListener("click", () => {
       byotContent.value = PRESETS.python;
       byotSessionId.value = "byot-python-uv-001";
       byotFormat.value = "json";
+      setActivePreset(loadPresetPythonBtn);
     });
   }
   if (loadPresetDockerBtn) {
@@ -183,6 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
       byotContent.value = PRESETS.docker;
       byotSessionId.value = "byot-docker-guardrail-002";
       byotFormat.value = "json";
+      setActivePreset(loadPresetDockerBtn);
     });
   }
   if (loadPresetTerraformBtn) {
@@ -190,13 +199,22 @@ document.addEventListener("DOMContentLoaded", () => {
       byotContent.value = PRESETS.terraform;
       byotSessionId.value = "byot-terraform-policy-003";
       byotFormat.value = "json";
+      setActivePreset(loadPresetTerraformBtn);
     });
   }
 
   if (byotClearBtn) {
     byotClearBtn.addEventListener("click", () => {
       byotContent.value = "";
+      setActivePreset(null);
+      if (byotFormat) byotFormat.value = "auto";
       if (byotStatusText) byotStatusText.style.display = "none";
+    });
+  }
+
+  if (byotContent) {
+    byotContent.addEventListener("input", () => {
+      setActivePreset(null);
     });
   }
 
@@ -208,6 +226,11 @@ document.addEventListener("DOMContentLoaded", () => {
       reader.onload = (evt) => {
         byotContent.value = evt.target.result;
         byotSessionId.value = "byot-" + file.name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+        if (byotFormat) {
+          if (file.name.endsWith(".jsonl")) byotFormat.value = "jsonl";
+          else if (file.name.endsWith(".json")) byotFormat.value = "json";
+          else byotFormat.value = "auto";
+        }
       };
       reader.readAsText(file);
     });
