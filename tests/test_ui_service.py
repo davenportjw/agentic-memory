@@ -164,6 +164,8 @@ def test_ui_service_topbar_and_layout_integrity():
         assert title_idx < nav_idx < session_idx, f"Layout order violated on {path}"
         assert 'id="githubPopoutBtn"' in html, f"Missing githubPopoutBtn on {path}"
         assert '<dialog id="githubModal"' in html, f"Missing native <dialog> githubModal on {path}"
+        assert 'https://github.com/davenportjw/agentic-memory' in html, f"Missing agentic-memory GitHub URL on {path}"
+        assert 'https://github.com/davenportjw/electric-sheep' not in html, f"Stale electric-sheep link found on {path}"
         assert 'class="signout-btn"' in html, f"Missing signout-btn on {path}"
         assert 'id="sessionInfoBtn"' in html, f"Missing sessionInfoBtn on {path}"
         assert 'id="sessionInfoTooltip"' in html, f"Missing sessionInfoTooltip on {path}"
@@ -205,6 +207,8 @@ def test_ui_service_auth_endpoints_and_login_protection():
     assert login_res.status_code == 200
     assert "Control Center Login" in login_res.text
     assert '<strong id="allowed-domain-text">' in login_res.text
+    assert 'https://github.com/davenportjw/agentic-memory' in login_res.text
+    assert 'https://github.com/davenportjw/electric-sheep' not in login_res.text
 
     # 2. Auth config endpoint should return allowlist and Firebase settings
     cfg_res = client.get("/api/auth/config")
@@ -280,6 +284,52 @@ def test_ui_service_byot_and_cognitive_sleep_features():
 
     how_js = client.get("/how-it-works.js").text
     assert "initMathVisualizer" in how_js
+
+
+def test_ui_service_byot_quick_sample_and_antigravity_ingest():
+    """Verify Quick Sample JSON array and Antigravity transcript ingestion into BigQuery."""
+    client = TestClient(api)
+    user_id = "test-byot-qa-user"
+
+    # Test 1: Quick Sample JSON array format (format="json")
+    quick_sample_json = """[
+        {"role": "user", "content": "Always run pytest with uv in electric-sheep."},
+        {"role": "assistant", "content": "Docker is prohibited, using apple container."}
+    ]"""
+    res_qs = client.post(
+        "/api/telemetry/ingest_transcript",
+        json={
+            "user_id": user_id,
+            "session_id": "session-byot-quick-sample",
+            "raw_transcript": quick_sample_json,
+            "format": "json",
+        },
+    )
+    assert res_qs.status_code == 200, res_qs.text
+    data_qs = res_qs.json()
+    assert data_qs["status"] == "success"
+    assert data_qs["events_ingested"] == 2
+
+    # Test 2: Antigravity transcript JSONL format (format="auto" or format="json")
+    antigravity_jsonl = (
+        '{"step_index": 0, "type": "USER_INPUT", "content": "Check database schemas."}\n'
+        '{"step_index": 1, "type": "PLANNER_RESPONSE", "content": "Checking schemas now.", "tool_calls": [{"tool_name": "run_command", "args": {"CommandLine": "gcloud spanner databases list"}}]}\n'
+        '{"step_index": 2, "type": "TOOL_RESULT", "content": "databases: [electric-sheep-db]"}\n'
+    )
+    # Even if user kept format="json", the server should gracefully handle JSONL
+    res_ag = client.post(
+        "/api/telemetry/ingest_transcript",
+        json={
+            "user_id": user_id,
+            "session_id": "session-byot-antigravity-jsonl",
+            "raw_transcript": antigravity_jsonl,
+            "format": "json",
+        },
+    )
+    assert res_ag.status_code == 200, res_ag.text
+    data_ag = res_ag.json()
+    assert data_ag["status"] == "success"
+    assert data_ag["events_ingested"] >= 3
 
 
 def test_ui_service_refresh_buttons_and_spanner_matrix_integration():

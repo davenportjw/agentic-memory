@@ -258,6 +258,11 @@ document.addEventListener("DOMContentLoaded", () => {
         reader.onload = (evt) => {
           byotContent.value = evt.target.result;
           byotSessionId.value = "byot-" + file.name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+          if (byotFormat) {
+            if (file.name.endsWith(".jsonl")) byotFormat.value = "jsonl";
+            else if (file.name.endsWith(".json")) byotFormat.value = "json";
+            else byotFormat.value = "auto";
+          }
         };
         reader.readAsText(file);
       }
@@ -433,7 +438,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   ingestBqBtn.addEventListener("click", async () => {
-    const { user_id, session_id } = getParams();
+    const { user_id } = getParams();
+    const session_id = sessionSelect.value || sessionIdInput.value || "session-ui-001";
     metaStatus.textContent = "Ingesting...";
     metaStatus.className = "intent-pill pill-warn";
     ingestBqBtn.disabled = true;
@@ -445,9 +451,15 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ user_id, session_id }),
       });
       const data = await res.json();
-      metaStatus.textContent = `Ingested (${data.turns_ingested} turns)`;
-      metaStatus.className = "intent-pill pill-success";
-      fetchLogs();
+      if (data.status === "success") {
+        metaStatus.textContent = `Ingested (${data.turns_ingested} turns)`;
+        metaStatus.className = "intent-pill pill-success";
+        sessionIdInput.value = session_id;
+        fetchLogs();
+      } else {
+        metaStatus.textContent = `Error: ${data.detail || "Ingest failed"}`;
+        metaStatus.className = "intent-pill pill-warn";
+      }
     } catch (err) {
       metaStatus.textContent = "Ingest Error";
       metaStatus.className = "intent-pill pill-warn";
@@ -592,7 +604,7 @@ document.addEventListener("DOMContentLoaded", () => {
     harvestStatus.innerHTML = `
       <div class="dream-placeholder">
         <span class="dream-icon">⚙️</span>
-        <p><strong>Memory Synthesis in Progress:</strong> Distilling session logs and crystallizing long-term beliefs with <strong>Gemini 3.8 Flash</strong> on Vertex AI...</p>
+        <p><strong>Memory Synthesis in Progress:</strong> Distilling session logs and crystallizing long-term beliefs with <strong>Gemini 3.8 Flash</strong> on Gemini platform...</p>
       </div>
     `;
 

@@ -1,6 +1,7 @@
 """FastAPI web backend for the Material Light UI Service."""
 
 import os
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -11,7 +12,7 @@ import uvicorn
 
 from src.common.config import get_config
 from src.common.auth import get_default_dev_email, is_email_authorized, get_authenticated_user_email
-from src.common.telemetry import BigQueryTelemetrySink
+from src.common.telemetry import BigQueryTelemetrySink, extract_5_word_summary
 from src.common.spanner_client import SpannerPreferenceClient
 from src.pipeline.bq_to_spanner_sync import BqToSpannerSynchronizer
 from src.interview_agent.server import adk_agent as interview_adk_agent
@@ -299,10 +300,67 @@ async def query_interview_agent(request: ChatRequest) -> Dict[str, Any]:
     }
 
 
+@api.get("/api/lakehouse/sessions")
+def list_lakehouse_sessions(limit: int = 50) -> Dict[str, Any]:
+    """Retrieve distinct sessions in the Telemetry Lakehouse with ID, source, and ~5-word summary."""
+    # 1. Base telemetry sessions from BigQuery & memory
+    sessions = telemetry_sink.list_sessions(limit=limit)
+
+    # 2. Enrich with Spanner crystallized summaries if available
+    spanner_summaries: Dict[str, str] = {}
+    try:
+        user_id = "demo-user-42"
+        for s in spanner_client.get_user_session_summaries(user_id):
+            if s.get("session_id"):
+                spanner_summaries[s["session_id"]] = s.get("summary_text", "")
+    except Exception as e:
+        logger.warning(f"Could not load Spanner summaries for lakehouse sessions: {e}")
+
+    # 3. Enrich with Antigravity crawler sessions if available
+    ag_sessions: Dict[str, Any] = {}
+    try:
+        from src.common.antigravity_crawler import AntigravitySessionCrawler
+        crawler = AntigravitySessionCrawler()
+        for s in crawler.list_sessions(limit=limit):
+            if s.get("session_id"):
+                ag_sessions[s["session_id"]] = s
+    except Exception as e:
+        logger.warning(f"Could not load Antigravity sessions: {e}")
+
+    # Merge by session_id
+    session_map: Dict[str, Dict[str, Any]] = {s["session_id"]: dict(s) for s in sessions}
+
+    # Overlay Spanner summaries if available
+    for sid, summary_text in spanner_summaries.items():
+        if sid in session_map and summary_text:
+            session_map[sid]["summary"] = extract_5_word_summary(summary_text)
+
+    # Overlay / add Antigravity sessions
+    for sid, ag_info in ag_sessions.items():
+        if sid not in session_map:
+            session_map[sid] = {
+                "session_id": sid,
+                "source": "antigravity",
+                "summary": extract_5_word_summary(ag_info.get("title", "")),
+                "event_count": ag_info.get("step_count", 0),
+                "last_timestamp": ag_info.get("last_modified", ""),
+            }
+        else:
+            if ag_info.get("title") and not ag_info.get("title").startswith("Antigravity Session"):
+                session_map[sid]["summary"] = extract_5_word_summary(ag_info.get("title", ""))
+
+    merged_sessions = sorted(
+        session_map.values(),
+        key=lambda x: str(x.get("last_timestamp", "")),
+        reverse=True,
+    )
+    return {"sessions": merged_sessions[:limit], "count": len(merged_sessions[:limit])}
+
+
 @api.get("/api/logs/{session_id}")
-def get_telemetry_logs(session_id: str) -> Dict[str, Any]:
-    """Retrieve all BigQuery telemetry logs for a given session."""
-    logs = telemetry_sink.get_session_logs(session_id)
+def get_telemetry_logs(session_id: str, limit: int = 500) -> Dict[str, Any]:
+    """Retrieve all BigQuery telemetry logs for a given session or all sessions if 'ALL'."""
+    logs = telemetry_sink.get_session_logs(session_id=session_id, limit=limit)
     return {"session_id": session_id, "count": len(logs), "logs": logs}
 
 
@@ -413,42 +471,50 @@ def ingest_transcript_telemetry(request: TranscriptIngestRequest) -> Dict[str, A
     turns_to_log: List[Dict[str, Any]] = []
     detected_format = request.format
 
-    # Attempt JSON parsing
-    if detected_format in ("auto", "json"):
-        try:
-            parsed = json.loads(content)
-            if isinstance(parsed, list):
-                turns_to_log = parsed
-                detected_format = "json"
-            elif isinstance(parsed, dict):
-                for k in ("turns", "events", "steps", "trajectory", "interactions", "messages"):
-                    if k in parsed and isinstance(parsed[k], list):
-                        turns_to_log = parsed[k]
-                        detected_format = "json"
-                        break
-                if not turns_to_log:
-                    turns_to_log = [parsed]
-                    detected_format = "json"
-        except Exception:
-            if detected_format == "json":
-                raise HTTPException(status_code=400, detail="Invalid JSON formatted content")
-
-    # Attempt JSONL parsing
-    if not turns_to_log and detected_format in ("auto", "jsonl"):
-        lines = [line.strip() for line in content.splitlines() if line.strip()]
-        candidate_turns = []
-        is_jsonl = True
-        for line in lines:
+    # 1. Attempt JSON / JSONL parsing
+    if detected_format in ("auto", "json", "jsonl"):
+        # Try single JSON array or dict first
+        if detected_format in ("auto", "json"):
             try:
-                candidate_turns.append(json.loads(line))
+                parsed = json.loads(content)
+                if isinstance(parsed, list):
+                    turns_to_log = parsed
+                    detected_format = "json"
+                elif isinstance(parsed, dict):
+                    for k in ("turns", "events", "steps", "trajectory", "interactions", "messages"):
+                        if k in parsed and isinstance(parsed[k], list):
+                            turns_to_log = parsed[k]
+                            detected_format = "json"
+                            break
+                    if not turns_to_log:
+                        turns_to_log = [parsed]
+                        detected_format = "json"
             except Exception:
-                is_jsonl = False
-                break
-        if is_jsonl and candidate_turns:
-            turns_to_log = candidate_turns
-            detected_format = "jsonl"
+                pass
 
-    # Fallback to plaintext lines
+        # If not parsed, try JSONL (newline-delimited JSON)
+        if not turns_to_log:
+            lines = [line.strip() for line in content.splitlines() if line.strip()]
+            candidate_turns = []
+            is_jsonl = True
+            for line in lines:
+                try:
+                    candidate_turns.append(json.loads(line))
+                except Exception:
+                    is_jsonl = False
+                    break
+            if is_jsonl and candidate_turns:
+                turns_to_log = candidate_turns
+                detected_format = "jsonl"
+
+        # If caller specifically asked for json/jsonl and neither parsed, raise 400
+        if not turns_to_log and request.format in ("json", "jsonl"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid {request.format.upper()} formatted content. Please check syntax or select Auto-Detect.",
+            )
+
+    # 2. Fallback to plaintext lines if auto or text
     if not turns_to_log:
         detected_format = "text"
         lines = [line for line in content.splitlines() if line.strip()]
@@ -462,35 +528,102 @@ def ingest_transcript_telemetry(request: TranscriptIngestRequest) -> Dict[str, A
                 "message": msg,
             })
 
+    # 3. Process and log turns to BigQuery
     logged = 0
     for idx, item in enumerate(turns_to_log):
         if not isinstance(item, dict):
             item = {"message": str(item)}
 
-        event_type = item.get("event_type") or item.get("type") or item.get("role") or "INTERACTION"
-        message = (
-            item.get("message")
-            or item.get("content")
-            or item.get("user_prompt")
-            or item.get("agent_thought")
-            or item.get("thinking")
-            or item.get("prompt")
-            or ""
+        # Antigravity transcript step normalization:
+        # Steps use: type ("USER_INPUT", "PLANNER_RESPONSE", "GENERIC", "TOOL_RESULT"),
+        # source ("USER_EXPLICIT", "MODEL", "SYSTEM"), content, thinking, tool_calls
+        t_type = str(item.get("type") or "").upper()
+        source = str(item.get("source") or "").upper()
+        agent_name = (
+            item.get("agent_name")
+            or ("antigravity" if (source in ("MODEL", "USER_EXPLICIT") or "thinking" in item) else "byot-telemetry")
         )
-        if not message and "tool_calls" in item:
-            message = json.dumps(item["tool_calls"])
-        elif not message:
-            message = json.dumps(item)
 
-        telemetry_sink.log_interaction(
-            user_id=request.user_id,
-            session_id=request.session_id,
-            agent_name="byot-telemetry",
-            event_type=str(event_type).upper(),
-            message=str(message),
-            payload=item,
-        )
-        logged += 1
+        if t_type == "USER_INPUT" or (source == "USER_EXPLICIT" and not item.get("event_type")):
+            msg = item.get("content") or item.get("user_prompt") or item.get("message") or ""
+            telemetry_sink.log_interaction(
+                user_id=request.user_id,
+                session_id=request.session_id,
+                agent_name=agent_name,
+                event_type="USER_PROMPT",
+                message=str(msg),
+                payload=item,
+            )
+            logged += 1
+        elif t_type == "PLANNER_RESPONSE":
+            thought_msg = item.get("content") or item.get("thinking") or item.get("message") or ""
+            tool_calls = item.get("tool_calls") or []
+            if thought_msg or not tool_calls:
+                telemetry_sink.log_interaction(
+                    user_id=request.user_id,
+                    session_id=request.session_id,
+                    agent_name=agent_name,
+                    event_type="AGENT_RESPONSE",
+                    message=str(thought_msg),
+                    payload=item,
+                )
+                logged += 1
+
+            for tc in tool_calls:
+                tc_name = tc.get("name", "tool")
+                tc_args = tc.get("args") if "args" in tc else tc.get("arguments", {})
+                telemetry_sink.log_interaction(
+                    user_id=request.user_id,
+                    session_id=request.session_id,
+                    agent_name=agent_name,
+                    event_type="TOOL_CALL",
+                    message=f"{tc_name}({json.dumps(tc_args)})",
+                    payload={"tool_call": tc, "parent_step": item.get("step_index")},
+                )
+                logged += 1
+        elif t_type == "TOOL_RESULT":
+            res_msg = item.get("content") or item.get("tool_output") or item.get("message") or ""
+            telemetry_sink.log_interaction(
+                user_id=request.user_id,
+                session_id=request.session_id,
+                agent_name=agent_name,
+                event_type="TOOL_RESULT",
+                message=str(res_msg),
+                payload=item,
+            )
+            logged += 1
+        else:
+            # Standard formats and quick samples with event_type: USER_PROMPT, AGENT_RESPONSE, etc.
+            event_type = item.get("event_type") or item.get("role") or item.get("type") or "INTERACTION"
+            event_type_str = str(event_type).upper()
+            if event_type_str in ("USER", "HUMAN"):
+                event_type_str = "USER_PROMPT"
+            elif event_type_str in ("ASSISTANT", "MODEL"):
+                event_type_str = "AGENT_RESPONSE"
+
+            message = (
+                item.get("message")
+                or item.get("content")
+                or item.get("user_prompt")
+                or item.get("agent_thought")
+                or item.get("thinking")
+                or item.get("prompt")
+                or ""
+            )
+            if not message and "tool_calls" in item:
+                message = json.dumps(item["tool_calls"])
+            elif not message:
+                message = json.dumps(item)
+
+            telemetry_sink.log_interaction(
+                user_id=request.user_id,
+                session_id=request.session_id,
+                agent_name=agent_name,
+                event_type=event_type_str,
+                message=str(message),
+                payload=item,
+            )
+            logged += 1
 
     return {
         "status": "success",

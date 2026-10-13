@@ -180,7 +180,7 @@ class AntigravitySessionCrawler:
                     # Emit individual tool calls
                     for tc in tool_calls:
                         t_name = tc.get("name", "")
-                        t_args = json.dumps(tc.get("arguments", {}))
+                        t_args = json.dumps(tc.get("args") if "args" in tc else tc.get("arguments", {}))
                         turns.append(
                             AntigravityTurn(
                                 session_id=session_id,
