@@ -14,7 +14,7 @@ fi
 
 PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-your-gcp-project-id}"
 REGION="${GOOGLE_CLOUD_REGION:-us-central1}"
-MODEL_NAME="${MODEL_NAME:-gemini-3.5-flash-lite}"
+MODEL_NAME="${MODEL_NAME:-gemini-3.8-flash}"
 BQ_DATASET_ID="${BQ_DATASET_ID:-adk_agent_telemetry}"
 BQ_TABLE_ID="${BQ_TABLE_ID:-agent_logs}"
 SPANNER_INSTANCE_ID="${SPANNER_INSTANCE_ID:-adk-spanner-instance}"

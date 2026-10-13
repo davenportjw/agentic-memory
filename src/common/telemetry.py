@@ -17,7 +17,7 @@ class BigQueryTelemetrySink:
 
     def __init__(self, use_mock: Optional[bool] = None):
         self.config = get_config()
-        self.use_mock = self.config.use_mock_clients if use_mock is None else use_mock
+        self.use_mock = False if use_mock is None else use_mock
         self.in_memory_logs = _GLOBAL_IN_MEMORY_LOGS
         self._bq_client = None
 
@@ -91,10 +91,16 @@ class BigQueryTelemetrySink:
                 )
             rows = self._bq_client.query(query, job_config=job_config).result()
             bq_logs = [dict(row) for row in rows]
-            # Merge memory_logs with bq_logs to handle BigQuery streaming buffer delay
-            seen = {(r.get("timestamp", ""), r.get("message", "")) for r in bq_logs}
+
+            def _log_key(r: Dict[str, Any]) -> tuple:
+                ts = r.get("timestamp", "")
+                if hasattr(ts, "isoformat"):
+                    ts = ts.isoformat()
+                return (str(ts)[:19], str(r.get("event_type", "")), str(r.get("message", ""))[:50])
+
+            seen = {_log_key(r) for r in bq_logs}
             for ml in memory_logs:
-                key = (ml.get("timestamp", ""), ml.get("message", ""))
+                key = _log_key(ml)
                 if key not in seen:
                     bq_logs.append(ml)
                     seen.add(key)
@@ -140,9 +146,16 @@ class BigQueryTelemetrySink:
             job_config = bigquery.QueryJobConfig(query_parameters=params)
             rows = self._bq_client.query(query, job_config=job_config).result()
             bq_logs = [dict(row) for row in rows]
-            seen = {(r.get("timestamp", ""), r.get("message", "")) for r in bq_logs}
+
+            def _log_key(r: Dict[str, Any]) -> tuple:
+                ts = r.get("timestamp", "")
+                if hasattr(ts, "isoformat"):
+                    ts = ts.isoformat()
+                return (str(ts)[:19], str(r.get("event_type", "")), str(r.get("message", ""))[:50])
+
+            seen = {_log_key(r) for r in bq_logs}
             for ml in memory_logs:
-                key = (ml.get("timestamp", ""), ml.get("message", ""))
+                key = _log_key(ml)
                 if key not in seen:
                     bq_logs.append(ml)
                     seen.add(key)

@@ -9,9 +9,19 @@ import urllib.error
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("adk.validate_live")
 
-UI_SERVICE_URL = os.environ.get("UI_SERVICE_URL", "https://ui-service-txgsracloq-uc.a.run.app")
-INTERVIEW_AGENT_URL = os.environ.get("INTERVIEW_AGENT_URL", "https://interview-agent-txgsracloq-uc.a.run.app")
-PREFERENCE_AGENT_URL = os.environ.get("PREFERENCE_AGENT_URL", "https://preference-agent-txgsracloq-uc.a.run.app")
+# Automatically load local .env file if present
+dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+if os.path.exists(dotenv_path):
+    with open(dotenv_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+
+UI_SERVICE_URL = os.environ.get("UI_SERVICE_URL", "http://localhost:8080")
+INTERVIEW_AGENT_URL = os.environ.get("INTERVIEW_AGENT_URL", "http://localhost:8081")
+PREFERENCE_AGENT_URL = os.environ.get("PREFERENCE_AGENT_URL", "http://localhost:8082")
 
 
 def get_auth_headers(url: str) -> dict:
@@ -94,8 +104,9 @@ def test_post(url: str, name: str, payload: dict):
 
 
 def main():
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT", os.environ.get("PROJECT_ID", "configured-project"))
     print("=" * 80)
-    print("  VALIDATING LIVE GOOGLE CLOUD RUN ENDPOINTS (davenport-boutique)  ")
+    print(f"  VALIDATING LIVE GOOGLE CLOUD RUN ENDPOINTS ({project_id})  ")
     print("=" * 80)
 
     # 1. Health checks (Unauthenticated/public readiness checks)
@@ -147,6 +158,22 @@ def main():
         "Google Cloud Spanner Memory",
     )
 
+    test_get(
+        f"{UI_SERVICE_URL}/api/spanner/guardrails/{user_id}",
+        "Google Cloud Spanner Guardrail Memory",
+    )
+
+    test_post(
+        f"{UI_SERVICE_URL}/api/telemetry/ingest_transcript",
+        "BYOT Transcript Ingestion",
+        {
+            "user_id": user_id,
+            "session_id": "session-live-byot-01",
+            "format": "jsonl",
+            "content": '{"type": "USER_INPUT", "content": "Never mock data in production"}\n{"type": "PLANNER_RESPONSE", "content": "Understood, using real services."}',
+        },
+    )
+
     test_post(
         f"{UI_SERVICE_URL}/api/preference/query",
         "PreferenceAgent Query (Fast Spanner Cache Hit)",
@@ -179,6 +206,15 @@ def main():
             "intent_or_question": "user_intent",
             "limit": 5,
             "include_random": True,
+        },
+    )
+
+    test_post(
+        f"{UI_SERVICE_URL}/api/mcp/execute",
+        "MCP Live Tool Execution (/api/mcp/execute)",
+        {
+            "tool_name": "get_user_crystallized_beliefs",
+            "arguments": {"user_id": user_id},
         },
     )
 

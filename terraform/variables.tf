@@ -13,7 +13,7 @@ variable "region" {
 variable "model_name" {
   description = "The Gemini model name to use across ADK agents and BigQuery AI summarization."
   type        = string
-  default     = "gemini-3.5-flash-lite"
+  default     = "gemini-3.8-flash"
 }
 
 variable "bq_dataset_id" {

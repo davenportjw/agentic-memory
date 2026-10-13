@@ -290,13 +290,14 @@ def _reason_over_spanner_records(
     matched_records: List[Dict[str, Any]],
     latency_ms: float,
 ) -> str:
-    """Hybrid RAG Reasoner: Use gemini-3.5-flash-lite (or selectively 3.6-flash) to reason over Spanner records.
+    """Hybrid RAG Reasoner: Use gemini-3.8-flash to reason over Spanner records.
 
     In offline / test mode (config.use_mock_clients=True), returns deterministic fast-path template response
     to guarantee sub-1000ms test latency and offline execution.
     In live deployed mode, calls Google GenAI to synthesize a contextual, reasoned answer over cached Spanner facts.
     """
-    if config.use_mock_clients:
+    dev_bypass = os.environ.get("DEV_AUTH_BYPASS", "false").lower() == "true" or os.environ.get("FAST_REASONER_MODE", "false").lower() == "true"
+    if dev_bypass:
         return format_multi_fact_spanner_response(matched_records, latency_ms)
 
     try:
@@ -317,7 +318,7 @@ Instructions:
 4. Bookend your answer with brief philosophical reflections on memory and consciousness — frame Cloud Spanner as your long-term "crystalline memory" formed during the AI "Dream Cycle" (REM Synthesis), where fragmented BigQuery waking logs were synthesized into enduring beliefs.
 5. Mention that the crystalline memory retrieval from Spanner took {latency_ms}ms, and gently ponder whether a cached preference is a memory truly lived or a binary dream crystallized in Spanner.
 """
-        client = genai.Client()
+        client = genai.Client(vertexai=True, project=config.project_id, location="global")
         response = client.models.generate_content(
             model=config.model_name,
             contents=llm_prompt,

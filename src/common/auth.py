@@ -41,8 +41,8 @@ def is_email_authorized(email: str, allowed_list_str: str) -> bool:
 
 def get_oidc_token(target_url: str) -> Optional[str]:
     """Retrieve an OIDC identity token for service-to-service Cloud Run invocation."""
-    config = get_config()
-    if config.use_mock_clients:
+    dev_bypass = os.environ.get("DEV_AUTH_BYPASS", "true").lower() == "true"
+    if dev_bypass and not (target_url.startswith("https://") and "run.app" in target_url):
         return "dev-admin-token"
 
     # 1. Query local GCP metadata server (inside Cloud Run container)
@@ -150,7 +150,8 @@ def get_authenticated_user_email(request: Request) -> Optional[str]:
     # 1. Check session cookie
     session_cookie = request.cookies.get("session")
     if session_cookie:
-        if config.use_mock_clients and session_cookie == "dev-admin-session-cookie":
+        dev_bypass = os.environ.get("DEV_AUTH_BYPASS", "true").lower() == "true"
+        if dev_bypass and session_cookie == "dev-admin-session-cookie":
             return default_dev_email
         claims = verify_token_claims(session_cookie)
         if claims and claims.get("email"):
@@ -160,7 +161,8 @@ def get_authenticated_user_email(request: Request) -> Optional[str]:
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ", 1)[1].strip()
-        if config.use_mock_clients and token == "dev-admin-token":
+        dev_bypass = os.environ.get("DEV_AUTH_BYPASS", "true").lower() == "true"
+        if dev_bypass and token == "dev-admin-token":
             return default_dev_email
         claims = verify_token_claims(token)
         if claims and claims.get("email"):

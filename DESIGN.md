@@ -29,7 +29,7 @@ All user interfaces MUST strictly adhere to the light-mode color tokens defined 
 | **Primary Brand** | `--primary-color` | `#1a73e8` (`hsl(215, 90%, 52%)`) | Primary buttons, active navigation markers, key links |
 | **Primary Hover** | `--primary-hover` | `#1557b0` | Hover state for primary interactive elements |
 | **Primary Light Tint** | `--primary-light` | `#e8f0fe` | Model badge backgrounds, subtle active step highlights |
-| **Accent Success** | `--accent-color` | `#0f9d58` (`hsl(158, 64%, 40%)`) | Spanner cache hits (`< 10ms SLA`), success badges, live status |
+| **Accent Success** | `--accent-color` | `#0f9d58` (`hsl(158, 64%, 40%)`) | Spanner cache hits (`< 10ms fast lookup`), success badges, live status |
 | **Accent Light Tint** | `--accent-light` | `#e6f4ea` | Success chip backgrounds, live status indicators |
 | **Highlight Brand (Dream)** | `--highlight-color` | `#6366f1` (`hsl(238, 83%, 67%)`) | Dream Harvest REM Synthesis highlights and specialized actions |
 | **Highlight Light Tint** | `--highlight-light` | `#eef2ff` | Dream Harvest card accents, REM info block backgrounds |
@@ -66,7 +66,7 @@ All user interfaces MUST strictly adhere to the light-mode color tokens defined 
   -webkit-backdrop-filter: blur(12px);
   ```
 - With `@supports not (backdrop-filter: blur(12px))` fallback to solid `--surface-color`.
-- Embeds the active model badge (`Model: Gemini 3.5 Flash Lite`), user/session identity inputs (`User ID`, `Session ID`), and an interactive help tooltip explaining multi-user crystalline memory vs episodic BigQuery traces.
+- Embeds the active model badge (`Model: Gemini 3.8 Flash`), user/session identity inputs (`User ID`, `Session ID`), and an interactive help tooltip explaining multi-user crystalline memory vs episodic BigQuery traces.
 
 ### 3.1.1 Top App Bar 2-Child Layout Standard (Zero-Wrap Guarantee)
 - **Problem statement**: When `.app-bar-content` has `justify-content: space-between`, adding more than two direct children (e.g., placing `.app-nav` as a separate sibling between `.app-title-group` and `.session-info`) causes flexbox to distribute three items across the full bar width. On normal or narrow viewports, the middle navigation element wraps onto an awkward second line ("ugly top bar").
@@ -104,7 +104,7 @@ All user interfaces MUST strictly adhere to the light-mode color tokens defined 
 The control center follows a responsive split-pane architecture:
 ```
 +------------------------------------------------------------------------------------+
-| Sticky App Bar: Google ADK 2.0                | Model: Gemini 3.5 Flash Lite      |
+| Sticky App Bar: Google ADK 2.0                | Model: Gemini 3.8 Flash           |
 +------------------------------------+-----------------------------------------------+
 | ASIDE: Left Navigation Sidebar     | MAIN SECTION: Continuous Stage 1-5 Long Page  |
 |                                    |                                               |
@@ -130,25 +130,30 @@ The control center follows a responsive split-pane architecture:
 |                                    |                                               |
 |                                    | +-------------------------------------------+ |
 |                                    | | Card 5: Preference Agent                | |
-|                                    | | (< 10ms Spanner Cache Recall SLA)       | |
+|                                    | | (< 10ms Spanner Cache Recall)           | |
 |                                    | +-------------------------------------------+ |
 +------------------------------------+-----------------------------------------------+
 ```
 
-- **Left Navigation Sidebar (`aside.left-nav`)**:
+- **Left Navigation Sidebar (`aside.left-nav`) & Collapsible Numbers-Only Mode**:
   - Sticky table-of-contents tracking stages 1 through 5.
   - Step icons (`.nav-step-icon`) with connecting vertical lines (`.nav-connector`).
   - Active stage highlighting with primary color borders and font weights.
-- **Main Single-Pane Container (`section.single-pane-container`)**:
+  - **Collapsible Toggle (`#leftNavToggleBtn`)**: Includes a dedicated collapse/expand toggle button (`.left-nav-collapse-btn`) in `.left-nav-header`.
+  - **Numbers-Only Collapsed State (`.left-nav.collapsed`)**: When collapsed, `.nav-title`, `.nav-subtitle`, `.nav-item-text`, and `.left-nav-footer` are cleanly hidden. The sidebar smoothly contracts from `250px` to `58px`, displaying exclusively the centered stage numbers (`1` to `5`) and vertical connectors.
+  - **Hover Tooltips & Full Keyboard Accessibility**: Each stage link includes descriptive `title` and `aria-label` tags (e.g. `Stage 1: Interview Agent`), providing instant hover context even in compact mode.
+  - **State Persistence**: The collapse preference is stored in `localStorage` (`electric_sheep_left_nav_collapsed`) and restored instantaneously on page load without layout shift.
+- **Main Single-Pane Container (`section.single-pane-container`) & Maximized Viewing Pane**:
   - Contains all 5 stage cards arranged vertically with generous gap spacing (`32px`).
   - Employs `scroll-behavior: smooth` so clicking left navigation items smoothly scrolls to the target stage.
+  - **Viewing Pane Maximization (`.app-body-layout.nav-collapsed`)**: When the sidebar is collapsed, the viewing pane expands into the reclaimed horizontal space, and `.app-body-layout` increases its `max-width` to `1800px`, maximizing horizontal screen real estate for wide monitors and complex data panels.
 
 ### 3.3 Architecture Lifecycle Slide & Pipeline Layout Standard (`.arch-pipeline-grid`)
 - **Problem statement**: Multi-stage architectural flow slides (such as the ADK 2.0 Lifecycle Data Flow diagram in `how-it-works.html`) must present complex end-to-end data flows without horizontal crowding, text squishing, or lopsided arrow wrapping. Placing multiple stage boxes and standalone arrow elements in a single horizontal flexbox (`.arch-pipeline-container`) causes cards to compress into unreadable vertical columns on standard viewports.
 - **Required Layout & Component Structure**:
   1. **Responsive 4-Column CSS Grid (`.arch-pipeline-grid`)**: The architectural pipeline MUST use `display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;`, allocating equal 25% columns to each stage card (`STEP 1 • WAKING LIFE`, `STEP 2 • REM SLEEP`, `STEP 3 • CONSOLIDATION`, `STEP 4 • AGENT RECALL`).
-  2. **Integrated Flow Transition Tags (`.arch-stage-flow-tag`)**: Instead of standalone arrow sibling elements between columns, flow transitions (`→ Nightly SQL`, `→ ACID Upsert`, `→ < 10ms Cache`, `✓ Live SLA`) MUST be rendered inside each card's top header row (`.arch-stage-top`), preserving grid column widths.
-  3. **Stage Accent Borders**: Each `.arch-stage-box` MUST incorporate a 4px top accent indicator (`::before`) colored by stage role (Blue for BigQuery Episodic Traces, Indigo for Vertex AI REM Synthesis, Emerald for Spanner ACID Crystalline Memory, and Primary Blue for Sub-10ms Cache SLA).
+  2. **Integrated Flow Transition Tags (`.arch-stage-flow-tag`)**: Instead of standalone arrow sibling elements between columns, flow transitions (`→ BigQuery`, `→ GenAI`, `→ Spanner`, `✓ < 10ms`) MUST be rendered inside each card's top header row (`.arch-stage-top`), preserving grid column widths.
+  3. **Stage Accent Borders**: Each `.arch-stage-box` MUST incorporate a 4px top accent indicator (`::before`) colored by stage role (Blue for BigQuery Episodic Traces, Indigo for Vertex AI REM Synthesis, Emerald for Spanner Crystalline Memory, and Primary Blue for Sub-10ms Fast Lookup).
   4. **Responsive Collapse**: At viewports `max-width: 1050px`, the grid MUST collapse to `repeat(2, 1fr)`, and at `max-width: 640px` to `1fr`.
 - **Why this works**: CSS Grid gives every architectural stage a clean, predictable card width, while embedded flow tags eliminate visual clutter and ensure executive-grade readability across all screen sizes.
 
@@ -187,7 +192,7 @@ The control center follows a responsive split-pane architecture:
 ### 4.5 Stage 5: Preference Agent (Sub-10ms Spanner Fast Cache)
 - **Role**: Cache-first agent querying Spanner before falling back to LLM inference.
 - **Components**:
-  - Fast-Path Badge: `.chip-success` with text `Spanner Fast Cache` and animated pulsing status dot (`< 10ms SLA`).
+  - Fast-Path Badge: `.chip-success` with text `Spanner Fast Cache` and animated pulsing status dot (`Sub-10ms Fast Lookup`).
   - Chat Box (`#preferenceChatBox`) rendering instantaneous cache hits alongside latency metrics.
 
 ---
@@ -203,7 +208,7 @@ Synthesized from `modern-web-guidance` and industry standards:
 3. **Micro-Animations & Status Feedback**:
    - Subtle button hover elevation (`box-shadow: var(--elevation-2); transform: translateY(-1px);`).
    - Active state tactile compression (`active: scale(0.98)`).
-   - Animated pulsing status dots (`.status-dot.animate-pulse`) for active cache SLAs.
+   - Animated pulsing status dots (`.status-dot.animate-pulse`) for active cache fast-path status.
 4. **Accessibility (WCAG 2.1 AA Compliance)**:
    - Contrast ratios minimum 4.5:1 for body text and 3:1 for large text/icons.
    - Reduced motion fallbacks:

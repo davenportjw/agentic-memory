@@ -6,7 +6,7 @@ A complete, end-to-end production-grade AI agent demonstration built with the **
 
 ## 📑 Table of Contents
 1. [📖 How to Use the App (Web Control Center Walkthrough)](#-how-to-use-the-app-web-control-center-walkthrough)
-2. [🌐 Accessing Live Services & Programmatic Endpoints](#-accessing-live-services--programmatic-endpoints-davenport-boutique)
+2. [🌐 Accessing Live Services & Programmatic Endpoints](#-accessing-live-services--programmatic-endpoints)
 3. [🚀 Running Locally with uv](#-running-locally-with-uv)
 4. [☁️ Deploying to Google Cloud Run (Source Script & Terraform)](#-deploying-to-google-cloud-run-source-script--terraform)
 5. [🔒 Security, Environment Variables & IAP Proxy Setup](#-security-environment-variables--iap-proxy-setup)
@@ -20,7 +20,7 @@ A complete, end-to-end production-grade AI agent demonstration built with the **
 The **Material Light UI Control Center** provides an interactive dashboard to explore the multi-agent lifecycle, observe real-time telemetry, and test long-term memory consolidation.
 
 ### 1. Sign In / Authenticate
-- Navigate to [https://ui-service-834476222725.us-central1.run.app](https://ui-service-834476222725.us-central1.run.app) (or `http://localhost:8080` when running locally).
+- Navigate to your deployed UI Service URL (e.g., `https://ui-service-<project-hash>.<region>.run.app` or `$UI_SERVICE_URL` from your `.env` file, or `http://localhost:8080` when running locally).
 - Sign in with an authorized Google account via Firebase Authentication, OR click **"Bypass Auth (Local Developer)"** when running in developer/mock mode.
 
 ### 2. Step 1 — Conduct an Interview (`InterviewAgent`)
@@ -46,22 +46,45 @@ The **Material Light UI Control Center** provides an interactive dashboard to ex
 
 ---
 
-## 🌐 Accessing Live Services & Programmatic Endpoints (`davenport-boutique`)
+## 🌐 Accessing Live Services & Programmatic Endpoints
 
-All microservices are deployed and live on Google Cloud Run in project **`davenport-boutique`** using default model **`gemini-3.5-flash-lite`**.
+All microservices can be run locally or deployed to Google Cloud Run in your Google Cloud project (configured via `GOOGLE_CLOUD_PROJECT` in your `.env` file) using default model **`gemini-3.8-flash`**.
 
-### 1. Web UI Control Center (Browser Access)
-- **Material Light UI URL**: [https://ui-service-834476222725.us-central1.run.app](https://ui-service-834476222725.us-central1.run.app)
-  - Open in any browser to interact with the **InterviewAgent**, view live **BigQuery Telemetry Logs**, execute a **Dream Harvest**, inspect stored **Google Cloud Spanner Memory**, and test the **PreferenceAgent** fast-path Spanner cache hits.
+### 1. Configuring Service URLs (`.env` file)
+Copy `.env.example` to `.env` to configure your GCP project ID and service endpoints:
+```bash
+cp .env.example .env
+```
+Configure your environment in `.env`:
+```dotenv
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_CLOUD_REGION=us-central1
 
-### 2. Live Cloud Run Base URLs
-| Service Name | Cloud Run Base URL |
-| :--- | :--- |
-| **UI Service (Control Center)** | `https://ui-service-834476222725.us-central1.run.app` |
-| **InterviewAgent** | `https://interview-agent-834476222725.us-central1.run.app` |
-| **PreferenceAgent** | `https://preference-agent-834476222725.us-central1.run.app` |
+# Local development defaults:
+PORT=8080
+UI_SERVICE_URL=http://localhost:8080
+INTERVIEW_AGENT_URL=http://localhost:8081
+PREFERENCE_AGENT_URL=http://localhost:8082
 
-### 3. Programmatic REST API Endpoints
+# When deployed to Google Cloud Run, retrieve your live URLs via:
+# gcloud run services list --project=$GOOGLE_CLOUD_PROJECT
+# UI_SERVICE_URL=https://ui-service-<hash>.<region>.run.app
+# INTERVIEW_AGENT_URL=https://interview-agent-<hash>.<region>.run.app
+# PREFERENCE_AGENT_URL=https://preference-agent-<hash>.<region>.run.app
+```
+
+### 2. Web UI Control Center (Browser Access)
+- **Local Control Center**: `http://localhost:8080`
+- **Cloud Run Control Center**: Open `$UI_SERVICE_URL` (configured from your `.env` file or deployment output) in any browser to interact with the **InterviewAgent**, view live **BigQuery Telemetry Logs**, execute a **Dream Harvest**, inspect stored **Google Cloud Spanner Memory**, and test the **PreferenceAgent** fast-path Spanner cache hits.
+
+### 3. Service Base URLs
+| Service Name | Example Cloud Run URL (From `.env`) | Local Development URL |
+| :--- | :--- | :--- |
+| **UI Service (Control Center)** | `https://ui-service-<hash>.<region>.run.app` (`$UI_SERVICE_URL`) | `http://localhost:8080` |
+| **InterviewAgent** | `https://interview-agent-<hash>.<region>.run.app` (`$INTERVIEW_AGENT_URL`) | `http://localhost:8081` |
+| **PreferenceAgent** | `https://preference-agent-<hash>.<region>.run.app` (`$PREFERENCE_AGENT_URL`) | `http://localhost:8082` |
+
+### 4. Programmatic REST API Endpoints
 All endpoints return structured JSON and can be called programmatically via `curl`, Python, or any HTTP client:
 
 | Endpoint | Method | Description | Example Payload |
@@ -73,7 +96,7 @@ All endpoints return structured JSON and can be called programmatically via `cur
 | `/api/spanner/preferences/{user_id}` | `GET` | Fetch stored user profile preferences from Spanner | N/A |
 | `/api/preference/query` | `POST` | Query PreferenceAgent with fast Spanner cache hit (< 10ms) | `{"user_id": "user-01", "session_id": "sess-01", "prompt": "What is my favorite language?"}` |
 
-### 4. Agent Prompt & Response Payloads (Code Block Formatting)
+### 5. Agent Prompt & Response Payloads (Code Block Formatting)
 
 When interacting with `InterviewAgent` or `PreferenceAgent`, all prompts, responses, and structured payloads should be formatted within fenced markdown code blocks (` ```json `, ` ```python `, ` ```sql `) for clear readability and syntax highlighting.
 
@@ -90,7 +113,7 @@ When interacting with `InterviewAgent` or `PreferenceAgent`, all prompts, respon
 **Agent Response Payload (`AGENT_RESPONSE`):**
 ```json
 {
-  "response": "Hello Jason! I've recorded **Python** as your favorite programming language and **Principal Cloud Architect** as your job role.\n\nYour Python agent configuration snippet:\n```python\nfrom google.adk.agents import Agent\nagent = Agent(name=\"DemoAgent\", model=\"gemini-3.5-flash-lite\")\n```\nWill be logged to BigQuery and crystallized into Spanner during REM synthesis.",
+  "response": "Hello Alex! I've recorded **Python** as your favorite programming language and **Principal Cloud Architect** as your job role.\n\nYour Python agent configuration snippet:\n```python\nfrom google.adk.agents import Agent\nagent = Agent(name=\"DemoAgent\", model=\"gemini-3.5-flash-lite\")\n```\nWill be logged to BigQuery and crystallized into Spanner during REM synthesis.",
   "user_id": "demo-user-42",
   "session_id": "session-ui-001",
   "agent_name": "InterviewAgent",
@@ -131,15 +154,15 @@ When interacting with `InterviewAgent` or `PreferenceAgent`, all prompts, respon
 }
 ```
 
-### 5. Automated Live Programmatic Validation
-You can programmatically validate all 7 live Google Cloud Run endpoints using the included validator script:
+### 6. Automated Live Programmatic Validation
+You can programmatically validate all 7 live Google Cloud Run endpoints using the included validator script. The script automatically reads your target endpoints from `.env` (or environment variables):
 ```bash
 python3 -m scripts.validate_live_endpoints
 ```
 
-### 6. Critical Development & Deployment Policy
+### 7. Critical Development & Deployment Policy
 > [!IMPORTANT]
-> **Deployed State Testing Required**: Any code, UI, or prompt changes MUST be tested in the deployed state on Google Cloud Run (`davenport-boutique`). Local unit tests (`uv run pytest`) are necessary but not sufficient.
+> **Deployed State Testing Required**: Any code, UI, or prompt changes MUST be tested in the deployed state on Google Cloud Run (in your target Google Cloud project). Local unit tests (`uv run pytest`) are necessary but not sufficient.
 > **Deployment as Final Step**: Deploying to Google Cloud Run (via `./scripts/deploy_cloud_run_source.sh`) and validating live endpoints (`python3 -m scripts.validate_live_endpoints`) MUST be the final step of any feature development or modification.
 
 ---
@@ -155,7 +178,7 @@ graph TD
         CloudRun1 -->|Telemetry / Trace| BQ[BigQuery: adk_agent_telemetry.agent_logs]
         CloudRun2 -->|Telemetry / Trace| BQ
         CloudRun2 -->|1. Fast-Path Vector Cache Lookup < 10ms| Spanner[(Cloud Spanner: UserPreferences)]
-        CloudRun2 -.->|2. LLM Fallback if Miss| Gemini[Vertex AI: Gemini 3.5 Flash Lite]
+        CloudRun2 -.->|2. LLM Fallback if Miss| Gemini[Vertex AI: Gemini 3.8 Flash]
     end
     
     subgraph "Analytics & Summarization Pipeline"
@@ -192,16 +215,16 @@ This project implements industry best practices for long-term LLM memory consoli
 
 ### 1. The REM Sleep Analogy for AI Agents (Two-Stage Memory Architecture)
 - **Waking State (Episodic / Short-Term Memory)**: During live conversation, all user interactions and agent responses stream into **Google BigQuery** (`adk_agent_telemetry.agent_logs`). This acts as raw episodic memory—fast to record, but noisy, fragmented, and redundant.
-- **REM Synthesis / Dream Harvest (Asynchronous Memory Consolidation)**: Rather than writing raw user inputs directly into a database, the `/api/harvest` endpoint acts as an offline "Dream Cycle". It passes the episodic session logs to **Vertex AI Gemini (`gemini-3.5-flash-lite`)** with an explicit REM Memory Consolidation instruction.
+- **REM Synthesis / Dream Harvest (Asynchronous Memory Consolidation)**: Rather than writing raw user inputs directly into a database, the `/api/harvest` endpoint acts as an offline "Dream Cycle". It passes the episodic session logs to **Vertex AI Gemini (`gemini-3.8-flash`)** with an explicit REM Memory Consolidation instruction.
   - Removes conversational noise and resolves contradictions.
   - Keeps identity attributes (`name`) completely separate from occupational roles (`job_role`).
   - Crystallizes beliefs into complete, self-contained natural language semantic vectors/schemas (`CrystallizedBelief`).
 
 ### 2. High-Value LLM Memory Schema (`UserPreferences` in Google Cloud Spanner)
 A robust agentic memory schema must support both structured lookups and semantic similarity. Our Spanner DDL schema includes:
-- **`PreferenceKey` & `PreferenceValue`**: Canonical snake_case identifiers (`favorite_language`, `job_role`, `name`, `preferred_tools`, `work_style`) and exact string values (`Python`, `Principal Cloud Architect`, `Jason`).
+- **`PreferenceKey` & `PreferenceValue`**: Canonical snake_case identifiers (`favorite_language`, `job_role`, `name`, `preferred_tools`, `work_style`) and exact string values (`Python`, `Principal Cloud Architect`, `Alex`).
 - **`Category` & `Confidence`**: Domain taxonomy (`profile`, `technical`, `role`, `infrastructure`) and a 0.0–1.0 belief confidence score.
-- **`CrystallizedBelief` (LLM Semantic Document/Vector)**: A full natural language statement synthesized during the Dream Cycle (e.g., *"The user Jason works as a Principal Cloud Architect specializing in cloud infrastructure."*).
+- **`CrystallizedBelief` (LLM Semantic Document/Vector)**: A full natural language statement synthesized during the Dream Cycle (e.g., *"The user works as a Principal Cloud Architect specializing in cloud infrastructure."*).
 - **`Keywords` (Search Tags & Synonyms)**: Normalized keywords and synonyms (e.g., *"python, programming, language, code, coding"* or *"architect, principal, cloud, role, job, title, career"*) to support multi-angle retrieval.
 - **`Embedding` (`ARRAY<FLOAT64>(768)`)**: A 768-dimensional semantic embedding vector indexed with a Spanner `VECTOR INDEX` for approximate nearest neighbor (ANN) lookups using `COSINE_DISTANCE`.
 
@@ -302,7 +325,7 @@ Once started, open `http://localhost:8080` in your browser and click **"Bypass A
 You can deploy `electric-sheep` to Google Cloud using either the automated source deployment script or Terraform Infrastructure as Code (IaC).
 
 ### Method 1: Automated Source Deployment (Recommended for Updates & Feature Releases)
-Use [deploy_cloud_run_source.sh](file:///Users/jasondavenport/GitHub/electric-sheep/scripts/deploy_cloud_run_source.sh) to build and deploy all three microservices directly from source:
+Use [deploy_cloud_run_source.sh](scripts/deploy_cloud_run_source.sh) to build and deploy all three microservices directly from source:
 ```bash
 ./scripts/deploy_cloud_run_source.sh
 ```
@@ -345,13 +368,14 @@ When committing or deploying this repository:
 You can query agent session logs and generate structured profile summaries directly in BigQuery using `AI.GENERATE` / `ML.GENERATE_TEXT`:
 
 ```sql
+-- Note: Replace `your-gcp-project-id` with your GCP project ID (GOOGLE_CLOUD_PROJECT from your .env file)
 WITH SessionTranscripts AS (
   SELECT
     user_id,
     session_id,
     STRING_AGG(CONCAT(event_type, ': ', message), '\n' ORDER BY timestamp ASC) AS full_transcript,
     MAX(timestamp) AS last_interaction
-  FROM `davenport-boutique.adk_agent_telemetry.agent_logs`
+  FROM `your-gcp-project-id.adk_agent_telemetry.agent_logs`
   WHERE agent_name = 'InterviewAgent'
   GROUP BY user_id, session_id
 )
@@ -361,7 +385,7 @@ SELECT
   ml_generate_text_result['candidates'][0]['content']['parts'][0]['text'] AS generated_summary_json
 FROM
   ML.GENERATE_TEXT(
-    MODEL `davenport-boutique.adk_agent_telemetry.gemini_summarizer`,
+    MODEL `your-gcp-project-id.adk_agent_telemetry.gemini_summarizer`,
     (
       SELECT CONCAT(
         'Extract user profile preferences into JSON with keys: user_id, summary, preferences (list of preference_key, preference_value, category, confidence). Transcript:\n',

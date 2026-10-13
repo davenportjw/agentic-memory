@@ -22,7 +22,7 @@ class SpannerPreferenceClient:
 
     def __init__(self, use_mock: Optional[bool] = None):
         self.config = get_config()
-        self.use_mock = self.config.use_mock_clients if use_mock is None else use_mock
+        self.use_mock = False if use_mock is None else use_mock
         self._in_memory_prefs = _GLOBAL_IN_MEMORY_PREFS
         self._in_memory_summaries = _GLOBAL_IN_MEMORY_SUMMARIES
         self._spanner_client = None
@@ -81,6 +81,8 @@ class SpannerPreferenceClient:
             "style": [200, 201], "work_style": [200, 201, 202], "prefer": [200, 203], "collaborative": [200, 204],
             "intent": [250, 251], "goal": [250, 252], "objective": [250, 253], "purpose": [250, 254],
             "trajectory": [250, 255], "session_intent": [250, 251], "cross_session_intent": [250, 251],
+            "guardrail": [300, 301], "procedural": [300, 302], "invariant": [300, 303], "rule": [300, 304],
+            "limit": [300, 305], "torque": [300, 306], "docker": [300, 307], "uv": [300, 308],
         }
 
         for w in words:
@@ -247,6 +249,18 @@ class SpannerPreferenceClient:
         except Exception as e:
             logger.error(f"Error listing Spanner UserPreferences ({e})")
             return [p for p in self._in_memory_prefs.values() if p["user_id"] == user_id]
+
+    def get_procedural_guardrails(self, user_id: str) -> List[Dict[str, Any]]:
+        """Retrieve all procedural invariants and operational guardrails for a given user."""
+        all_prefs = self.get_all_user_preferences(user_id)
+        guardrails = []
+        for p in all_prefs:
+            cat = str(p.get("category", "")).lower()
+            kw = str(p.get("keywords", "")).lower()
+            key = str(p.get("preference_key", "")).lower()
+            if cat in ("guardrail", "procedural") or "guardrail" in kw or "invariant" in kw or key.startswith("guardrail_") or key.startswith("invariant_"):
+                guardrails.append(p)
+        return guardrails
 
     def upsert_user_preference(
         self,

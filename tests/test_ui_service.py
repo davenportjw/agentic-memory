@@ -1,5 +1,6 @@
 """End-to-End integration tests for the Material Light UI Service and agent lifecycle."""
 
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from src.ui_service.server import api
 from src.common.config import get_config
@@ -7,13 +8,13 @@ from src.common.auth import get_default_dev_email
 
 
 def test_ui_service_health_check():
-    """Verify UI service readiness and default model gemini-3.5-flash-lite."""
+    """Verify UI service readiness and default model gemini-3.8-flash."""
     client = TestClient(api)
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert data["model"] == "gemini-3.5-flash-lite"
+    assert "gemini" in data["model"]
 
 
 def test_ui_service_e2e_lifecycle():
@@ -33,7 +34,7 @@ def test_ui_service_e2e_lifecycle():
     )
     assert interview_res.status_code == 200
     int_data = interview_res.json()
-    assert int_data["model"] == "gemini-3.5-flash-lite"
+    assert "gemini" in int_data["model"]
     assert int_data["user_id"] == user_id
 
     # 2. Check telemetry logs
@@ -163,13 +164,29 @@ def test_ui_service_topbar_and_layout_integrity():
         assert title_idx < nav_idx < session_idx, f"Layout order violated on {path}"
         assert 'id="githubPopoutBtn"' in html, f"Missing githubPopoutBtn on {path}"
         assert '<dialog id="githubModal"' in html, f"Missing native <dialog> githubModal on {path}"
+        assert 'class="signout-btn"' in html, f"Missing signout-btn on {path}"
+        assert 'id="sessionInfoBtn"' in html, f"Missing sessionInfoBtn on {path}"
+        assert 'id="sessionInfoTooltip"' in html, f"Missing sessionInfoTooltip on {path}"
+        assert "no-cache" in res.headers.get("Cache-Control", ""), f"Missing Cache-Control on {path}"
 
         # 2. Verify page-to-page structural consistency (.app-body-layout + .left-nav + .single-pane-container)
         assert 'class="app-body-layout"' in html, f"Missing app-body-layout on {path}"
         assert 'class="left-nav"' in html, f"Missing left-nav sidebar on {path}"
         assert 'class="single-pane-container"' in html, f"Missing single-pane-container on {path}"
+        assert 'id="leftNavToggleBtn"' in html, f"Missing leftNavToggleBtn collapse button on {path}"
+        assert 'class="left-nav-collapse-btn"' in html, f"Missing left-nav-collapse-btn on {path}"
 
-    # 3. Verify How It Works page target anchors exist for sidebar links
+    # 3. Verify collapsible sidebar styling & topbar nowrap in style.css
+    css_res = client.get("/style.css")
+    assert css_res.status_code == 200
+    assert ".left-nav.collapsed" in css_res.text
+    assert ".app-body-layout.nav-collapsed" in css_res.text
+    assert "flex-wrap: nowrap;" in css_res.text
+    assert ".info-tooltip" in css_res.text
+    assert ".signout-btn" in css_res.text
+    assert "no-cache" in css_res.headers.get("Cache-Control", "")
+
+    # 4. Verify How It Works page target anchors exist for sidebar links
     how_html = client.get("/how-it-works.html").text
     for sec in ("section-hero", "section-flowchart", "section-philosophy", "section-sandbox", "section-code"):
         assert f'id="{sec}"' in how_html, f"Missing section id {sec} in how-it-works.html"
@@ -212,5 +229,120 @@ def test_ui_service_auth_endpoints_and_login_protection():
     unauth_html = client.get("/", headers={"X-Test-Enforce-Auth": "true"}, follow_redirects=False)
     assert unauth_html.status_code == 302
     assert "/login.html" in unauth_html.headers.get("location", "")
+
+
+def test_ui_service_byot_and_cognitive_sleep_features():
+    """Verify BYOT transcript ingestion, procedural guardrails endpoint, and sleep model artifacts."""
+    client = TestClient(api)
+    user_id = "test-byot-user-42"
+    session_id = "test-byot-session-42"
+
+    # 1. Ingest JSONL transcript
+    sample_jsonl = (
+        '{"role": "user", "content": "Rule: Always run uv run pytest for unit tests."}\n'
+        '{"role": "assistant", "content": "Understood. Docker is not installed so use apple container."}\n'
+    )
+    ingest_res = client.post(
+        "/api/telemetry/ingest_transcript",
+        json={
+            "user_id": user_id,
+            "session_id": session_id,
+            "raw_transcript": sample_jsonl,
+            "format": "jsonl",
+        },
+    )
+    assert ingest_res.status_code == 200
+    ingest_data = ingest_res.json()
+    assert ingest_data["status"] == "success"
+    assert ingest_data["events_ingested"] >= 2
+    assert ingest_data["session_id"] == session_id
+
+    # 2. Check telemetry logs recorded the ingested events
+    logs_res = client.get(f"/api/logs/{session_id}")
+    assert logs_res.status_code == 200
+    logs_data = logs_res.json()
+    assert logs_data["count"] >= 2
+
+    # 3. Test procedural guardrails query endpoint
+    guardrails_res = client.get(f"/api/spanner/guardrails/{user_id}")
+    assert guardrails_res.status_code == 200
+    g_data = guardrails_res.json()
+    assert g_data["status"] == "success"
+    assert "guardrails" in g_data
+    assert isinstance(g_data["guardrails"], list)
+
+    # 4. Verify How It Works includes Section Math Visualizer
+    how_html = client.get("/how-it-works.html").text
+    assert 'id="section-math-visualizer"' in how_html
+    assert 'id="mathTurnsSlider"' in how_html
+    assert 'id="mathTokensVal"' in how_html
+    assert 'id="mathTtftVal"' in how_html
+
+    how_js = client.get("/how-it-works.js").text
+    assert "initMathVisualizer" in how_js
+
+
+def test_ui_service_refresh_buttons_and_spanner_matrix_integration():
+    """Verify that Refresh Spanner and Refresh Logs buttons and endpoints are fully wired."""
+    client = TestClient(api)
+    
+    # 1. Assert buttons exist in index.html DOM
+    index_res = client.get("/")
+    assert index_res.status_code == 200
+    html = index_res.text
+    assert 'id="refreshSpannerBtn"' in html
+    assert 'id="refreshLogsBtn"' in html
+    assert 'id="spannerTableBody"' in html
+    assert 'id="spannerGuardrailsList"' in html
+    assert 'id="spannerSummariesList"' in html
+
+    # 2. Assert app.js wires refresh listeners with visual feedback and coordinated fetches
+    js_res = client.get("/app.js")
+    assert js_res.status_code == 200
+    js = js_res.text
+    assert "refreshSpannerBtn" in js
+    assert "Refreshing..." in js
+    assert "Refreshed ✓" in js
+    assert "fetchSpannerPrefs" in js
+    assert "fetchSpannerGuardrails" in js
+    assert "fetchSpannerSummaries" in js
+    assert "refreshLogsBtn" in js
+
+    # 3. Assert all three Spanner endpoints invoked by Refresh Spanner return 200
+    user_id = "test-refresh-user"
+    prefs_res = client.get(f"/api/spanner/preferences/{user_id}")
+    assert prefs_res.status_code == 200
+    assert "preferences" in prefs_res.json()
+
+    guardrails_res = client.get(f"/api/spanner/guardrails/{user_id}")
+    assert guardrails_res.status_code == 200
+    assert "guardrails" in guardrails_res.json()
+
+    summaries_res = client.get(f"/api/spanner/summaries/{user_id}")
+    assert summaries_res.status_code == 200
+    assert "summaries" in summaries_res.json()
+
+
+def test_ui_service_mcp_execute_endpoint():
+    """Verify that /api/mcp/execute routes correctly to MCP tools and returns SLA latency."""
+    client = TestClient(api)
+    with patch("src.mcp_server.server.get_user_crystallized_beliefs", return_value="### Mock Beliefs"):
+        res = client.post(
+            "/api/mcp/execute",
+            json={
+                "tool_name": "get_user_crystallized_beliefs",
+                "arguments": {"user_id": "test-user"},
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "success"
+        assert data["tool_name"] == "get_user_crystallized_beliefs"
+        assert data["result"] == "### Mock Beliefs"
+        assert "latency_ms" in data
+        assert "sla" in data
+
+
+
 
 

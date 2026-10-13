@@ -3,7 +3,7 @@
 
 project_id          = "your-gcp-project-id"
 region              = "us-central1"
-model_name          = "gemini-3.5-flash-lite"
+model_name          = "gemini-3.8-flash"
 bq_dataset_id       = "agent_telemetry"
 bq_table_id         = "agent_logs"
 spanner_instance_id = "adk-spanner-instance"

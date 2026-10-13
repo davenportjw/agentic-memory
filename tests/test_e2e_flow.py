@@ -4,11 +4,14 @@ from fastapi.testclient import TestClient
 from src.ui_service.server import api, telemetry_sink, spanner_client, synchronizer
 
 
+import uuid
+
+
 def test_complete_e2e_multi_agent_flow():
     """Execute the full end-to-end multi-agent interview, summarization, and cache lookup lifecycle."""
     client = TestClient(api)
-    user_id = "test-e2e-user-888"
-    session_id = "session-e2e-complete-001"
+    user_id = f"test-e2e-user-{uuid.uuid4().hex[:8]}"
+    session_id = f"session-e2e-complete-{uuid.uuid4().hex[:8]}"
 
     # 1. User introduces themselves to InterviewAgent
     r1 = client.post(

@@ -16,7 +16,7 @@ class AppConfig:
     otel_to_cloud: bool
     enable_telemetry: bool
     model_name: str
-    use_mock_clients: bool
+    antigravity_brain_path: str
     ui_service_url: str
     interview_agent_url: str
     preference_agent_url: str
@@ -43,8 +43,8 @@ def get_config() -> AppConfig:
     spanner_database_id = os.environ.get("SPANNER_DATABASE_ID", "agent_memory_db")
     otel_to_cloud = os.environ.get("OTEL_TO_CLOUD", "false").lower() in ("true", "1", "yes")
     enable_telemetry = os.environ.get("ENABLE_TELEMETRY", "true").lower() in ("true", "1", "yes")
-    model_name = os.environ.get("MODEL_NAME", "gemini-3.5-flash-lite")
-    use_mock_clients = os.environ.get("USE_MOCK_CLIENTS", "false").lower() in ("true", "1", "yes")
+    model_name = os.environ.get("MODEL_NAME", "gemini-3.8-flash")
+    antigravity_brain_path = os.environ.get("ANTIGRAVITY_BRAIN_PATH", os.path.expanduser("~/.gemini/antigravity/brain"))
     ui_service_url = os.environ.get("UI_SERVICE_URL", "http://localhost:8080")
     interview_agent_url = os.environ.get("INTERVIEW_AGENT_URL", "http://localhost:8081")
     preference_agent_url = os.environ.get("PREFERENCE_AGENT_URL", "http://localhost:8082")
@@ -79,7 +79,7 @@ def get_config() -> AppConfig:
         otel_to_cloud=otel_to_cloud,
         enable_telemetry=enable_telemetry,
         model_name=model_name,
-        use_mock_clients=use_mock_clients,
+        antigravity_brain_path=antigravity_brain_path,
         ui_service_url=ui_service_url,
         interview_agent_url=interview_agent_url,
         preference_agent_url=preference_agent_url,

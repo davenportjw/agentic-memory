@@ -11,9 +11,11 @@ document.addEventListener("DOMContentLoaded", () => {
   initDataSandbox();
   initDreamSandboxTabs();
   initSessionTooltip();
+  initLeftNavCollapse();
   initArchSidebar();
   initArchDiagramSelector();
   initGithubModal();
+  initMathVisualizer();
 });
 
 /* ==========================================================================
@@ -21,28 +23,28 @@ document.addEventListener("DOMContentLoaded", () => {
    ========================================================================== */
 const FLOW_STAGE_DATA = {
   1: {
-    title: "1. Waking State: InterviewAgent (Google ADK 2.0)",
-    desc: "<strong>The Waking State:</strong> When a user interacts with the system, the <code>InterviewAgent</code> engages in dynamic dialogue using Google ADK 2.0 and Gemini 3.5 Flash Lite on Vertex AI. During this daytime state, the agent focuses on responsiveness and tool execution (<code>record_user_answer</code>) without blocking on heavy database writes.",
+    title: "1. Live Dialogue: InterviewAgent (Google ADK 2.0)",
+    desc: "<strong>Live Dialogue:</strong> The <code>InterviewAgent</code> engages in conversational turns using Google ADK 2.0 and Gemini 3.8 Flash on Vertex AI. Facts are captured via tool execution (<code>record_user_answer</code>) without blocking on persistent database writes.",
     codeTab: "1"
   },
   2: {
-    title: "2. Episodic Waking Memory: BigQuery Telemetry",
-    desc: "<strong>Episodic Trace Logging:</strong> Every user prompt and agent response is asynchronously appended to Google BigQuery table <code>adk_agent_telemetry.agent_logs</code>. This immutable log serves as the agent's daytime episodic memory, preserving full conversational provenance for auditability and batch REM synthesis.",
+    title: "2. Episodic Trace Logging: BigQuery Telemetry",
+    desc: "<strong>Episodic Trace Logging:</strong> Every user prompt and agent response is asynchronously appended to BigQuery table <code>adk_agent_telemetry.agent_logs</code>, preserving full conversational provenance for auditability and batch distillation.",
     codeTab: "2"
   },
   3: {
-    title: "3. REM Sleep & Dream Harvest: AI.GENERATE Belief Synthesis",
-    desc: "<strong>Artificial REM Sleep:</strong> When a Dream Harvest is triggered, the synchronizer aggregates raw BigQuery logs and prompts Gemini 3.5 Flash Lite with <code>response_mime_type=\"application/json\"</code>. The AI prunes conversational noise and extracts a clean array of structured user preference facts.",
+    title: "3. Memory Synthesis: Gemini 3.8 Flash Distillation",
+    desc: "<strong>Memory Synthesis:</strong> When synthesis triggers, the synchronizer aggregates BigQuery logs and invokes Gemini 3.8 Flash with a strict JSON schema to distill structured preferences.",
     codeTab: "3"
   },
   4: {
-    title: "4. Crystalline Memory: Google Cloud Spanner Table",
-    desc: "<strong>Crystallized Preference Storage:</strong> Distilled user beliefs are mutated into the Cloud Spanner <code>UserPreferences</code> table with a composite primary key <code>(user_id, preference_key)</code> and automatic commit timestamps. This provides ACID-compliant, globally consistent memory that persists across deployments.",
+    title: "4. Crystalline Memory: Cloud Spanner",
+    desc: "<strong>Crystalline Storage:</strong> Distilled user beliefs are mutated into the Cloud Spanner <code>UserPreferences</code> table with primary key <code>(UserId, PreferenceKey)</code> and commit timestamps, providing durable, structured persistence across sessions.",
     codeTab: "4"
   },
   5: {
-    title: "5. Instant Recall: PreferenceAgent (< 10ms SLA)",
-    desc: "<strong>Fast-Path Cache Interception:</strong> When a subagent queries user profile facts, <code>PreferenceAgent</code> intercepts the request and performs an instantaneous primary-key lookup in Cloud Spanner. On a cache hit, exact profile facts are returned in <strong>< 10ms</strong> without incurring any LLM inference latency or token costs.",
+    title: "5. Instant Recall: PreferenceAgent (Sub-10ms Fast Lookup)",
+    desc: "<strong>Cache Interception:</strong> When querying user profile facts, <code>PreferenceAgent</code> performs a primary-key lookup in Cloud Spanner. Cache hits return in <strong>< 10ms</strong> without incurring LLM inference latency or token costs.",
     codeTab: "5"
   }
 };
@@ -166,7 +168,7 @@ function initCodeCopyButtons() {
 const SANDBOX_DATA = {
   1: {
     bq: `{
-  "event_timestamp": "2026-08-03T20:31:00Z",
+  "timestamp": "2026-10-12T20:31:00Z",
   "session_id": "session-ui-001",
   "user_id": "demo-user-42",
   "agent_name": "InterviewAgent",
@@ -196,75 +198,52 @@ const SANDBOX_DATA = {
     }
   ]
 }`,
-    dreamQueries: `-- 1. BigQuery Waking Telemetry SELECT Query
+    dreamQueries: `-- 1. BigQuery Telemetry Extraction Query
 SELECT session_id, user_id, event_type, message, timestamp
 FROM \`adk_agent_telemetry.agent_logs\`
 WHERE session_id = 'session-ui-001'
 ORDER BY timestamp ASC;
 
--- 2. BigQuery AI Batch Synthesizer Query (ML.GENERATE_TEXT / AI.GENERATE)
-SELECT ml_generate_text_result['content'] AS distilled_preferences
-FROM ML.GENERATE_TEXT(
-  MODEL \`adk_agent_telemetry.gemini_3_5_flash_lite\`,
-  (SELECT CONCAT('Analyze waking logs and distill JSON beliefs:\\n', STRING_AGG(message, '\\n')) AS prompt
-   FROM \`adk_agent_telemetry.agent_logs\`
-   WHERE session_id = 'session-ui-001')
-);
-
--- 3. Cloud Spanner Upsert Mutations
+-- 2. Cloud Spanner Upsert Mutations
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
 VALUES ('demo-user-42', 'favorite_language', 'Python', 'language', 0.98, 'session-ui-001', 'The user\\'s favorite programming language is Python.', 'python, language, programming', PENDING_COMMIT_TIMESTAMP());
 
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
 VALUES ('demo-user-42', 'job_role', 'Principal Cloud Architect', 'role', 0.99, 'session-ui-001', 'The user works as a Principal Cloud Architect.', 'architect, principal, cloud, role', PENDING_COMMIT_TIMESTAMP());`,
-    dreamPrompt: `You are an AI REM Memory Synthesizer ("Dream Engine") performing offline memory consolidation over waking conversation logs for user 'demo-user-42' in session 'session-ui-001'.
-Your goal is to crystallize short-term episodic interactions into clean, accurate, high-confidence long-term semantic beliefs and capture user intent.
+    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'demo-user-42' in session 'session-ui-001'.
+Extract long-term semantic beliefs and capture user intent.
 
-Analyze the conversation transcript below:
+Conversation transcript:
 USER_PROMPT: My favorite language is Python and I am a Principal Cloud Architect
 
-Rules:
-1. Extract the user's primary "session_intent": what is the user's underlying goal, motivation, or project focus in this session?
-2. Extract the "intent_category": choose one of "onboarding", "exploratory", "architecture_design", "troubleshooting", "profile", or "general".
-3. Provide an "intent_confidence" float score between 0.0 and 1.0.
-4. Extract every distinct preference, technical skill, job role, favorite language, preferred tool, or identity attribute.
-5. NEVER confuse or merge the user's name with their job role.
-6. For each preference record, provide: preference_key, preference_value, category, confidence, crystallized_belief, keywords.
-7. Also provide a 2-sentence overall profile summary.
-
-Return a valid JSON object matching this schema:
-{
-  "user_id": "demo-user-42",
-  "session_id": "session-ui-001",
-  "summary": "Overall profile summary text...",
-  "session_intent": "The user's primary intent in this session...",
-  "intent_category": "profile",
-  "intent_confidence": 0.95,
-  "preferences": [...]
-}`,
-    spanner: `INSERT_OR_UPDATE INTO UserPreferences:
+Requirements:
+1. Extract primary session_intent and intent_category.
+2. Provide intent_confidence between 0.0 and 1.0.
+3. Extract distinct preferences (preference_key, preference_value, category, confidence, crystallized_belief, keywords).
+4. Return valid JSON matching the schema.`,
+    spanner: `INSERT OR UPDATE UserPreferences:
 ---
-user_id: "demo-user-42"
-preference_key: "favorite_language"
-preference_value: "Python"
-category: "language"
-confidence: 0.98
-crystallized_belief: "The user's favorite programming language is Python."
-keywords: "python, language, programming"
-updated_at: PENDING_COMMIT_TIMESTAMP()
+UserId: "demo-user-42"
+PreferenceKey: "favorite_language"
+PreferenceValue: "Python"
+Category: "language"
+Confidence: 0.98
+CrystallizedBelief: "The user's favorite programming language is Python."
+Keywords: "python, language, programming"
+LastUpdated: PENDING_COMMIT_TIMESTAMP()
 
-user_id: "demo-user-42"
-preference_key: "job_role"
-preference_value: "Principal Cloud Architect"
-category: "role"
-confidence: 0.99
-crystallized_belief: "The user works as a Principal Cloud Architect."
-keywords: "architect, principal, cloud, role"
-updated_at: PENDING_COMMIT_TIMESTAMP()`
+UserId: "demo-user-42"
+PreferenceKey: "job_role"
+PreferenceValue: "Principal Cloud Architect"
+Category: "role"
+Confidence: 0.99
+CrystallizedBelief: "The user works as a Principal Cloud Architect."
+Keywords: "architect, principal, cloud, role"
+LastUpdated: PENDING_COMMIT_TIMESTAMP()`
   },
   2: {
     bq: `{
-  "event_timestamp": "2026-08-03T20:32:14Z",
+  "timestamp": "2026-10-12T20:32:14Z",
   "session_id": "session-ui-001",
   "user_id": "demo-user-42",
   "agent_name": "InterviewAgent",
@@ -302,84 +281,61 @@ updated_at: PENDING_COMMIT_TIMESTAMP()`
     }
   ]
 }`,
-    dreamQueries: `-- 1. BigQuery Waking Telemetry SELECT Query
+    dreamQueries: `-- 1. BigQuery Telemetry Extraction Query
 SELECT session_id, user_id, event_type, message, timestamp
 FROM \`adk_agent_telemetry.agent_logs\`
 WHERE session_id = 'session-ui-001'
 ORDER BY timestamp ASC;
 
--- 2. BigQuery AI Batch Synthesizer Query (ML.GENERATE_TEXT / AI.GENERATE)
-SELECT ml_generate_text_result['content'] AS distilled_preferences
-FROM ML.GENERATE_TEXT(
-  MODEL \`adk_agent_telemetry.gemini_3_5_flash_lite\`,
-  (SELECT CONCAT('Analyze waking logs and distill JSON beliefs:\\n', STRING_AGG(message, '\\n')) AS prompt
-   FROM \`adk_agent_telemetry.agent_logs\`
-   WHERE session_id = 'session-ui-001')
-);
-
--- 3. Cloud Spanner Upsert Mutations
+-- 2. Cloud Spanner Upsert Mutations
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
 VALUES ('demo-user-42', 'deploy_target', 'Google Cloud Run', 'infrastructure', 0.97, 'session-ui-001', 'The user deploys microservices to Google Cloud Run.', 'cloud run, serverless, microservices, deploy', PENDING_COMMIT_TIMESTAMP());
 
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
 VALUES ('demo-user-42', 'iac_tool', 'Terraform', 'devops', 0.95, 'session-ui-001', 'The user manages infrastructure as code using Terraform.', 'terraform, iac, devops, infrastructure', PENDING_COMMIT_TIMESTAMP());`,
-    dreamPrompt: `You are an AI REM Memory Synthesizer ("Dream Engine") performing offline memory consolidation over waking conversation logs for user 'demo-user-42' in session 'session-ui-001'.
-Your goal is to crystallize short-term episodic interactions into clean, accurate, high-confidence long-term semantic beliefs and capture user intent.
+    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'demo-user-42' in session 'session-ui-001'.
+Extract long-term semantic beliefs and capture user intent.
 
-Analyze the conversation transcript below:
+Conversation transcript:
 USER_PROMPT: I deploy microservices to Cloud Run using Terraform and Spanner
 
-Rules:
-1. Extract the user's primary "session_intent": what is the user's underlying goal, motivation, or project focus in this session?
-2. Extract the "intent_category": choose one of "onboarding", "exploratory", "architecture_design", "troubleshooting", "profile", or "general".
-3. Provide an "intent_confidence" float score between 0.0 and 1.0.
-4. Extract every distinct preference, technical skill, job role, favorite language, preferred tool, or identity attribute.
-5. NEVER confuse or merge the user's name with their job role.
-6. For each preference record, provide: preference_key, preference_value, category, confidence, crystallized_belief, keywords.
-7. Also provide a 2-sentence overall profile summary.
-
-Return a valid JSON object matching this schema:
-{
-  "user_id": "demo-user-42",
-  "session_id": "session-ui-001",
-  "summary": "Overall profile summary text...",
-  "session_intent": "The user's primary intent in this session...",
-  "intent_category": "profile",
-  "intent_confidence": 0.95,
-  "preferences": [...]
-}`,
-    spanner: `INSERT_OR_UPDATE INTO UserPreferences:
+Requirements:
+1. Extract primary session_intent and intent_category.
+2. Provide intent_confidence between 0.0 and 1.0.
+3. Extract distinct preferences (preference_key, preference_value, category, confidence, crystallized_belief, keywords).
+4. Return valid JSON matching the schema.`,
+    spanner: `INSERT OR UPDATE UserPreferences:
 ---
-user_id: "demo-user-42"
-preference_key: "deploy_target"
-preference_value: "Google Cloud Run"
-category: "infrastructure"
-confidence: 0.97
-crystallized_belief: "The user deploys microservices to Google Cloud Run."
-keywords: "cloud run, serverless, microservices, deploy"
-updated_at: PENDING_COMMIT_TIMESTAMP()
+UserId: "demo-user-42"
+PreferenceKey: "deploy_target"
+PreferenceValue: "Google Cloud Run"
+Category: "infrastructure"
+Confidence: 0.97
+CrystallizedBelief: "The user deploys microservices to Google Cloud Run."
+Keywords: "cloud run, serverless, microservices, deploy"
+LastUpdated: PENDING_COMMIT_TIMESTAMP()
 
-user_id: "demo-user-42"
-preference_key: "iac_tool"
-preference_value: "Terraform"
-category: "devops"
-confidence: 0.95
-crystallized_belief: "The user manages infrastructure as code using Terraform."
-keywords: "terraform, iac, devops, infrastructure"
-updated_at: PENDING_COMMIT_TIMESTAMP()
+UserId: "demo-user-42"
+PreferenceKey: "iac_tool"
+PreferenceValue: "Terraform"
+Category: "devops"
+Confidence: 0.95
+CrystallizedBelief: "The user manages infrastructure as code using Terraform."
+Keywords: "terraform, iac, devops, infrastructure"
+LastUpdated: PENDING_COMMIT_TIMESTAMP()
 
-user_id: "demo-user-42"
-preference_key: "database"
-preference_value: "Google Cloud Spanner"
-category: "database"
-confidence: 0.98
-crystallized_belief: "The user relies on Google Cloud Spanner as their database."
-keywords: "spanner, database, sql, google cloud"
-updated_at: PENDING_COMMIT_TIMESTAMP()`
+UserId: "demo-user-42"
+PreferenceKey: "database"
+PreferenceValue: "Google Cloud Spanner"
+Category: "database"
+Confidence: 0.98
+CrystallizedBelief: "The user relies on Google Cloud Spanner as their database."
+Keywords: "spanner, database, sql, google cloud"
+LastUpdated: PENDING_COMMIT_TIMESTAMP()`
   },
   3: {
     bq: `{
-  "event_timestamp": "2026-08-03T20:33:40Z",
+  "timestamp": "2026-10-12T20:33:40Z",
   "session_id": "session-ui-001",
   "user_id": "demo-user-42",
   "agent_name": "InterviewAgent",
@@ -409,71 +365,48 @@ updated_at: PENDING_COMMIT_TIMESTAMP()`
     }
   ]
 }`,
-    dreamQueries: `-- 1. BigQuery Waking Telemetry SELECT Query
+    dreamQueries: `-- 1. BigQuery Telemetry Extraction Query
 SELECT session_id, user_id, event_type, message, timestamp
 FROM \`adk_agent_telemetry.agent_logs\`
 WHERE session_id = 'session-ui-001'
 ORDER BY timestamp ASC;
 
--- 2. BigQuery AI Batch Synthesizer Query (ML.GENERATE_TEXT / AI.GENERATE)
-SELECT ml_generate_text_result['content'] AS distilled_preferences
-FROM ML.GENERATE_TEXT(
-  MODEL \`adk_agent_telemetry.gemini_3_5_flash_lite\`,
-  (SELECT CONCAT('Analyze waking logs and distill JSON beliefs:\\n', STRING_AGG(message, '\\n')) AS prompt
-   FROM \`adk_agent_telemetry.agent_logs\`
-   WHERE session_id = 'session-ui-001')
-);
-
--- 3. Cloud Spanner Upsert Mutations
+-- 2. Cloud Spanner Upsert Mutations
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
 VALUES ('demo-user-42', 'ui_theme', 'Dark Mode', 'preference', 0.99, 'session-ui-001', 'The user prefers dark mode UI.', 'dark mode, theme, ui', PENDING_COMMIT_TIMESTAMP());
 
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
 VALUES ('demo-user-42', 'test_runner', 'uv + pytest', 'testing', 0.96, 'session-ui-001', 'The user runs tests using uv and pytest.', 'uv, pytest, testing, python', PENDING_COMMIT_TIMESTAMP());`,
-    dreamPrompt: `You are an AI REM Memory Synthesizer ("Dream Engine") performing offline memory consolidation over waking conversation logs for user 'demo-user-42' in session 'session-ui-001'.
-Your goal is to crystallize short-term episodic interactions into clean, accurate, high-confidence long-term semantic beliefs and capture user intent.
+    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'demo-user-42' in session 'session-ui-001'.
+Extract long-term semantic beliefs and capture user intent.
 
-Analyze the conversation transcript below:
+Conversation transcript:
 USER_PROMPT: I prefer dark mode UI and writing Go tests with pytest and uv
 
-Rules:
-1. Extract the user's primary "session_intent": what is the user's underlying goal, motivation, or project focus in this session?
-2. Extract the "intent_category": choose one of "onboarding", "exploratory", "architecture_design", "troubleshooting", "profile", or "general".
-3. Provide an "intent_confidence" float score between 0.0 and 1.0.
-4. Extract every distinct preference, technical skill, job role, favorite language, preferred tool, or identity attribute.
-5. NEVER confuse or merge the user's name with their job role.
-6. For each preference record, provide: preference_key, preference_value, category, confidence, crystallized_belief, keywords.
-7. Also provide a 2-sentence overall profile summary.
-
-Return a valid JSON object matching this schema:
-{
-  "user_id": "demo-user-42",
-  "session_id": "session-ui-001",
-  "summary": "Overall profile summary text...",
-  "session_intent": "The user's primary intent in this session...",
-  "intent_category": "profile",
-  "intent_confidence": 0.95,
-  "preferences": [...]
-}`,
-    spanner: `INSERT_OR_UPDATE INTO UserPreferences:
+Requirements:
+1. Extract primary session_intent and intent_category.
+2. Provide intent_confidence between 0.0 and 1.0.
+3. Extract distinct preferences (preference_key, preference_value, category, confidence, crystallized_belief, keywords).
+4. Return valid JSON matching the schema.`,
+    spanner: `INSERT OR UPDATE UserPreferences:
 ---
-user_id: "demo-user-42"
-preference_key: "ui_theme"
-preference_value: "dark mode"
-category: "preferences"
-confidence: 0.99
-crystallized_belief: "The user prefers a dark mode UI theme."
-keywords: "dark mode, theme, ui, appearance"
-updated_at: PENDING_COMMIT_TIMESTAMP()
+UserId: "demo-user-42"
+PreferenceKey: "ui_theme"
+PreferenceValue: "dark mode"
+Category: "preferences"
+Confidence: 0.99
+CrystallizedBelief: "The user prefers a dark mode UI theme."
+Keywords: "dark mode, theme, ui, appearance"
+LastUpdated: PENDING_COMMIT_TIMESTAMP()
 
-user_id: "demo-user-42"
-preference_key: "python_test_runner"
-preference_value: "uv + pytest"
-category: "testing"
-confidence: 0.96
-crystallized_belief: "The user runs tests using uv and pytest."
-keywords: "uv, pytest, testing, python"
-updated_at: PENDING_COMMIT_TIMESTAMP()`
+UserId: "demo-user-42"
+PreferenceKey: "python_test_runner"
+PreferenceValue: "uv + pytest"
+Category: "testing"
+Confidence: 0.96
+CrystallizedBelief: "The user runs tests using uv and pytest."
+Keywords: "uv, pytest, testing, python"
+LastUpdated: PENDING_COMMIT_TIMESTAMP()`
   }
 };
 
@@ -565,8 +498,48 @@ function initSessionTooltip() {
 }
 
 /* ==========================================================================
-   6. Left-Nav Sidebar Smooth Scrolling & Active Highlight
+   6. Left-Nav Sidebar Collapsible Behavior & Maximized Viewport
    ========================================================================== */
+function initLeftNavCollapse() {
+  const leftNav = document.querySelector(".left-nav");
+  const toggleBtn = document.getElementById("leftNavToggleBtn");
+  const layout = document.querySelector(".app-body-layout");
+  if (!leftNav || !toggleBtn) return;
+
+  const STORAGE_KEY = "electric_sheep_left_nav_collapsed";
+
+  function setCollapsed(isCollapsed) {
+    if (isCollapsed) {
+      leftNav.classList.add("collapsed");
+      if (layout) layout.classList.add("nav-collapsed");
+      toggleBtn.setAttribute("aria-expanded", "false");
+      toggleBtn.setAttribute("aria-label", "Expand stage navigation");
+      toggleBtn.setAttribute("title", "Expand sidebar");
+      try { localStorage.setItem(STORAGE_KEY, "true"); } catch (e) {}
+    } else {
+      leftNav.classList.remove("collapsed");
+      if (layout) layout.classList.remove("nav-collapsed");
+      toggleBtn.setAttribute("aria-expanded", "true");
+      toggleBtn.setAttribute("aria-label", "Collapse stage navigation");
+      toggleBtn.setAttribute("title", "Collapse sidebar to numbers only");
+      try { localStorage.setItem(STORAGE_KEY, "false"); } catch (e) {}
+    }
+  }
+
+  // Restore state from localStorage if not already applied by inline script
+  try {
+    if (localStorage.getItem(STORAGE_KEY) === "true") {
+      setCollapsed(true);
+    }
+  } catch (e) {}
+
+  toggleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isCurrentlyCollapsed = leftNav.classList.contains("collapsed");
+    setCollapsed(!isCurrentlyCollapsed);
+  });
+}
+
 function initArchSidebar() {
   const navItems = document.querySelectorAll(".left-nav .nav-item[data-arch-stage], .left-nav .nav-item[data-arch-section]");
   const sections = [
@@ -619,35 +592,35 @@ function initArchSidebar() {
 const ARCH_DIAGRAM_DATA = {
   "1": {
     badgeNum: "1",
-    title: "Step 1: How Context Telemetry Is Stored (Waking Life)",
+    title: "Step 1: Telemetry Ingestion (BigQuery)",
     techBadge: "Google BigQuery • agent_logs",
-    desc: "During waking interactive chat, the <code>InterviewAgent</code> streams every user utterance and agent response directly to Google BigQuery via an asynchronous OpenTelemetry/REST sink. This ensures high-throughput, append-only audit trails without slowing down the user experience or writing unverified beliefs to production tables.",
+    desc: "The <code>InterviewAgent</code> logs user prompts and agent responses to BigQuery table <code>adk_agent_telemetry.agent_logs</code> asynchronously. This provides an immutable audit trail without adding latency to live dialogue.",
     langTag: "SQL / BigQuery Schema",
-    code: `CREATE TABLE \`adk_agent_telemetry.agent_logs\` (\n  event_timestamp TIMESTAMP NOT NULL OPTIONS(description="UTC event arrival time"),\n  session_id STRING NOT NULL OPTIONS(description="Episodic session scope"),\n  user_id STRING NOT NULL OPTIONS(description="Long-term user identity"),\n  agent_name STRING NOT NULL OPTIONS(description="Agent emitting event"),\n  event_type STRING NOT NULL OPTIONS(description="USER_PROMPT or AGENT_RESPONSE"),\n  message STRING OPTIONS(description="Raw message content or JSON payload")\n)\nPARTITION BY DATE(event_timestamp)\nCLUSTER BY user_id, session_id;`
+    code: `CREATE TABLE \`adk_agent_telemetry.agent_logs\` (\n  timestamp TIMESTAMP NOT NULL OPTIONS(description="UTC event arrival time"),\n  user_id STRING NOT NULL OPTIONS(description="Long-term user identity"),\n  session_id STRING NOT NULL OPTIONS(description="Session scope"),\n  agent_name STRING NOT NULL OPTIONS(description="Agent emitting event"),\n  event_type STRING NOT NULL OPTIONS(description="USER_PROMPT or AGENT_RESPONSE"),\n  message STRING OPTIONS(description="Raw message content"),\n  json_payload JSON OPTIONS(description="Structured tool call metadata")\n)\nPARTITION BY DATE(timestamp)\nCLUSTER BY user_id, session_id;`
   },
   "2": {
     badgeNum: "2",
-    title: "Step 2: How REM Dreams Run & Synthesize Beliefs",
-    techBadge: "Vertex AI • ML.GENERATE_TEXT (Gemini 3.5 Flash Lite)",
-    desc: "During offline REM memory consolidation (triggered nightly or via <code>POST /api/harvest</code>), the Dream Engine executes a BigQuery AI <code>ML.GENERATE_TEXT</code> query across all waking logs for the session. Gemini 3.5 Flash Lite distills raw dialogue into structured semantic beliefs and confidence scores, pruning noise and resolving contradictions.",
-    langTag: "SQL / BigQuery AI ML.GENERATE_TEXT",
-    code: `-- BigQuery AI REM Memory Synthesizer Query\nSELECT ml_generate_text_result['content'] AS distilled_preferences_json\nFROM ML.GENERATE_TEXT(\n  MODEL \`adk_agent_telemetry.gemini_3_5_flash_lite\`,\n  (\n    SELECT CONCAT(\n      'Analyze waking telemetry logs and crystallize JSON beliefs across categories:\\n',\n      STRING_AGG(message, '\\n' ORDER BY event_timestamp ASC)\n    ) AS prompt\n    FROM \`adk_agent_telemetry.agent_logs\`\n    WHERE session_id = @session_id AND user_id = @user_id\n  ),\n  STRUCT(0.1 AS temperature, 1024 AS max_output_tokens)\n);`
+    title: "Step 2: Memory Synthesis (Gemini 3.8 Flash)",
+    techBadge: "Vertex AI • gemini-3.8-flash",
+    desc: "During offline memory consolidation, the engine reads session logs from BigQuery and invokes Gemini 3.8 Flash with a typed JSON schema to distill structured semantic beliefs and confidence scores.",
+    langTag: "Python / Vertex AI Gemini 3.8 Flash",
+    code: `# Distill structured preferences via Gemini 3.8 Flash\nresponse = genai_client.models.generate_content(\n  model="gemini-3.8-flash",\n  contents=f"Extract structured beliefs from session logs:\\n{logs}",\n  config=types.GenerateContentConfig(\n    response_mime_type="application/json",\n    temperature=0.2,\n  ),\n)`
   },
   "3": {
     badgeNum: "3",
-    title: "Step 3: How Crystalline Memory Is Saved",
-    techBadge: "Google Cloud Spanner • UserPreferences Table",
-    desc: "High-confidence beliefs harvested during REM sleep are committed into Google Cloud Spanner via ACID <code>INSERT OR UPDATE</code> mutations. Spanner acts as a permanent, multi-region crystalline matrix keyed by <code>(user_id, preference_key)</code>, ensuring long-term memory across sessions without duplicating or contradicting past preferences.",
+    title: "Step 3: Crystalline Storage (Cloud Spanner)",
+    techBadge: "Google Cloud Spanner • UserPreferences",
+    desc: "Distilled beliefs are committed to Cloud Spanner table <code>UserPreferences</code> using primary key <code>(UserId, PreferenceKey)</code>, ensuring structured, durable preference persistence across sessions.",
     langTag: "SQL / Cloud Spanner Mutations",
-    code: `-- ACID Mutation in Cloud Spanner Crystalline Table\nINSERT OR UPDATE UserPreferences (\n  user_id, preference_key, preference_value, category,\n  confidence, source_session_id, crystallized_belief, keywords, updated_at\n) VALUES (\n  'demo-user-42',\n  'favorite_language',\n  'Python',\n  'language',\n  0.98,\n  'session-ui-001',\n  'The user\\'s favorite programming language is Python.',\n  'python, language, programming',\n  PENDING_COMMIT_TIMESTAMP()\n);`
+    code: `-- Spanner Preference Upsert Mutation\nINSERT OR UPDATE UserPreferences (\n  UserId, PreferenceKey, PreferenceValue, Category,\n  Confidence, SourceSessionId, CrystallizedBelief, Keywords, LastUpdated\n) VALUES (\n  'demo-user-42',\n  'favorite_language',\n  'Python',\n  'language',\n  0.98,\n  'session-ui-001',\n  'The user\\'s favorite programming language is Python.',\n  'python, language, programming',\n  PENDING_COMMIT_TIMESTAMP()\n);`
   },
   "4": {
     badgeNum: "4",
-    title: "Step 4: How The Agent Retrieves Crystalline Memory",
-    techBadge: "PreferenceAgent • < 10ms Spanner Fast Cache SLA",
-    desc: "When the user interacts with any agent in future sessions, <code>PreferenceAgent</code> intercepts the request with a sub-10ms Spanner primary-key lookup (<code>SELECT preference_value, confidence, crystallized_belief...</code>). If crystalline memory answers the user's intent, the agent returns immediately without consuming LLM inference tokens, achieving instant recall.",
+    title: "Step 4: Sub-10ms Cache Retrieval (PreferenceAgent)",
+    techBadge: "PreferenceAgent • Sub-10ms Fast Lookup",
+    desc: "When retrieving user facts, <code>PreferenceAgent</code> executes a primary-key or vector lookup against Cloud Spanner. On cache hit, results return in sub-10ms without LLM inference.",
     langTag: "Python / Sub-10ms Spanner Fast Path",
-    code: `# Sub-10ms Spanner Fast Cache Intercept in src/preference_agent/server.py\ndef _fast_spanner_lookup(user_id: str, prompt: str) -> Optional[Dict[str, Any]]:\n    """Query Spanner crystalline memory table with < 10ms SLA."""\n    with spanner_client.database.snapshot() as snapshot:\n        results = snapshot.execute_sql(\n            "SELECT preference_key, preference_value, confidence, crystallized_belief "\n            "FROM UserPreferences WHERE user_id = @user_id AND confidence >= 0.8",\n            params={"user_id": user_id},\n            param_types={"user_id": spanner.param_types.STRING}\n        )\n        # Match key/keywords against prompt -> instant cache return without LLM!`
+    code: `# Sub-10ms Spanner Fast Cache Lookup\ndef _fast_spanner_lookup(user_id: str, prompt: str) -> Optional[Dict[str, Any]]:\n  with spanner_client.database.snapshot() as snapshot:\n    results = snapshot.execute_sql(\n      "SELECT PreferenceKey, PreferenceValue, Confidence, CrystallizedBelief "\n      "FROM UserPreferences WHERE UserId = @user_id AND Confidence >= 0.8",\n      params={"user_id": user_id},\n      param_types={"user_id": spanner.param_types.STRING}\n    )\n    return list(results)`
   }
 };
 
@@ -742,5 +715,52 @@ function initGithubModal() {
       githubModal.setAttribute("aria-hidden", "true");
     });
   }
+}
+
+/* ==========================================================================
+   8. Why Agents Sleep: O(N) vs O(1) Interactive Math Visualizer
+   ========================================================================== */
+function initMathVisualizer() {
+  const slider = document.getElementById("mathTurnsSlider");
+  const turnsVal = document.getElementById("mathTurnsVal");
+  const tokensVal = document.getElementById("mathTokensVal");
+  const ttftVal = document.getElementById("mathTtftVal");
+  const compactionVal = document.getElementById("mathCompactionVal");
+  const presetBtns = document.querySelectorAll(".math-preset-btn");
+
+  if (!slider) return;
+
+  function updateMathMetrics(turns) {
+    const N = parseInt(turns, 10);
+    const rawTokens = N * 1500;
+    // TTFT model: base 220ms + 16ms/turn + 0.1ms/turn^2 quadratic KV attention growth
+    const ttftMs = Math.round(220 + (16 * N) + (0.1 * N * N));
+    // Compaction: constant ~280 tokens of verified invariants in Spanner
+    const invariantTokens = 280;
+    const compactionPct = Math.min(99.9, Math.max(0, ((1 - (invariantTokens / rawTokens)) * 100))).toFixed(1);
+
+    if (turnsVal) turnsVal.textContent = N;
+    if (tokensVal) tokensVal.textContent = rawTokens.toLocaleString();
+    if (ttftVal) ttftVal.textContent = `${ttftMs.toLocaleString()} ms`;
+    if (compactionVal) compactionVal.textContent = `${compactionPct}%`;
+  }
+
+  slider.addEventListener("input", (e) => {
+    presetBtns.forEach(btn => btn.classList.remove("active"));
+    updateMathMetrics(e.target.value);
+  });
+
+  presetBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      presetBtns.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const turns = btn.getAttribute("data-turns");
+      slider.value = turns;
+      updateMathMetrics(turns);
+    });
+  });
+
+  // Initial calculation
+  updateMathMetrics(slider.value || 25);
 }
 

@@ -7,7 +7,7 @@
 -- Example DDL to create the Remote Model:
 -- CREATE OR REPLACE MODEL `${PROJECT_ID}.${BQ_DATASET_ID}.gemini_summarizer`
 -- REMOTE WITH CONNECTION `${PROJECT_ID}.us.vertex_ai_conn`
--- OPTIONS (ENDPOINT = 'gemini-3.5-flash-lite');
+-- OPTIONS (ENDPOINT = 'gemini-3.8-flash');
 
 -- 1. Aggregation & Summarization Query using BigQuery AI / ML.GENERATE_TEXT
 WITH SessionTranscripts AS (

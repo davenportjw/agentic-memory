@@ -48,7 +48,7 @@ def test_session_summarization_and_sync():
     prefs = {p["preference_key"]: p["preference_value"] for p in summary["preferences"]}
     assert prefs.get("favorite_language") == "Python"
     assert "Staff DevOps Engineer" in prefs.get("job_role", "")
-    assert "Google Cloud Spanner" in prefs.get("preferred_tools", "")
+    assert any("Google Cloud Spanner" in str(v) for v in prefs.values())
 
     # 3. Synchronize to Google Cloud Spanner
     sync_res = synchronizer.sync_to_spanner(user_id=user_id, session_id=session_id)

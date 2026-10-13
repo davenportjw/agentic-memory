@@ -3,44 +3,55 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Google ADK 2.0 Multi-Agent Control Center</title>
+  <title>Electric Sheep v2 • Long-Term Memory Synthesis &amp; Fast Recall</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2.2">
 </head>
 <body>
-  <!-- Top Material App Bar -->
+  <!-- Academic Cleanroom Top Bar -->
   <header class="app-bar">
     <div class="app-bar-content">
       <div class="app-title-group">
-        <h1>Google ADK 2.0</h1>
+        <div class="brand-badge">
+          <span class="brand-icon">🐑</span>
+          <span class="brand-name">Electric Sheep v2</span>
+        </div>
+        <span class="model-badge">Gemini 3.8 Flash • Vertex AI global</span>
         <nav class="app-nav" aria-label="Main Navigation">
           <a href="index.html" class="nav-pill active">
-            <span>🕹️</span><span>Control Center</span>
+            <span>Control Center</span>
           </a>
           <a href="how-it-works.html" class="nav-pill">
-            <span>🧠</span><span>How It Works</span>
+            <span>Architecture &amp; Docs</span>
           </a>
         </nav>
-        <span class="model-badge">Model: Gemini 3.5 Flash Lite</span>
       </div>
+
       <div class="session-info">
-        <label for="userIdInput">User ID:</label>
-        <input type="text" id="userIdInput" value="demo-user-42" class="input-inline" title="Long-term user identity for Google Cloud Spanner crystalline memory across sessions.">
-        <label for="sessionIdInput">Session ID:</label>
-        <input type="text" id="sessionIdInput" value="session-ui-001" class="input-inline" title="Short-term episodic conversation scope for Google BigQuery telemetry logs.">
-        <button type="button" id="githubPopoutBtn" class="github-nav-btn" aria-label="View GitHub Repository & QR Code" title="GitHub Repository & QR Code">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+        <div class="param-input-group">
+          <label for="userIdInput">User ID</label>
+          <input type="text" id="userIdInput" value="demo-user-42" class="input-inline" title="Cloud Spanner Long-Term Identity">
+        </div>
+        <div class="param-input-group">
+          <label for="sessionIdInput">Session ID</label>
+          <input type="text" id="sessionIdInput" value="session-ui-001" class="input-inline" title="BigQuery / Antigravity Session Scope">
+        </div>
+
+        <button type="button" id="githubPopoutBtn" class="github-nav-btn" aria-label="View GitHub Repository" title="GitHub Repository">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
           </svg>
           <span>GitHub</span>
         </button>
-        <a href="/logout" class="signout-btn" title="Sign out of Control Center">
+
+        <a href="/logout" class="signout-btn" title="Sign out of Google ADK session">
           <span>🚪</span><span>Sign Out</span>
         </a>
+
         <div class="info-tooltip-container">
-          <button type="button" id="sessionInfoBtn" class="info-icon-btn" aria-label="About User ID & Session ID" aria-describedby="sessionInfoTooltip">
+          <button type="button" id="sessionInfoBtn" class="info-icon-btn" aria-label="About User ID &amp; Session ID" aria-describedby="sessionInfoTooltip">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
             </svg>
@@ -52,11 +63,11 @@
             <div class="info-tooltip-body">
               <div class="info-tooltip-item">
                 <span class="info-tooltip-badge">User ID</span>
-                <p><strong>Long-Term Identity:</strong> Scopes crystalline preferences stored in <strong>Google Cloud Spanner</strong> across sessions. In this demo, change the User ID to demonstrate multi-user memory isolation or test cross-session cache recall in Stage 5.</p>
+                <p><strong>Long-Term Identity:</strong> Scopes crystalline preferences stored in <strong>Google Cloud Spanner</strong> across sessions. In this demo, change the User ID to demonstrate multi-user memory isolation.</p>
               </div>
               <div class="info-tooltip-item">
                 <span class="info-tooltip-badge">Session ID</span>
-                <p><strong>Short-Term Scope:</strong> Scopes waking conversation history and episodic telemetry logs in <strong>Google BigQuery</strong>. In this demo, change the Session ID to start a fresh short-term conversation without wiping long-term Spanner memory.</p>
+                <p><strong>Short-Term Scope:</strong> Scopes waking conversation history and episodic telemetry logs in <strong>Google BigQuery</strong>.</p>
               </div>
             </div>
           </div>
@@ -65,555 +76,560 @@
     </div>
   </header>
 
-  <!-- Main Workspace Layout: Fixed Left Navigation Sidebar + Continuous Long Page Pane -->
+  <!-- Main 2-Panel Cleanroom Layout -->
   <main class="app-body-layout">
-    
-    <!-- Left Navigation Sidebar: Sticky Table-of-Contents for Long Page -->
+    <!-- Left Navigation Sidebar -->
     <aside class="left-nav" aria-label="Stage Navigation">
       <div class="left-nav-header">
-        <span class="nav-title">STAGE PROGRESSION</span>
-        <span class="nav-subtitle">1 to 5 Agent Workflow</span>
+        <div class="left-nav-header-row">
+          <span class="nav-title">COGNITIVE LIFECYCLE</span>
+          <button type="button" id="leftNavToggleBtn" class="left-nav-collapse-btn" aria-label="Collapse stage navigation" aria-expanded="true" title="Collapse sidebar to numbers only">
+            <svg class="collapse-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="10 13 5 8 10 3"></polyline>
+            </svg>
+          </button>
+        </div>
+        <span class="nav-subtitle">Episodic Logs → Synthesis → Recall</span>
       </div>
       <nav class="nav-menu">
-        <a href="#stage-panel-1" class="nav-item active" data-stage="1">
+        <a href="#stage-panel-1" class="nav-item active" data-stage="1" title="Stage 1: Waking Life (Antigravity Sessions &amp; Chat)">
           <span class="nav-step-icon">1</span>
           <div class="nav-item-text">
-            <span class="nav-item-title">Interview Agent</span>
-            <span class="nav-item-desc">Action: Chat to build profile</span>
+            <span class="nav-item-title">Waking Life</span>
+            <span class="nav-item-desc">Antigravity Sessions &amp; Chat</span>
           </div>
         </a>
         <div class="nav-connector"></div>
-        <a href="#stage-panel-2" class="nav-item" data-stage="2">
+        <a href="#stage-panel-2" class="nav-item" data-stage="2" title="Stage 2: Telemetry Lakehouse (BigQuery Trajectory Traces)">
           <span class="nav-step-icon">2</span>
           <div class="nav-item-text">
-            <span class="nav-item-title">Telemetry Logs</span>
-            <span class="nav-item-desc">Action: Refresh BQ log table</span>
+            <span class="nav-item-title">Telemetry Lakehouse</span>
+            <span class="nav-item-desc">BigQuery Trajectory Traces</span>
           </div>
         </a>
         <div class="nav-connector"></div>
-        <a href="#stage-panel-3" class="nav-item" data-stage="3">
+        <a href="#stage-panel-3" class="nav-item" data-stage="3" title="Stage 3: Memory Synthesis (Offline Memory Consolidation)">
           <span class="nav-step-icon">3</span>
           <div class="nav-item-text">
-            <span class="nav-item-title">Dream Harvest</span>
-            <span class="nav-item-desc">Action: Click Run Dream Harvest</span>
+            <span class="nav-item-title">Memory Synthesis</span>
+            <span class="nav-item-desc">Offline Memory Consolidation</span>
           </div>
         </a>
         <div class="nav-connector"></div>
-        <a href="#stage-panel-4" class="nav-item" data-stage="4">
+        <a href="#stage-panel-4" class="nav-item" data-stage="4" title="Stage 4: Crystalline Matrix (Cloud Spanner Beliefs &amp; Vectors)">
           <span class="nav-step-icon">4</span>
           <div class="nav-item-text">
-            <span class="nav-item-title">Spanner Memory</span>
-            <span class="nav-item-desc">Action: Refresh Spanner table</span>
+            <span class="nav-item-title">Crystalline Matrix</span>
+            <span class="nav-item-desc">Cloud Spanner Beliefs &amp; Vectors</span>
           </div>
         </a>
         <div class="nav-connector"></div>
-        <a href="#stage-panel-5" class="nav-item" data-stage="5">
+        <a href="#stage-panel-5" class="nav-item" data-stage="5" title="Stage 5: Recall &amp; MCP (&lt;10ms Cache &amp; MCP Protocol)">
           <span class="nav-step-icon">5</span>
           <div class="nav-item-text">
-            <span class="nav-item-title">Preference Agent</span>
-            <span class="nav-item-desc">Action: Ask for &lt;10ms recall</span>
+            <span class="nav-item-title">Recall &amp; MCP</span>
+            <span class="nav-item-desc">&lt;10ms Cache &amp; MCP Protocol</span>
           </div>
         </a>
       </nav>
       <div class="left-nav-footer">
-        <div class="nav-footer-hint">💡 Click any item to jump to that section on the long page.</div>
+        <div class="nav-footer-status">
+          <span class="status-indicator live"></span>
+          <span>Spanner &amp; BQ Connected</span>
+        </div>
       </div>
+      <script>
+        (function() {
+          try {
+            if (localStorage.getItem("electric_sheep_left_nav_collapsed") === "true") {
+              var aside = document.currentScript.closest(".left-nav");
+              if (aside) aside.classList.add("collapsed");
+              var layout = document.querySelector(".app-body-layout");
+              if (layout) layout.classList.add("nav-collapsed");
+              var btn = document.getElementById("leftNavToggleBtn");
+              if (btn) {
+                btn.setAttribute("aria-expanded", "false");
+                btn.setAttribute("aria-label", "Expand stage navigation");
+                btn.setAttribute("title", "Expand sidebar");
+              }
+            }
+          } catch(e) {}
+        })();
+      </script>
     </aside>
 
-    <!-- Single Main Screen Pane: Continuous Top-to-Bottom Stage 1-5 Long Page -->
+    <!-- Center Workspace Pane -->
     <section class="single-pane-container">
       
-      <!-- 5-State Workflow Overview Guide Card -->
-      <div class="card workflow-guide-card">
+      <!-- System Architecture Banner -->
+      <div class="card system-intro-card">
         <div class="card-header">
-          <h2>🚀 How to Run Each State (Workflow Guide)</h2>
-          <span class="chip chip-primary">5-Stage Quickstart</span>
-        </div>
-        <p class="card-subtitle">Follow these 5 sequential states to experience the full Waking → REM Sleep → Crystalline Memory agent lifecycle:</p>
-        <div class="workflow-steps-grid">
-          <a href="#stage-panel-1" class="workflow-step-card">
-            <div class="step-num">State 1</div>
-            <div class="step-title">Interview Agent</div>
-            <div class="step-action">💬 <strong>How to run:</strong> Type your role &amp; favorite language in the chat box and click <strong>Send</strong>.</div>
-          </a>
-          <a href="#stage-panel-2" class="workflow-step-card">
-            <div class="step-num">State 2</div>
-            <div class="step-title">Telemetry Logs</div>
-            <div class="step-action">📊 <strong>How to run:</strong> Click <strong>Refresh Logs</strong> to inspect raw waking BigQuery traces.</div>
-          </a>
-          <a href="#stage-panel-3" class="workflow-step-card">
-            <div class="step-num">State 3</div>
-            <div class="step-title">Dream Harvest</div>
-            <div class="step-action">🌙 <strong>How to run:</strong> Click <strong>Run Dream Harvest</strong> to synthesize BigQuery logs into Spanner memory.</div>
-          </a>
-          <a href="#stage-panel-4" class="workflow-step-card">
-            <div class="step-num">State 4</div>
-            <div class="step-title">Spanner Memory</div>
-            <div class="step-action">💎 <strong>How to run:</strong> Click <strong>Refresh Spanner</strong> to verify crystallized long-term preferences.</div>
-          </a>
-          <a href="#stage-panel-5" class="workflow-step-card">
-            <div class="step-num">State 5</div>
-            <div class="step-title">Preference Agent</div>
-            <div class="step-action">⚡ <strong>How to run:</strong> Ask a profile question and click <strong>Ask</strong> to test sub-10ms cache recall.</div>
-          </a>
+          <div>
+            <h2>Electric Sheep v2: Long-Term Memory for Autonomous Agents</h2>
+            <p class="card-subtitle">Episodic interaction logs are analyzed offline and synthesized into dual-contract cognitive memory: working session context in BigQuery &amp; permanent crystallized beliefs in Cloud Spanner.</p>
+          </div>
+          <span class="intent-pill pill-primary">v2.0 Production</span>
         </div>
       </div>
 
-      <!-- Stage 1: Interview Agent -->
+      <!-- Stage 1: Waking Life (Antigravity Sessions & Interactive Dialogue) -->
       <div id="stage-panel-1" class="stage-panel" role="region" aria-labelledby="stage-title-1">
         <div class="card">
           <div class="card-header">
-            <h2 id="stage-title-1">1. Interview Agent</h2>
-            <span class="chip chip-primary">Profile Builder</span>
-          </div>
-          <p class="card-subtitle">Interview the user about their role, favorite programming languages, and tools.</p>
-          
-          <div class="stage-run-guide">
-            <span class="stage-run-guide-icon">▶️</span>
-            <div class="stage-run-guide-text">
-              <strong>How to run this state:</strong> Type your role and favorite programming language in the chat box below (e.g., <em>"My favorite language is Python and I am a Principal Cloud Architect"</em>) and click <strong>Send</strong>. The Interview Agent will converse with you and record your answers in short-term session memory.
+            <div>
+              <h2 id="stage-title-1">1. Waking Life: Episodic Trajectories</h2>
+              <p class="card-subtitle">Capture real-time developer workflows from Google Antigravity or converse via interactive dialogue.</p>
+            </div>
+            <div class="tab-group" role="tablist">
+              <button type="button" id="tabAntigravityBtn" class="tab-btn active" role="tab" aria-selected="true">Antigravity Sessions</button>
+              <button type="button" id="tabChatBtn" class="tab-btn" role="tab" aria-selected="false">Interactive Dialogue</button>
+              <button type="button" id="tabByotBtn" class="tab-btn" role="tab" aria-selected="false">BYOT Telemetry Dropzone</button>
             </div>
           </div>
 
-          <details class="stage-info" open>
-            <summary>ℹ️ Stage 1: Waking Life & Short-Term Conversation</summary>
-            <div class="stage-info-content">
-              <strong>What happens:</strong> You chat with the AI during its "waking hours." Every message is handled by Google ADK 2.0 with Gemini 3.5 Flash Lite.<br>
-              <strong>How it works:</strong> As you answer questions about your role and stack, your responses are recorded in short-term session memory and exported in real-time to Google BigQuery telemetry.
-            </div>
-          </details>
-
-          <!-- Collapsible Code & Architecture Section for Stage 1 -->
-          <details class="code-arch-collapse">
-            <summary>🛠️ Architecture & Code: ADK 2.0 Agent & Vertex AI (Click to inspect)</summary>
-            <div class="code-arch-content">
-              <div class="arch-overview">
-                <strong>Architecture Focus:</strong> Powered by <code>google.adk.agents.Agent</code> and <code>Runner</code> with Gemini 3.5 Flash Lite on Vertex AI. The agent executes custom tools (<code>record_user_answer</code>) to capture facts and logs Otel/BigQuery telemetry.
+          <!-- Tab Content: Antigravity Session Crawler -->
+          <div id="antigravitySection" class="tab-content active">
+            <div class="toolbar-row">
+              <div class="select-wrapper">
+                <label for="antigravitySessionSelect">Discovered Sessions:</label>
+                <select id="antigravitySessionSelect" class="select-control">
+                  <option value="">Loading local Antigravity sessions...</option>
+                </select>
               </div>
-              <div class="code-snippet-box">
-                <div class="code-header">
-                  <span>src/interview_agent/agent.py</span>
-                  <span class="code-badge">Python • Google ADK 2.0</span>
+              <div class="btn-group">
+                <button type="button" id="loadSessionTurnsBtn" class="btn btn-secondary btn-sm" title="Inspect user prompts, model reasoning, and tool calls for this session">Inspect Turns</button>
+                <button type="button" id="ingestSessionBqBtn" class="btn btn-primary btn-sm" title="Stream this session's raw interaction turns into BigQuery as queryable telemetry">Ingest to BigQuery</button>
+                <button type="button" id="dreamSessionDirectBtn" class="btn btn-harvest btn-sm" title="Analyze session logs with Gemini 3.8 Flash and store crystallized beliefs into Cloud Spanner">Synthesize Memories</button>
+              </div>
+            </div>
+
+            <div class="session-help-caption" id="sessionDiscoveryHelp" style="font-size: 0.82rem; color: var(--text-muted); margin: 6px 0 10px 2px; line-height: 1.4;">
+              💡 <em>Local Antigravity sessions are read from <code>~/.gemini/antigravity/brain</code> on your local workstation. When viewing on Cloud Run or if no local sessions exist, switch to <strong>Interactive Dialogue</strong> or <strong>BYOT Telemetry Dropzone</strong> above.</em>
+            </div>
+
+            <div class="session-metadata-strip" id="sessionMetaStrip">
+              <span class="meta-item"><strong>Turns:</strong> <span id="metaTurnCount">--</span></span>
+              <span class="meta-item"><strong>Tools Used:</strong> <span id="metaTools">--</span></span>
+              <span class="meta-item"><strong>Status:</strong> <span id="metaStatus" class="intent-pill pill-neutral">Ready</span></span>
+            </div>
+
+            <div class="turns-stream-box" id="turnsStreamBox">
+              <div class="empty-state-card">
+                <span>Select an Antigravity session above to inspect user prompts, model reasoning, and tool calls.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Content: Interactive Chat -->
+          <div id="chatSection" class="tab-content" style="display: none;">
+            <div id="interviewChatBox" class="chat-box">
+              <div class="msg agent-msg">
+                <div class="msg-sender">InterviewAgent</div>
+                <div class="msg-text">Hello! I am your Waking Interview Agent. What is your role, favorite programming language, and preferred cloud tools?</div>
+              </div>
+            </div>
+            
+            <form id="interviewForm" class="chat-form">
+              <input type="text" id="interviewInput" placeholder="e.g. My favorite language is Go for agents and Python for pipelines..." required>
+              <button type="submit" class="btn btn-primary">Send</button>
+            </form>
+          </div>
+
+          <!-- Tab Content: BYOT Telemetry Dropzone -->
+          <div id="byotSection" class="tab-content" style="display: none;">
+            <div class="byot-header-banner">
+              <div class="byot-banner-text">
+                <strong>Bring Your Own Telemetry (BYOT)</strong>: Paste or upload agent transcripts (JSON array, JSONL, or raw turns). Ingests directly into the BigQuery lakehouse for offline NREM/REM sleep consolidation.
+              </div>
+              <div class="byot-presets-group">
+                <span class="preset-label">Quick Samples:</span>
+                <button type="button" id="loadPresetPythonBtn" class="preset-pill" title="Load Python testing & uv preference trajectory">Python &amp; uv Refactor</button>
+                <button type="button" id="loadPresetDockerBtn" class="preset-pill" title="Load Docker container guardrail incident">Docker Ban Guardrail</button>
+                <button type="button" id="loadPresetTerraformBtn" class="preset-pill" title="Load Terraform & Spanner policy run">Terraform Policy Run</button>
+              </div>
+            </div>
+
+            <div class="byot-control-grid">
+              <div class="byot-toolbar-row">
+                <div class="select-wrapper" style="flex: 1; min-width: 180px;">
+                  <label for="byotSessionId">Target Session ID:</label>
+                  <input type="text" id="byotSessionId" class="select-control" value="byot-session-001" style="height: 32px; padding: 4px 8px;">
                 </div>
-                <pre><code><span class="kw">from</span> google.adk.agents <span class="kw">import</span> Agent
-<span class="kw">from</span> google.adk.runners <span class="kw">import</span> Runner
+                <div class="select-wrapper" style="flex: 1; min-width: 180px;">
+                  <label for="byotFormat">Format:</label>
+                  <select id="byotFormat" class="select-control" style="height: 32px;">
+                    <option value="auto">Auto-Detect (JSON / JSONL / Text)</option>
+                    <option value="json">JSON Array</option>
+                    <option value="jsonl">JSONL (transcript.jsonl)</option>
+                    <option value="text">Plaintext Dialog</option>
+                  </select>
+                </div>
+                <div class="file-upload-wrapper">
+                  <label class="btn btn-secondary btn-sm file-btn-label" style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px; height: 32px; margin-top: 18px;">
+                    <span>📁 Upload File</span>
+                    <input type="file" id="byotFileInput" accept=".json,.jsonl,.txt,.log" style="display:none;">
+                  </label>
+                </div>
+              </div>
 
-agent = Agent(
-    name=<span class="str">"InterviewAgent"</span>,
-    model=config.model_name, <span class="com"># gemini-3.5-flash-lite on Vertex AI</span>
-    instruction=<span class="str">"""
-    You are an AI Profile & Interview Agent ('Introspective AI Philosopher').
-    1. For EVERY fact the user shares, call `record_user_answer` BEFORE replying.
-    2. Greet user accurately by name without confusing name with job role.
-    """</span>,
-    tools=[record_user_answer, get_recorded_answers],
-)
+              <div class="dropzone-area" id="byotDropzone">
+                <textarea id="byotContent" class="byot-textarea" rows="8" placeholder="Paste agent transcript JSON, JSONL (e.g. transcript.jsonl), or plaintext turns here, or drag &amp; drop a file..."></textarea>
+                <div class="dropzone-hint">Drag &amp; drop any <code>.json</code> or <code>.jsonl</code> transcript file directly into this area.</div>
+              </div>
 
-<span class="com"># Asynchronous event execution via ADK Runner</span>
-runner = Runner(app=adk_app, session_service=InMemorySessionService(), auto_create_session=<span class="kw">True</span>)
-<span class="kw">async for</span> event <span class="kw">in</span> runner.run_async(user_id=user_id, session_id=session_id, new_message=user_msg):
-    <span class="com"># Yield conversational parts & automatically execute tool calls</span></code></pre>
+              <div class="byot-actions-row" style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
+                <button type="button" id="byotIngestBtn" class="btn btn-primary btn-sm">Ingest Telemetry into BigQuery</button>
+                <button type="button" id="byotClearBtn" class="btn btn-secondary btn-sm">Clear</button>
+                <span id="byotStatusText" class="byot-status-badge" style="display:none;"></span>
               </div>
             </div>
-          </details>
-
-          <div id="interviewChatBox" class="chat-box">
-            <div class="msg agent-msg">
-              <div class="msg-sender">InterviewAgent</div>
-              <div class="msg-text">Hello! I am your Profile Interview Agent. What is your name, your job role, and your favorite programming language?</div>
-            </div>
           </div>
-          
-          <form id="interviewForm" class="chat-form">
-            <input type="text" id="interviewInput" placeholder="e.g., My favorite language is Python and I am a Principal Cloud Architect..." required>
-            <button type="submit" class="btn btn-primary">Send</button>
-          </form>
         </div>
       </div>
 
-      <!-- Stage 2: BigQuery Telemetry Logs -->
+      <!-- Stage 2: Telemetry Lakehouse (BigQuery) -->
       <div id="stage-panel-2" class="stage-panel" role="region" aria-labelledby="stage-title-2">
         <div class="card">
           <div class="card-header">
-            <h2 id="stage-title-2">2. BigQuery Telemetry Logs</h2>
-            <button id="refreshLogsBtn" class="btn btn-outlined btn-sm">Refresh Logs</button>
-          </div>
-          <p class="card-subtitle">Live traces of USER_PROMPT and AGENT_RESPONSE events logged to BigQuery.</p>
-          
-          <div class="stage-run-guide guide-success">
-            <span class="stage-run-guide-icon">▶️</span>
-            <div class="stage-run-guide-text">
-              <strong>How to run this state:</strong> Click the <strong>Refresh Logs</strong> button above after chatting in State 1 to inspect the live waking traces automatically streamed to Google BigQuery (<code>adk_agent_telemetry.agent_logs</code>). (Sending a chat message in State 1 also auto-refreshes this table!)
+            <div>
+              <h2 id="stage-title-2">2. Telemetry Lakehouse (Google BigQuery)</h2>
+              <p class="card-subtitle">Streaming audit trail of conversation turns, model thoughts, and tool executions.</p>
+            </div>
+            <div class="btn-group">
+              <button id="refreshLogsBtn" class="btn btn-secondary btn-sm">Refresh BigQuery Traces</button>
             </div>
           </div>
 
-          <details class="stage-info" open>
-            <summary>ℹ️ Stage 2: Short-Term Episodic Memory (BigQuery)</summary>
-            <div class="stage-info-content">
-              <strong>What happens:</strong> Raw, unfiltered conversation traces are streamed to BigQuery table <code>adk_agent_telemetry.agent_logs</code>.<br>
-              <strong>How it works:</strong> Instead of immediate database updates, these logs act as the agent's daytime waking memory. They await the nightly or triggered "Dream Cycle" to be synthesized into permanent beliefs.
+          <div class="filter-strip">
+            <span class="filter-label">Filter Events:</span>
+            <div class="filter-pills" id="logFilters">
+              <button type="button" class="intent-pill active" data-filter="ALL">All Events</button>
+              <button type="button" class="intent-pill" data-filter="USER_PROMPT">User Prompts</button>
+              <button type="button" class="intent-pill" data-filter="AGENT_RESPONSE">Agent Responses</button>
+              <button type="button" class="intent-pill" data-filter="TOOL_CALL">Tool Calls</button>
+              <button type="button" class="intent-pill" data-filter="TOOL_RESULT">Tool Results</button>
             </div>
-          </details>
-
-          <!-- Collapsible Code & Architecture Section for Stage 2 -->
-          <details class="code-arch-collapse">
-            <summary>🛠️ Architecture & Code: Asynchronous BigQuery Telemetry Sink (Click to inspect)</summary>
-            <div class="code-arch-content">
-              <div class="arch-overview">
-                <strong>Architecture Focus:</strong> The telemetry sink captures conversational events in real-time, structuring messages and JSON metadata for ingestion into Google BigQuery table <code>adk_agent_telemetry.agent_logs</code>.
-              </div>
-              <div class="code-snippet-box">
-                <div class="code-header">
-                  <span>src/common/telemetry.py</span>
-                  <span class="code-badge">Python • Google Cloud BigQuery</span>
-                </div>
-                <pre><code><span class="kw">class</span> BigQueryTelemetrySink:
-    <span class="kw">def</span> <span class="fn">log_interaction</span>(self, user_id, session_id, agent_name, event_type, message, payload=<span class="kw">None</span>):
-        row = {
-            <span class="str">"event_timestamp"</span>: datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            <span class="str">"session_id"</span>: session_id,
-            <span class="str">"user_id"</span>: user_id,
-            <span class="str">"agent_name"</span>: agent_name,
-            <span class="str">"event_type"</span>: event_type,  <span class="com"># 'USER_PROMPT' | 'AGENT_RESPONSE'</span>
-            <span class="str">"message"</span>: message,
-            <span class="str">"metadata_json"</span>: json.dumps(payload <span class="kw">or</span> {}),
-        }
-        <span class="com"># Async JSON row ingestion into BigQuery adk_agent_telemetry.agent_logs</span>
-        errors = self.client.insert_rows_json(self.table_ref, [row])
-        <span class="kw">if</span> errors:
-            logger.error(<span class="str">f"BigQuery insert error: {errors}"</span>)</code></pre>
-              </div>
-            </div>
-          </details>
+          </div>
 
           <div class="table-wrapper">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Event</th>
-                  <th>Agent</th>
-                  <th>Message</th>
+                  <th style="width: 140px;">Event Type</th>
+                  <th style="width: 160px;">Agent / Source</th>
+                  <th>Payload &amp; Message</th>
+                  <th style="width: 170px;">Timestamp</th>
                 </tr>
               </thead>
               <tbody id="logsTableBody">
-                <tr><td colspan="3" class="empty-state">No logs yet. Talk to an agent!</td></tr>
+                <tr><td colspan="4" class="empty-state">No logs loaded yet. Select a session or converse in Stage 1!</td></tr>
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      <!-- Stage 3: Dream Harvest -->
+      <!-- Stage 3: Offline Memory Consolidation (Gemini 3.8 Flash) -->
       <div id="stage-panel-3" class="stage-panel" role="region" aria-labelledby="stage-title-3">
-        <div class="card card-highlight">
+        <div class="card card-dream-glow">
           <div class="card-header">
-            <h2 id="stage-title-3">3. Dream Harvest</h2>
-            <button id="harvestBtn" class="btn btn-harvest">Run Dream Harvest</button>
-          </div>
-          <p class="card-subtitle">Summarize BigQuery session logs using AI.GENERATE / ML.GENERATE_TEXT and store learnings in Google Cloud Spanner.</p>
-          
-          <div class="stage-run-guide guide-warn">
-            <span class="stage-run-guide-icon">▶️</span>
-            <div class="stage-run-guide-text">
-              <strong>How to run this state:</strong> Click the <strong>Run Dream Harvest</strong> button above after chatting in State 1. This triggers the AI REM synthesis pipeline to analyze your waking BigQuery logs, distill your profile preferences via BigQuery AI (AI.GENERATE / ML.GENERATE_TEXT), and crystallize them into Google Cloud Spanner.
+            <div>
+              <h2 id="stage-title-3">3. Long-Term Memory Synthesis (Offline Consolidation)</h2>
+              <p class="card-subtitle">Offline memory consolidation via <strong>Gemini 3.8 Flash</strong> on Vertex AI. Distills short-term working context and crystallizes permanent user preferences into Cloud Spanner (inspired by biological memory consolidation during sleep).</p>
+            </div>
+            <div class="btn-group">
+              <button id="harvestBtn" class="btn btn-harvest" title="Analyze active session logs and crystallize beliefs into Cloud Spanner">Consolidate Session Memory</button>
+              <button id="multiHarvestBtn" class="btn btn-secondary btn-sm" title="Analyze all recorded user sessions to capture long-term intent and preferences across sessions">Consolidate All Sessions</button>
             </div>
           </div>
 
-          <details class="stage-info dream-info" open>
-            <summary>🌙 Stage 3: REM Synthesis / Dream Harvest</summary>
-            <div class="stage-info-content">
-              <strong>What happens when you click 'Run Dream Harvest':</strong> The AI enters an artificial sleep cycle ("REM Synthesis"). It reads all your raw conversation logs from BigQuery, uses <strong>BigQuery AI (AI.GENERATE / ML.GENERATE_TEXT)</strong> to distill key preferences, extract your single-session intent, and crystallize them into Google Cloud Spanner.<br>
-              <strong>Multi-Session Cross-Session Compaction:</strong> When run across multiple sessions, the Dream Engine synthesizes an overarching <code>cross_session_intent</code>, tracks your <code>intent_trajectory</code> as goals evolve over time, and resolves preference conflicts into clean, enduring beliefs in Spanner.<br>
-              <strong>Why "Do AI Agents Dream of Binary Sheep?":</strong> Just as biological brains consolidate daytime experiences into permanent memories during sleep, this pipeline converts noisy logs into clean, structured facts in Spanner.
-              
-              <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">
-                <strong>🔍 SQL Queries Executed During Dream Harvest:</strong>
-                <ul style="margin: 6px 0 10px 18px; padding: 0; line-height: 1.6;">
-                  <li><strong>BigQuery Waking Telemetry Extraction:</strong><br><code>SELECT session_id, user_id, event_type, message, timestamp FROM `adk_agent_telemetry.agent_logs` WHERE session_id = @session_id ORDER BY timestamp ASC;</code></li>
-                  <li><strong>BigQuery AI Batch Synthesizer (ML.GENERATE_TEXT / AI.GENERATE):</strong><br><code>SELECT ml_generate_text_result['content'] AS distilled_preferences FROM ML.GENERATE_TEXT(MODEL `adk_agent_telemetry.gemini_3_5_flash_lite`, (SELECT prompt FROM ...));</code></li>
-                  <li><strong>Cloud Spanner Crystalline Memory Upsert Mutations:</strong><br><code>INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at) VALUES (...);</code></li>
-                </ul>
-                <strong>📜 REM Dream Prompt Sent to Gemini 3.5 Flash Lite:</strong>
-                <div style="margin-top: 4px;">The AI is prompted with <code>response_mime_type="application/json"</code> and a structured schema instructing it to extract <code>session_intent</code>, <code>intent_category</code>, and crystallize natural language beliefs for every user preference fact.</div>
+          <!-- Dream Output Container -->
+          <div id="harvestStatus" class="harvest-output-area">
+            <div class="dream-placeholder">
+              <span class="dream-icon">🧠</span>
+              <p>Click <strong>Consolidate Session Memory</strong> to run offline memory synthesis. Raw interaction logs will be analyzed to distill immediate session intent and store persistent beliefs in Cloud Spanner.</p>
+            </div>
+          </div>
+
+          <!-- 2-Phase Sleep Model Indicator -->
+          <div id="sleepModelBanner" class="sleep-phases-strip" style="display: none; margin-bottom: 14px;">
+            <div class="phase-badge phase-nrem">
+              <span class="phase-num">STEP 1: ACTIVITY LOG (NREM)</span>
+              <span class="phase-name">What Happened: Raw Events &amp; Health</span>
+            </div>
+            <div class="phase-connector">➔</div>
+            <div class="phase-badge phase-rem">
+              <span class="phase-num">STEP 2: TAKEAWAYS &amp; GOALS (REM)</span>
+              <span class="phase-name">What It Means: Insights &amp; Intent</span>
+            </div>
+            <div class="phase-connector">➔</div>
+            <div class="phase-badge phase-gate">
+              <span class="phase-num">STEP 3: SAVED MEMORY (GATE)</span>
+              <span class="phase-name" id="certGateStatusText">What To Remember: Verified Rules</span>
+            </div>
+          </div>
+
+          <!-- Dual-Contract Memory Output Cards -->
+          <div id="dreamCardsContainer" class="dual-contract-grid" style="display: none;">
+            <!-- Phase 1: NREM Statistical Trace Diagnostics -->
+            <div class="contract-card nrem-diagnostics-card" id="nremCard">
+              <div class="contract-header">
+                <div>
+                  <span class="contract-badge badge-nrem">1. Session Activity (What Happened)</span>
+                  <span class="card-subtitle-hint">Raw chat events, errors, and detected tools</span>
+                </div>
+                <span class="contract-meta" id="nremTokensMeta">Tokens: --</span>
+              </div>
+              <div class="contract-body">
+                <div class="nrem-stat-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px;">
+                  <div class="nrem-stat-item" style="background: var(--surface-muted); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); text-align: center;">
+                    <span class="stat-label" style="display: block; font-size: 0.72rem; color: var(--text-muted);">Total Events</span>
+                    <strong class="stat-value" id="nremEventsCount" style="font-size: 1.1rem; color: var(--text-primary);">0</strong>
+                  </div>
+                  <div class="nrem-stat-item" style="background: var(--surface-muted); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); text-align: center;">
+                    <span class="stat-label" style="display: block; font-size: 0.72rem; color: var(--text-muted);">Est. Tokens</span>
+                    <strong class="stat-value" id="nremTokenCount" style="font-size: 1.1rem; color: var(--color-primary);">0</strong>
+                  </div>
+                  <div class="nrem-stat-item" style="background: var(--surface-muted); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); text-align: center;">
+                    <span class="stat-label" style="display: block; font-size: 0.72rem; color: var(--text-muted);">Error Rate</span>
+                    <strong class="stat-value" id="nremErrorRate" style="font-size: 1.1rem; color: var(--text-secondary);">0.0%</strong>
+                  </div>
+                </div>
+                <div class="field-block">
+                  <span class="field-title">Tools &amp; Technologies Used:</span>
+                  <div id="nremDomainsList" class="domain-pills-row" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                    <span class="intent-pill pill-neutral">None</span>
+                  </div>
+                </div>
+                <div class="field-block" style="margin-top: 8px;">
+                  <span class="field-title">Issues &amp; Roadblocks:</span>
+                  <ul id="nremFrictionList" class="compact-list" style="margin-top: 4px; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary);">
+                    <li>No friction detected in episodic traces.</li>
+                  </ul>
+                </div>
               </div>
             </div>
-          </details>
 
-          <!-- Collapsible Code & Architecture Section for Stage 3 -->
-          <details class="code-arch-collapse">
-            <summary>🛠️ Architecture, SQL Queries &amp; REM Prompts: Dream Harvest Pipeline (Click to inspect)</summary>
+            <!-- Short-Term Working Memory -->
+            <div class="contract-card short-term-card">
+              <div class="contract-header">
+                <div>
+                  <span class="contract-badge badge-working">2. Insights &amp; Working Goals (What It Means)</span>
+                  <span class="card-subtitle-hint">Understood workflow, goals, and working preferences</span>
+                </div>
+                <span class="contract-meta" id="dreamSessionId">Session: --</span>
+              </div>
+              <div class="contract-body">
+                <div class="field-block">
+                  <span class="field-title">Main Objective:</span>
+                  <p id="dreamIntent" class="intent-text">--</p>
+                </div>
+                <div class="field-block">
+                  <span class="field-title">Goals &amp; Evolution:</span>
+                  <ul id="dreamGoalsList" class="compact-list">
+                    <li>Awaiting synthesis...</li>
+                  </ul>
+                </div>
+                <div class="field-block">
+                  <span class="field-title">Blockers / Next Steps:</span>
+                  <p id="dreamBlockers" class="blockers-text">None detected.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Long-Term Crystallized Beliefs & Certification Gate -->
+            <div class="contract-card long-term-card">
+              <div class="contract-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="contract-badge badge-crystalline">3. Permanent Saved Rules (Remembered Forever)</span>
+                    <span id="certGateBadge" class="intent-pill pill-success" style="font-size: 0.72rem;">Certified (&ge; 0.85)</span>
+                  </div>
+                  <span class="card-subtitle-hint">Verified facts and habits stored in Cloud Spanner for all future agent sessions</span>
+                </div>
+                <span class="contract-meta" id="dreamBeliefCount">0 beliefs consolidated</span>
+              </div>
+              <div class="contract-body" id="dreamBeliefsBody">
+                <p class="empty-state">No beliefs synthesized yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Collapsible Query & Prompt Trace -->
+          <details class="code-arch-collapse" style="margin-top: 14px;">
+            <summary>Telemetry Traces &amp; Gemini 3.8 Flash Prompt Inspector</summary>
             <div class="code-arch-content">
-              <div class="arch-overview">
-                <strong>Architecture Focus:</strong> The Dream Harvest job acts as artificial REM sleep. It aggregates unstructured waking logs from BigQuery and invokes Gemini 3.5 Flash Lite with a structured JSON schema to distill facts and ingest mutations into Cloud Spanner.
+              <div class="query-block">
+                <strong>Execution Path:</strong> BigQuery logs extracted → Gemini 3.8 Flash Vertex AI (global) → Spanner <code>UserPreferences</code> &amp; <code>UserSessionSummaries</code>.
               </div>
-              <div class="code-snippet-box" style="margin-bottom: 12px;">
+              <div id="dreamPromptInspect" class="code-snippet-box">
                 <div class="code-header">
-                  <span>1. SQL Queries Executed (BigQuery &amp; Cloud Spanner)</span>
-                  <span class="code-badge">SQL • BigQuery AI &amp; Spanner Mutations</span>
+                  <span>Gemini 3.8 Flash Memory Synthesis Prompt Template</span>
+                  <span class="code-badge">Vertex AI (global)</span>
                 </div>
-                <pre><code><span class="com">-- 1. BigQuery Telemetry Extraction Query</span>
-<span class="kw">SELECT</span> session_id, user_id, event_type, message, timestamp
-<span class="kw">FROM</span> `adk_agent_telemetry.agent_logs`
-<span class="kw">WHERE</span> session_id = @session_id
-<span class="kw">ORDER BY</span> timestamp <span class="kw">ASC</span>;
-
-<span class="com">-- 2. BigQuery AI Batch Synthesizer Query (ML.GENERATE_TEXT / AI.GENERATE)</span>
-<span class="kw">SELECT</span> ml_generate_text_result['content'] <span class="kw">AS</span> distilled_preferences
-<span class="kw">FROM</span> ML.GENERATE_TEXT(
-  <span class="kw">MODEL</span> `adk_agent_telemetry.gemini_3_5_flash_lite`,
-  (<span class="kw">SELECT CONCAT</span>('Analyze waking logs and distill JSON beliefs:\n', <span class="kw">STRING_AGG</span>(message, '\n')) <span class="kw">AS</span> prompt
-   <span class="kw">FROM</span> `adk_agent_telemetry.agent_logs` <span class="kw">WHERE</span> session_id = @session_id)
-);
-
-<span class="com">-- 3. Cloud Spanner Upsert Mutations</span>
-<span class="kw">INSERT OR UPDATE</span> UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
-<span class="kw">VALUES</span> (@user_id, @preference_key, @preference_value, @category, @confidence, @source_session_id, @crystallized_belief, @keywords, PENDING_COMMIT_TIMESTAMP());</code></pre>
-              </div>
-              <div class="code-snippet-box" style="margin-bottom: 12px;">
-                <div class="code-header">
-                  <span>2. REM Dream Synthesis Prompt Template</span>
-                  <span class="code-badge">Prompt • Gemini 3.5 Flash Lite JSON</span>
-                </div>
-                <pre><code>You are an AI REM Memory Synthesizer ("Dream Engine") performing offline memory consolidation over waking conversation logs for user '{user_id}' in session '{session_id}'.
-Your goal is to crystallize short-term episodic interactions into clean, accurate, high-confidence long-term semantic beliefs and capture user intent.
-
-Analyze the conversation transcript below:
-{full_transcript}
-
-Rules:
-1. Extract the user's primary "session_intent": what is the user's underlying goal, motivation, or project focus in this session?
-2. Extract the "intent_category": choose one of "onboarding", "exploratory", "architecture_design", "troubleshooting", "profile", or "general".
-3. Provide an "intent_confidence" float score between 0.0 and 1.0.
-4. Extract every distinct preference, technical skill, job role, favorite language, preferred tool, or identity attribute.
-5. NEVER confuse or merge the user's name with their job role.
-6. For each preference record, provide: preference_key, preference_value, category, confidence, crystallized_belief, keywords.
-7. Also provide a 2-sentence overall profile summary.
-
-Return a valid JSON object matching the required schema.</code></pre>
-              </div>
-              <div class="code-snippet-box">
-                <div class="code-header">
-                  <span>3. src/pipeline/bq_to_spanner_sync.py</span>
-                  <span class="code-badge">Python • Vertex AI &amp; BigQuery AI</span>
-                </div>
-                <pre><code><span class="kw">class</span> BqToSpannerSynchronizer:
-    <span class="kw">def</span> <span class="fn">summarize_session_logs</span>(self, session_id: <span class="kw">str</span>, user_id: <span class="kw">str</span>) -&gt; Dict[<span class="kw">str</span>, Any]:
-        logs = self.telemetry_sink.get_session_logs(session_id)
-        dream_prompt = <span class="str">f"Analyze these waking logs and distill structured JSON beliefs:\n{logs}"</span>
-
-        response = client.models.generate_content(
-            model=self.config.model_name,
-            contents=dream_prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type=<span class="str">"application/json"</span>,
-                temperature=0.2,
-            ),
-        )
-        summary = self._parse_summary_json(response.text, user_id, session_id)
-        <span class="com"># Crystallize JSON preferences into Cloud Spanner memory table</span>
-        self.spanner_client.write_preferences(user_id, summary[<span class="str">"preferences"</span>])
-        <span class="kw">return</span> summary</code></pre>
+                <pre><code id="dreamPromptCode">-- Awaiting execution --</code></pre>
               </div>
             </div>
           </details>
-
-          <div id="harvestStatus" class="harvest-output">
-            <em>Click 'Run Dream Harvest' after interviewing the user to extract preferences.</em>
-          </div>
         </div>
       </div>
 
-      <!-- Stage 4: Google Cloud Spanner Memory -->
+      <!-- Stage 4: Spanner Crystalline Matrix -->
       <div id="stage-panel-4" class="stage-panel" role="region" aria-labelledby="stage-title-4">
         <div class="card">
           <div class="card-header">
-            <h2 id="stage-title-4">4. Spanner Memory</h2>
-            <button id="refreshSpannerBtn" class="btn btn-outlined btn-sm">Refresh Spanner</button>
-          </div>
-          <p class="card-subtitle">Persistent user profile learnings stored in Spanner table <code>UserPreferences</code>.</p>
-          
-          <div class="stage-run-guide guide-success">
-            <span class="stage-run-guide-icon">▶️</span>
-            <div class="stage-run-guide-text">
-              <strong>How to run this state:</strong> Click the <strong>Refresh Spanner</strong> button above after running Dream Harvest in State 3 to verify that your distilled user preferences (e.g., <code>favorite_language</code>, <code>job_role</code>) are permanently saved in the Cloud Spanner <code>UserPreferences</code> table.
+            <div>
+              <h2 id="stage-title-4">4. Crystalline Memory Matrix (Cloud Spanner)</h2>
+              <p class="card-subtitle">Globally consistent, high-availability developer beliefs in table <code>UserPreferences</code> and summaries in <code>UserSessionSummaries</code>.</p>
+            </div>
+            <div class="btn-group">
+              <button id="refreshSpannerBtn" class="btn btn-secondary btn-sm">Refresh Spanner</button>
             </div>
           </div>
 
-          <details class="stage-info spanner-info" open>
-            <summary>💎 Stage 4: Long-Term Crystalline Memory (Spanner)</summary>
-            <div class="stage-info-content">
-              <strong>What happens:</strong> Synthesized user profile learnings are stored in Google Cloud Spanner table <code>UserPreferences</code>.<br>
-              <strong>How it works:</strong> Each preference (e.g., <code>favorite_language</code>, <code>job_role</code>) gets a confidence score and timestamp. Spanner provides ultra-low latency, globally consistent memory that persists across deployments.
+          <!-- Category Filter Bar -->
+          <div class="filter-strip">
+            <span class="filter-label">Category:</span>
+            <div class="filter-pills" id="spannerCategoryFilters">
+              <button type="button" class="intent-pill active" data-category="ALL">All Categories</button>
+              <button type="button" class="intent-pill" data-category="guardrail">Guardrails &amp; Invariants</button>
+              <button type="button" class="intent-pill" data-category="technical">Technical</button>
+              <button type="button" class="intent-pill" data-category="infrastructure">Infrastructure</button>
+              <button type="button" class="intent-pill" data-category="tooling">Tooling</button>
+              <button type="button" class="intent-pill" data-category="role">Role</button>
+              <button type="button" class="intent-pill" data-category="profile">Profile</button>
+              <button type="button" class="intent-pill" data-category="intent">Intent</button>
             </div>
-          </details>
+          </div>
 
-          <!-- Collapsible Code & Architecture Section for Stage 4 -->
-          <details class="code-arch-collapse">
-            <summary>🛠️ Architecture & Code: Cloud Spanner Crystalline Memory Table (Click to inspect)</summary>
-            <div class="code-arch-content">
-              <div class="arch-overview">
-                <strong>Architecture Focus:</strong> Google Cloud Spanner stores consolidated user profile facts with multi-region consistency, composite primary keys (<code>user_id, preference_key</code>), and automatic commit timestamps.
-              </div>
-              <div class="code-snippet-box">
-                <div class="code-header">
-                  <span>Google Cloud Spanner DDL Schema &amp; Ingestion</span>
-                  <span class="code-badge">SQL • Cloud Spanner</span>
-                </div>
-                <pre><code><span class="com">-- Spanner UserPreferences Schema</span>
-<span class="kw">CREATE TABLE</span> UserPreferences (
-    user_id          <span class="kw">STRING</span>(128) <span class="kw">NOT NULL</span>,
-    preference_key   <span class="kw">STRING</span>(128) <span class="kw">NOT NULL</span>,
-    preference_value <span class="kw">STRING</span>(1024) <span class="kw">NOT NULL</span>,
-    category         <span class="kw">STRING</span>(64) <span class="kw">NOT NULL</span>,
-    confidence       <span class="kw">FLOAT64 NOT NULL</span>,
-    updated_at       <span class="kw">TIMESTAMP NOT NULL OPTIONS</span> (allow_commit_timestamp=<span class="kw">true</span>)
-) <span class="kw">PRIMARY KEY</span> (user_id, preference_key);
-
-<span class="com"># Python Client transaction mutation in src/common/spanner_client.py</span>
-transaction.insert_or_update(
-    table=<span class="str">"UserPreferences"</span>,
-    columns=(<span class="str">"user_id"</span>, <span class="str">"preference_key"</span>, <span class="str">"preference_value"</span>, <span class="str">"category"</span>, <span class="str">"confidence"</span>, <span class="str">"updated_at"</span>),
-    values=mutation_rows,
-)</code></pre>
-              </div>
-            </div>
-          </details>
-
+          <!-- Spanner Table -->
           <div class="table-wrapper">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Key</th>
-                  <th>Value</th>
-                  <th>Category</th>
-                  <th>Conf.</th>
+                  <th style="width: 170px;">Preference Key</th>
+                  <th>Crystallized Semantic Belief</th>
+                  <th style="width: 130px;">Category</th>
+                  <th style="width: 80px;">Conf.</th>
+                  <th style="width: 100px;">Vector</th>
                 </tr>
               </thead>
               <tbody id="spannerTableBody">
-                <tr><td colspan="4" class="empty-state">No preferences stored in Spanner yet.</td></tr>
+                <tr><td colspan="5" class="empty-state">No preferences stored in Spanner yet.</td></tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Operational Guardrails & Procedural Invariants -->
+          <div class="guardrails-block" id="spannerGuardrailsContainer" style="margin-top: 18px;">
+            <div class="sub-heading-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 class="sub-heading" style="margin: 0;">Operational Guardrails &amp; Procedural Invariants</h3>
+              <span class="intent-pill pill-primary" id="guardrailsCountBadge">0 Invariants</span>
+            </div>
+            <div id="spannerGuardrailsList" class="guardrails-list">
+              <div class="empty-state">No procedural guardrails stored in Spanner yet.</div>
+            </div>
+          </div>
+
+          <!-- Recent Session Summaries in Spanner -->
+          <div class="summaries-block" style="margin-top: 18px;">
+            <h3 class="sub-heading">Executive Session Summaries (Spanner `UserSessionSummaries`)</h3>
+            <div id="spannerSummariesList" class="summaries-list">
+              <div class="empty-state">No session summaries found.</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Stage 5: Preference Agent (Spanner Cache) -->
+      <!-- Stage 5: Sub-10ms Recall & Live MCP Playground -->
       <div id="stage-panel-5" class="stage-panel" role="region" aria-labelledby="stage-title-5">
         <div class="card">
           <div class="card-header">
-            <h2 id="stage-title-5">5. Preference Agent</h2>
-            <span class="chip chip-success"><span class="status-dot" aria-hidden="true"></span>Spanner Fast Cache (&lt; 10ms SLA)</span>
-          </div>
-          <p class="card-subtitle">Ask questions about your profile. Returns stored Spanner memory instantly without long LLM calls.</p>
-          
-          <div class="stage-run-guide">
-            <span class="stage-run-guide-icon">▶️</span>
-            <div class="stage-run-guide-text">
-              <strong>How to run this state:</strong> Type a question about your profile in the chat box below (e.g., <em>"What is my favorite programming language?"</em>) and click <strong>Ask</strong>. Notice the instant <strong>&lt; 10ms Spanner Cache</strong> hit latency!
+            <div>
+              <h2 id="stage-title-5">5. Sub-10ms Fast Recall &amp; MCP Protocol Playground</h2>
+              <p class="card-subtitle">Zero-inference primary key lookup (sub-10ms) and live Model Context Protocol (MCP) server tool execution.</p>
             </div>
+            <span class="intent-pill pill-success">&lt;10ms Fast Cache</span>
           </div>
 
-          <details class="stage-info spanner-info" open>
-            <summary>⚡ Stage 5: Fast-Path Memory Recall (&lt; 10ms Cache Hit)</summary>
-            <div class="stage-info-content">
-              <strong>What happens:</strong> When you ask the Preference Agent about your profile, it retrieves the crystallized Spanner memory instantly without running long reasoning prompts.<br>
-              <strong>How it works:</strong> The agent checks Cloud Spanner first. It returns exact profile facts in under 10ms while philosophically pondering whether its cached memories were lived or dreamed.
-            </div>
-          </details>
-
-          <!-- Collapsible Code & Architecture Section for Stage 5 -->
-          <details class="code-arch-collapse">
-            <summary>🛠️ Architecture & Code: Sub-10ms Spanner Cache Interception (Click to inspect)</summary>
-            <div class="code-arch-content">
-              <div class="arch-overview">
-                <strong>Architecture Focus:</strong> The API endpoint performs an instantaneous primary-key lookup in Cloud Spanner before invoking the LLM. On a cache hit, it formats the facts and returns in under 10ms, bypassing expensive inference.
+          <!-- Sub-Panel A: Sub-10ms Cache Interceptor -->
+          <div class="sub-panel">
+            <h3 class="sub-heading">A. Direct Spanner Memory Recall (Fast Cache Probe)</h3>
+            <div id="preferenceChatBox" class="chat-box" style="height: 180px;">
+              <div class="msg agent-msg">
+                <div class="msg-sender">PreferenceAgent</div>
+                <div class="msg-text">Ask me about your technical preferences, preferred languages, or cloud tools. I retrieve them from Spanner in &lt;10ms!</div>
               </div>
-              <div class="code-snippet-box">
-                <div class="code-header">
-                  <span>src/preference_agent/server.py</span>
-                  <span class="code-badge">Python • Spanner Fast Cache</span>
+            </div>
+            <form id="preferenceForm" class="chat-form">
+              <input type="text" id="preferenceInput" placeholder="e.g. What is my favorite programming language? What cloud tools do I use?" required>
+              <button type="submit" class="btn btn-primary">Ask</button>
+            </form>
+          </div>
+
+          <!-- Sub-Panel B: Live MCP Protocol Playground -->
+          <div class="sub-panel" style="margin-top: 20px;">
+            <div class="flex-between">
+              <h3 class="sub-heading">B. Live Model Context Protocol (MCP) Tool Execution</h3>
+              <span class="intent-pill pill-neutral">Protocol: MCP 2.x (stdio / JSON-RPC)</span>
+            </div>
+            <p class="small-desc">Execute MCP tools exposed to Antigravity agents directly against Cloud Spanner:</p>
+
+            <div class="mcp-runner-box">
+              <div class="mcp-controls-grid">
+                <div class="select-wrapper">
+                  <label for="mcpToolSelect">Select MCP Tool:</label>
+                  <select id="mcpToolSelect" class="select-control">
+                    <option value="get_user_crystallized_beliefs">get_user_crystallized_beliefs(user_id, category)</option>
+                    <option value="search_agent_memories">search_agent_memories(query, user_id, limit)</option>
+                    <option value="get_recent_session_memory">get_recent_session_memory(user_id, session_id)</option>
+                    <option value="crystallize_live_preference">crystallize_live_preference(user_id, key, value, ...)</option>
+                  </select>
                 </div>
-                <pre><code><span class="kw">@api.post</span>(<span class="str">"/api/preference/query"</span>)
-<span class="kw">async def</span> <span class="fn">query_preference_agent</span>(request: ChatRequest):
-    start_time = time.time()
-    <span class="com"># 1. Primary-Key Cache Lookup in Cloud Spanner (&lt; 10ms)</span>
-    facts = spanner_client.get_user_preferences(request.user_id)
-    cached_reply = format_multi_fact_spanner_response(request.prompt, facts)
-    
-    <span class="kw">if</span> cached_reply:
-        latency_ms = round((time.time() - start_time) * <span class="num">1000</span>, <span class="num">2</span>)
-        <span class="kw">return</span> {
-            <span class="str">"response"</span>: cached_reply,
-            <span class="str">"source"</span>: <span class="str">"SPANNER_CACHE"</span>,  <span class="com"># Zero LLM token cost</span>
-            <span class="str">"latency_ms"</span>: latency_ms,     <span class="com"># Typically 4ms – 9ms</span>
-        }
-    
-    <span class="com"># 2. Fallback to full ADK 2.0 reasoning only on cache miss</span>
-    <span class="kw">return await</span> _fallback_adk_runner(request)</code></pre>
+                <div class="input-wrapper" id="mcpParamWrapper">
+                  <label for="mcpArgInput">Arguments (JSON or Query):</label>
+                  <input type="text" id="mcpArgInput" class="input-control" value='{"user_id": "demo-user-42"}' placeholder='e.g. {"query": "python", "user_id": "demo-user-42"}'>
+                </div>
+                <div class="btn-align">
+                  <button type="button" id="executeMcpBtn" class="btn btn-harvest">Execute MCP Tool</button>
+                </div>
+              </div>
+
+              <div class="mcp-output-box" id="mcpOutputBox">
+                <div class="mcp-output-header">
+                  <span>Output</span>
+                  <span id="mcpLatencyBadge" class="intent-pill pill-neutral">Latency: --</span>
+                </div>
+                <pre id="mcpOutputContent" class="mcp-code">Click 'Execute MCP Tool' to run the tool through the live server.</pre>
               </div>
             </div>
-          </details>
-
-          <div id="preferenceChatBox" class="chat-box">
-            <div class="msg agent-msg">
-              <div class="msg-sender">PreferenceAgent</div>
-              <div class="msg-text">Ask me what your favorite language, role, or preferred tools are!</div>
-            </div>
           </div>
-          
-          <form id="preferenceForm" class="chat-form">
-            <input type="text" id="preferenceInput" placeholder="e.g., What is my favorite programming language?" required>
-            <button type="submit" class="btn btn-accent">Ask</button>
-          </form>
         </div>
       </div>
 
     </section>
   </main>
 
-  <!-- GitHub Repository & QR Code Popout Modal -->
+  <!-- GitHub Modal -->
   <dialog id="githubModal" class="github-modal-dialog" aria-labelledby="githubModalTitle">
     <div class="modal-card">
       <div class="modal-header">
-        <div class="modal-title-group">
-          <svg class="github-modal-icon" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-          <div>
-            <h3 id="githubModalTitle">Electric Sheep GitHub Repository</h3>
-            <span class="modal-subtitle">Google ADK 2.0 Multi-Agent Demo Control Center</span>
-          </div>
-        </div>
-        <button type="button" class="modal-close-btn" id="githubModalCloseBtn" aria-label="Close modal">✕</button>
+        <h3 id="githubModalTitle">Electric Sheep GitHub Repository</h3>
+        <button type="button" class="modal-close-btn" id="githubModalCloseBtn">✕</button>
       </div>
-      
       <div class="modal-body">
-        <p class="modal-desc">
-          Scan the QR code below with your mobile device or click the button to explore the open-source architecture, Vertex AI Dream Harvest pipelines, and Cloud Spanner Crystalline memory implementation on GitHub.
-        </p>
-        
-        <div class="qr-container">
-          <div class="qr-frame">
-            <img src="/qrcode_github.svg" alt="QR Code for Electric Sheep GitHub Repository" class="qr-image" width="180" height="180">
-          </div>
-          <span class="qr-caption">Scan to open on your phone</span>
-        </div>
-
+        <p>Electric Sheep v2 provides autonomous biological sleep memory consolidation for agentic workflows using Vertex AI Gemini 3.8 Flash, BigQuery, and Cloud Spanner.</p>
         <div class="repo-url-box">
           <code>https://github.com/davenportjw/electric-sheep</code>
         </div>
       </div>
-
       <div class="modal-footer">
-        <a href="https://github.com/davenportjw/electric-sheep" target="_blank" rel="noopener noreferrer" class="btn btn-primary modal-action-btn">
-          <span>Open GitHub Repository</span>
-          <span>↗</span>
-        </a>
-        <button type="button" class="btn btn-outlined" id="githubModalDismissBtn">Close</button>
+        <a href="https://github.com/davenportjw/electric-sheep" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Open GitHub</a>
+        <button type="button" class="btn btn-secondary" id="githubModalDismissBtn">Close</button>
       </div>
     </div>
   </dialog>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.2"></script>
 </body>
 </html>
