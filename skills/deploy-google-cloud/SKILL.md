@@ -11,19 +11,19 @@ This skill defines the complete operational guide, best practices, and mandatory
 
 ## 🚨 Critical Operational Rules & Deployment Mandates
 
-When modifying or deploying this repository, you **MUST** adhere to the following operational rules defined in [AGENTS.md](file:///Users/jasondavenport/GitHub/electric-sheep/AGENTS.md):
+When modifying or deploying this repository, you **MUST** adhere to the following operational rules defined in [AGENTS.md](../../AGENTS.md):
 
 > [!IMPORTANT]
 > 1. **Test in Deployed State**: Any code, UI, agent instruction, or prompt changes **MUST** be tested in the deployed state on Google Cloud Run. Local testing (`uv run pytest`) is required, but is **not sufficient on its own**.
-> 2. **Deployment as the Final Step**: Deployment to Google Cloud Run using [deploy_cloud_run_source.sh](file:///Users/jasondavenport/GitHub/electric-sheep/scripts/deploy_cloud_run_source.sh) (or CI/CD) **MUST always be the final step** of any development, feature, or bugfix workflow.
-> 3. **Validate Live Production Endpoints**: After deploying to Google Cloud Run, **always execute** `python3 -m scripts.validate_live_endpoints` to verify that all 7 live REST API endpoints respond correctly in the production environment (default project: `davenport-boutique`).
-> 4. **Terraform Code Formatting & Validation**: Whenever editing or working with Terraform files in the [terraform/](file:///Users/jasondavenport/GitHub/electric-sheep/terraform) directory, you **MUST always run** `terraform validate` and `terraform fmt`.
+> 2. **Deployment as the Final Step**: Deployment to Google Cloud Run using [deploy_cloud_run_source.sh](../../scripts/deploy_cloud_run_source.sh) (or CI/CD) **MUST always be the final step** of any development, feature, or bugfix workflow.
+> 3. **Validate Live Production Endpoints**: After deploying to Google Cloud Run, **always execute** `python3 -m scripts.validate_live_endpoints` to verify that all 7 live REST API endpoints respond correctly in the production environment (configured via `GOOGLE_CLOUD_PROJECT`).
+> 4. **Terraform Code Formatting & Validation**: Whenever editing or working with Terraform files in the [terraform/](../../terraform) directory, you **MUST always run** `terraform validate` and `terraform fmt`.
 
 ---
 
 ## 🏛️ Architecture & Services Overview
 
-The deployment consists of three standalone **Google Cloud Run** container services powered by the root [Dockerfile](file:///Users/jasondavenport/GitHub/electric-sheep/Dockerfile), supported by managed Google Cloud data services:
+The deployment consists of three standalone **Google Cloud Run** container services powered by the root [Dockerfile](../../Dockerfile), supported by managed Google Cloud data services:
 
 ```mermaid
 graph TD
@@ -46,7 +46,7 @@ graph TD
 2. **`interview-agent`** (`src.interview_agent.server`): Google ADK 2.0 conversational agent that collects user preferences and records live telemetry. Deployed with `--no-allow-unauthenticated`.
 3. **`preference-agent`** (`src.preference_agent.server`): Fast-path Google Cloud Spanner cache lookup agent. Checks Spanner first (`< 10ms` latency, zero LLM tokens) before falling back to Vertex AI Gemini. Deployed with `--no-allow-unauthenticated`.
 
-For deep-dive technical specs on API payloads and data schemas, see [endpoints_and_architecture.md](file:///Users/jasondavenport/GitHub/electric-sheep/skills/deploy-google-cloud/references/endpoints_and_architecture.md).
+For deep-dive technical specs on API payloads and data schemas, see [endpoints_and_architecture.md](references/endpoints_and_architecture.md).
 
 ---
 
@@ -56,7 +56,7 @@ For deep-dive technical specs on API payloads and data schemas, see [endpoints_a
    ```bash
    gcloud auth login
    gcloud auth application-default login
-   gcloud config set project davenport-boutique
+   gcloud config set project your-gcp-project-id
    ```
 2. **Container Runtime Note**: Local Docker installation is **not required**. Source deployments use **Google Cloud Build** remotely via `gcloud run deploy --source=.`. If local container testing is required, use `apple container` or your configured container engine.
 3. **IAM Permissions**: The deploying identity must have permissions to deploy Cloud Run services, create Cloud Build executions, and interact with BigQuery, Spanner, and Vertex AI.
@@ -68,7 +68,7 @@ For deep-dive technical specs on API payloads and data schemas, see [endpoints_a
 The **Material Light UI Control Center** provides an interactive dashboard to explore the multi-agent lifecycle, observe real-time telemetry, and test long-term memory consolidation.
 
 ### 1. Authenticating / Logging In
-- Access the UI at [https://ui-service-834476222725.us-central1.run.app](https://ui-service-834476222725.us-central1.run.app) (or `http://localhost:8080` locally).
+- Access the UI at `https://ui-service-<PROJECT_NUMBER>.us-central1.run.app` (or `http://localhost:8080` locally).
 - **Google / Firebase Sign-In**: Click **Sign In with Google** if your email domain is authorized in `ALLOWED_EMAIL_DOMAINS`.
 - **Local Developer Bypass**: When running in developer/mock mode (`USE_MOCK_CLIENTS=true`), click **Bypass Auth (Local Developer)** to enter immediately without external authentication.
 
@@ -125,16 +125,16 @@ Once running, open `http://localhost:8080` in your browser.
 
 ## 🚀 Workflow 1: Source Deployment (Recommended for Features & Updates)
 
-Use [deploy_cloud_run_source.sh](file:///Users/jasondavenport/GitHub/electric-sheep/scripts/deploy_cloud_run_source.sh) to build and deploy all three microservices directly from source using the root [Dockerfile](file:///Users/jasondavenport/GitHub/electric-sheep/Dockerfile).
+Use [deploy_cloud_run_source.sh](../../scripts/deploy_cloud_run_source.sh) to build and deploy all three microservices directly from source using the root [Dockerfile](../../Dockerfile).
 
-### 1. Standard Deployment (Default Project: `davenport-boutique`)
+### 1. Standard Deployment (Using `.env` or `GOOGLE_CLOUD_PROJECT`)
 From the repository root, run:
 ```bash
 ./scripts/deploy_cloud_run_source.sh
 ```
 
 ### 2. Custom Environment / Project Deployment
-You can override deployment parameters using shell environment variables before invoking the script (see [custom_env_deploy.sh](file:///Users/jasondavenport/GitHub/electric-sheep/skills/deploy-google-cloud/examples/custom_env_deploy.sh)):
+You can override deployment parameters using shell environment variables before invoking the script (see [custom_env_deploy.sh](examples/custom_env_deploy.sh)):
 ```bash
 export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
 export GOOGLE_CLOUD_REGION="us-central1"
@@ -160,7 +160,7 @@ export IAP_PROXY_URL="https://app.example.com"
 
 ## 🏗️ Workflow 2: Terraform IaC (Recommended for Initial Setup & Infrastructure)
 
-The [terraform/](file:///Users/jasondavenport/GitHub/electric-sheep/terraform) directory contains complete Infrastructure as Code (IaC) to provision APIs, BigQuery datasets/tables, Spanner instances/databases, IAM roles, and Cloud Run services.
+The [terraform/](../../terraform) directory contains complete Infrastructure as Code (IaC) to provision APIs, BigQuery datasets/tables, Spanner instances/databases, IAM roles, and Cloud Run services.
 
 ### Step-by-Step Terraform Instructions
 1. **Change to the Terraform Directory**:
@@ -182,7 +182,7 @@ The [terraform/](file:///Users/jasondavenport/GitHub/electric-sheep/terraform) d
    ```bash
    terraform plan -out=tfplan
    ```
-   *(For custom variable overrides, see [terraform.tfvars.example](file:///Users/jasondavenport/GitHub/electric-sheep/skills/deploy-google-cloud/examples/terraform.tfvars.example))*
+   *(For custom variable overrides, see [terraform.tfvars.example](examples/terraform.tfvars.example))*
 5. **Apply Infrastructure**:
    ```bash
    terraform apply tfplan
@@ -215,7 +215,7 @@ The validator script verifies the following **7 live REST API endpoints** and co
 | `/api/preference/query` | `POST` | `ui-service` -> `preference-agent` | Query preference agent (fast Spanner cache hit) | `200 OK` (`{"response": "...", "source": "SPANNER_CACHE"}`) |
 
 ### 3. UI Layout Integrity Verification
-If you modified UI HTML/CSS or navigation in [src/ui_service/](file:///Users/jasondavenport/GitHub/electric-sheep/src/ui_service), verify layout integrity against [DESIGN.md](file:///Users/jasondavenport/GitHub/electric-sheep/DESIGN.md) rules before deployment:
+If you modified UI HTML/CSS or navigation in [src/ui_service/](../../src/ui_service), verify layout integrity against [DESIGN.md](../../DESIGN.md) rules before deployment:
 ```bash
 uv run pytest tests/test_ui_service.py -k test_ui_service_topbar_and_layout_integrity -v
 ```
@@ -231,11 +231,13 @@ uv run pytest tests/test_ui_service.py -k test_ui_service_topbar_and_layout_inte
 
 ### 2. Spanner Database or Table NotFound
 - **Symptom**: Error `500` on `/api/spanner/preferences/{user_id}` or during Dream Harvest.
-- **Solution**: Verify that the Google Cloud Spanner instance (`SPANNER_INSTANCE_ID`) and database (`SPANNER_DATABASE_ID`) exist. Apply DDL schemas via Terraform (`terraform apply`) or check [spanner.tf](file:///Users/jasondavenport/GitHub/electric-sheep/terraform/spanner.tf).
+- **Solution**: Verify that the Google Cloud Spanner instance (`SPANNER_INSTANCE_ID`) and database (`SPANNER_DATABASE_ID`) exist. Apply DDL schemas via Terraform (`terraform apply`) or check [spanner.tf](../../terraform/spanner.tf).
 
 ### 3. BigQuery Remote Model / Summarizer Failure
 - **Symptom**: `/api/harvest` returns SQL execution error for `gemini_summarizer`.
 - **Solution**: Verify that BigQuery ML Remote Model connection (`bigqueryconnection.googleapis.com`) is enabled and that the BigQuery service account has Vertex AI user access (`roles/aiplatform.user`).
+- **If the model doesn't exist** (`Not found: Model ...gemini_summarizer`): the Terraform `google_bigquery_job.create_gemini_model` must send no create/write disposition (ML DDL rejects them with `Cannot set create disposition in jobs with ML DDL statements`). Its `job_id` is derived from a hash of the DDL, so changing `model_name` re-runs `CREATE OR REPLACE MODEL` under a new job ID on the next `terraform apply`.
+- **Truncated summaries**: Gemini 3.8 models spend part of `max_output_tokens` on reasoning; keep it at 1024+ (as in `sql/bq_summarize_sessions.sql`).
 
 ### 4. Local Test Mocking vs Production
 - **Symptom**: Deployed service returns mock/fake data instead of live Cloud Spanner/BigQuery results.

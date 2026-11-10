@@ -19,14 +19,26 @@ if os.path.exists(dotenv_path):
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
+os.environ["CLOUDSDK_CONTEXT_AWARE_USE_CLIENT_CERTIFICATE"] = "false"
+os.environ["CLOUDSDK_CONTEXT_AWARE_USE_ECP_HTTP_PROXY"] = "false"
+
 UI_SERVICE_URL = os.environ.get("UI_SERVICE_URL", "http://localhost:8080")
 INTERVIEW_AGENT_URL = os.environ.get("INTERVIEW_AGENT_URL", "http://localhost:8081")
 PREFERENCE_AGENT_URL = os.environ.get("PREFERENCE_AGENT_URL", "http://localhost:8082")
 
 
 def get_auth_headers(url: str) -> dict:
-    """Retrieve an identity token so developer validation scripts can authenticate against secure endpoints."""
+    """Retrieve an identity token via src.common.auth.get_oidc_token (ADC / IAM / gcloud) for secure Cloud Run endpoints."""
     headers = {"User-Agent": "ADK-Validator"}
+    try:
+        from src.common.auth import get_oidc_token
+
+        tok = get_oidc_token(url)
+        if tok and tok != "dev-admin-token":
+            headers["Authorization"] = f"Bearer {tok}"
+            return headers
+    except Exception:
+        pass
     try:
         import subprocess
 
@@ -82,7 +94,7 @@ def test_html_get(url: str, name: str):
         return False, None
 
 
-def test_post(url: str, name: str, payload: dict):
+def test_post(url: str, name: str, payload: dict, timeout: int = 60):
     logger.info(f"Testing POST {name}: {url}")
     try:
         data = json.dumps(payload).encode("utf-8")
@@ -93,7 +105,7 @@ def test_post(url: str, name: str, payload: dict):
             data=data,
             headers=headers,
         )
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             status = resp.status
             body = json.loads(resp.read().decode("utf-8"))
             logger.info(f" -> [{status}] OK: {json.dumps(body)}")
@@ -121,6 +133,8 @@ def main():
     # 1b. Static HTML pages validation
     test_html_get(f"{UI_SERVICE_URL}/", "UI Service Control Center Page")
     test_html_get(f"{UI_SERVICE_URL}/how-it-works.html", "UI Service How It Works Architecture Page")
+    test_html_get(f"{UI_SERVICE_URL}/studio", "Enterprise Memory Studio Page")
+    test_html_get(f"{UI_SERVICE_URL}/studio.html", "Enterprise Memory Studio HTML File")
 
     # 2. Programmatic API interaction with UI Service
     user_id = "test-live-user-42"
@@ -218,6 +232,50 @@ def main():
         },
     )
 
+    # 3. Enterprise Memory Studio Probes
+    test_get(
+        f"{UI_SERVICE_URL}/api/studio/scopes?user_id={user_id}",
+        "Enterprise Memory Studio Scopes",
+    )
+
+    test_post(
+        f"{UI_SERVICE_URL}/api/studio/eval/run",
+        "Enterprise Memory Studio Eval Run",
+        {"alpha_quality_weight": 0.65},
+    )
+
+    test_get(
+        f"{UI_SERVICE_URL}/api/studio/evolve/archive",
+        "Enterprise Memory Studio Evolve Archive",
+    )
+
+    test_get(
+        f"{UI_SERVICE_URL}/api/studio/tree",
+        "Enterprise Memory Studio Hierarchical Tree (/api/studio/tree)",
+    )
+
+    test_get(
+        f"{UI_SERVICE_URL}/api/studio/sessions",
+        "Enterprise Memory Studio Ingested Sessions (/api/studio/sessions)",
+    )
+
+    test_get(
+        f"{UI_SERVICE_URL}/api/studio/backend/status",
+        "Enterprise Memory Studio Backend Status (/api/studio/backend/status)",
+    )
+
+    test_get(
+        f"{UI_SERVICE_URL}/api/studio/security/policies",
+        "Enterprise Memory Studio Security Policies (/api/studio/security/policies)",
+    )
+
+    test_post(
+        f"{UI_SERVICE_URL}/api/rate/journeys",
+        "Agentic Rater Platform — 5 Canonical Journeys (/api/rate/journeys)",
+        {},
+        timeout=180,
+    )
+
     print("=" * 80)
     print("  LIVE GCP PROGRAMMATIC ENDPOINT VALIDATION COMPLETED!  ")
     print("=" * 80)
@@ -225,3 +283,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

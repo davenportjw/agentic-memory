@@ -1,5 +1,7 @@
 """End-to-End integration tests for the Material Light UI Service and agent lifecycle."""
 
+import uuid
+from pathlib import Path
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from src.ui_service.server import api
@@ -150,7 +152,7 @@ def test_ui_service_how_it_works_page():
 def test_ui_service_topbar_and_layout_integrity():
     """Verify top app-bar 2-child layout and page-to-page structural consistency per DESIGN.md."""
     client = TestClient(api)
-    for path in ("/", "/how-it-works.html"):
+    for path in ("/", "/how-it-works.html", "/studio.html", "/studio"):
         res = client.get(path)
         assert res.status_code == 200
         html = res.text
@@ -158,6 +160,9 @@ def test_ui_service_topbar_and_layout_integrity():
         # 1. Verify app-nav is inside app-title-group (2-child standard in app-bar-content)
         assert 'class="app-title-group"' in html
         assert 'class="app-nav"' in html
+        assert 'href="index.html"' in html
+        assert 'href="studio.html"' in html
+        assert 'href="how-it-works.html"' in html
         title_idx = html.find('class="app-title-group"')
         nav_idx = html.find('class="app-nav"')
         session_idx = html.find('class="session-info"')
@@ -393,6 +398,1047 @@ def test_ui_service_mcp_execute_endpoint():
         assert "sla" in data
 
 
+def test_ui_service_lakehouse_session_filtering():
+    """Verify that /api/lakehouse/sessions and /api/logs/ALL work, and index.html/app.js have session filter DOM."""
+    client = TestClient(api)
+
+    # 1. Verify GET /api/lakehouse/sessions
+    res = client.get("/api/lakehouse/sessions")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert "sessions" in data
+    assert isinstance(data["sessions"], list)
+    if len(data["sessions"]) > 0:
+        first = data["sessions"][0]
+        assert "session_id" in first
+        assert "source" in first
+        assert "summary" in first
+
+    # 2. Verify GET /api/logs/ALL returns lakehouse traces
+    logs_res = client.get("/api/logs/ALL")
+    assert logs_res.status_code == 200
+    logs_data = logs_res.json()
+    assert "logs" in logs_data
+    assert isinstance(logs_data["logs"], list)
+
+    # 3. Verify DOM elements in index.html
+    html_res = client.get("/")
+    assert html_res.status_code == 200
+    html = html_res.text
+    assert 'id="lakehouseSessionSelect"' in html
+    assert 'id="lakehouseSessionBadge"' in html
+    assert 'id="lakehouseBadgeSource"' in html
+    assert 'id="lakehouseBadgeId"' in html
+    assert 'id="lakehouseBadgeSummary"' in html
+    assert 'id="lakehouseSessionCount"' in html
+    assert 'id="lakehouseScopeAllBtn"' in html
+    assert 'id="lakehouseScopeActiveBtn"' in html
+    assert 'id="lakehouseActiveScopeBadge"' in html
+    assert 'id="dreamScopeBadge"' in html
+    assert 'id="spannerUserScopeBadge"' in html
+    assert 'id="spannerTotalCountBadge"' in html
+    assert 'id="mcpUserScopeBadge"' in html
+
+    # 4. Verify app.js references and active session filtering logic
+    js_res = client.get("/app.js")
+    assert js_res.status_code == 200
+    js = js_res.text
+    assert "lakehouseSessionSelect" in js
+    assert "fetchLakehouseSessions" in js
+    assert "updateLakehouseBadge" in js
+    assert "updateAllScopeIndicators" in js
+    assert "syncMcpToolArgs" in js
+    assert "lakehouseScopeAllBtn" in js
+    assert "lakehouseScopeActiveBtn" in js
+    assert "ensureSessionInDropdown" in js
+    assert "setLakehouseScope" in js
+    assert "Scope: Active Session (" in js
 
 
+def test_ui_service_studio_page_and_dom_integrity():
+    """Verify Enterprise Memory Studio HTML/JS/CSS assets, 3-Column IDE Workbench, Run Settings rail, and zero-amber policy."""
+    client = TestClient(api)
+    studio_res = client.get("/studio")
+    assert studio_res.status_code == 200
+    html = studio_res.text
+
+    for stage_id in ("stage-1-sandbox", "stage-2-scopes", "stage-3-eval", "stage-4-evolve"):
+        assert f'id="{stage_id}"' in html, f"Missing Studio stage {stage_id}"
+
+    for elem_id in (
+        "zeroResetBtn",
+        "seedMultiScopeBtn",
+        "runFederatedLookupBtn",
+        "runConsensusBtn",
+        "generateAdversarialBtn",
+        "runEvalSuiteBtn",
+        "runAlphaEvolveBtn",
+        "promoteChampionBtn",
+        "studioInspectorDrawer",
+        "mapElitesGridContainer",
+        "inspectorRunSettingsPane",
+        "inspectorJsonPane",
+        "applyRunSettingsBtn",
+        "settingDimButtonGroup",
+        "playgroundContextPre",
+        "toggleManualFeedbackBuilderBtn",
+        "studioIntentTopNav",
+        "leftScopePillsContainer",
+        "studioFileDataTree",
+        "leftMemoryTreeList",
+        "leftMemoryQuickEditor",
+        "tabBtnStudioGuide",
+        "inspectorGuidePane",
+        "openStudioGuideBtn",
+    ):
+        assert f'id="{elem_id}"' in html, f"Missing Studio control {elem_id}"
+
+    for cls_name in (
+        "studio-workbench-body",
+        "studio-workbench-layout",
+        "studio-left-rail",
+        "studio-workspace-canvas",
+        "studio-command-bar",
+        "studio-intent-top-nav",
+        "studio-intent-tab",
+        "left-scope-pill",
+        "studio-file-tree",
+        "studio-system-context-bar",
+        "studio-docked-prompt-bar",
+        "studio-split-pane-2col",
+    ):
+        assert cls_name in html, f"Missing Studio workbench class {cls_name} in studio.html"
+
+    # Verify JS mode switching and Run Settings wiring
+    js_res = client.get("/studio.js")
+    assert js_res.status_code == 200
+    assert "switchStudioMode" in js_res.text
+    assert "switchInspectorTab" in js_res.text
+    assert "handlePromoteConfig" in js_res.text
+    assert "applyRunSettingsBtn" in js_res.text
+
+    # Verify CSS definitions exist for all Studio Workbench classes + .hidden visibility invariant
+    css_res = client.get("/style.css")
+    assert css_res.status_code == 200
+    for css_selector in (
+        ".hidden",
+        ".studio-workbench-layout",
+        ".studio-left-rail",
+        ".left-nav-list",
+        ".left-nav-item",
+        ".studio-workspace-canvas",
+        ".studio-stage-panel",
+        ".studio-system-context-bar",
+        ".studio-docked-prompt-bar",
+        ".studio-prompt-input",
+        ".studio-candidate-card",
+        ".studio-memory-search-bar",
+        ".badge",
+        ".chip",
+    ):
+        assert css_selector in css_res.text, f"Missing CSS selector {css_selector} in style.css"
+    assert "display: none !important" in css_res.text
+
+    # Verify Non-Linear Practitioner Workbench controls and zero raw LaTeX strings
+    for practitioner_id in (
+        "trajectoryExtractorCard",
+        "extractTrajectoryCandidatesBtn",
+        "memorySearchInput",
+        "memoryCategoryFilter",
+        "memoryDesignerCard",
+        "memoryDesignerForm",
+        "memoryPackDrawer",
+        "exportMemoryPackBtn",
+        "importMemoryPackBtn",
+        "openTrajectoryIngestCmdBtn",
+        "openMemoryDesignerCmdBtn",
+        "openMemoryPackCmdBtn",
+    ):
+        assert f'id="{practitioner_id}"' in html, f"Missing Practitioner Workbench control {practitioner_id}"
+
+    for raw_latex in ("$\\alpha$", "$F_{\\alpha}$", "$\\alpha \\cdot"):
+        assert raw_latex not in html, f"Unrendered raw LaTeX string {raw_latex} found in studio.html"
+
+    # Verify zero yellow/amber hex colors in studio.html, studio.js, and style.css
+    for forbidden_color in ("#f59e0b", "#fef3c7", "#d97706"):
+        assert forbidden_color not in html.lower()
+        assert forbidden_color not in js_res.text.lower()
+        assert forbidden_color not in css_res.text.lower()
+
+
+def test_ui_service_studio_reset_scopes_promote_and_consensus():
+    """Verify /api/studio/reset, /api/studio/seed-demo, /api/studio/scopes, /api/studio/scopes/promote, and /api/studio/scopes/consensus."""
+    client = TestClient(api)
+    uid = "user:test_studio_77"
+    tid = "team:test_studio_77"
+    aid = "agent:test_studio_77"
+    oid = "org:default"
+
+    # 1. Cold-Start Zero Reset
+    reset_res = client.post(
+        "/api/studio/reset",
+        json={
+            "scope_id": uid,
+            "scope_type": "USER",
+            "clear_eval_cases": False,
+            "reset_all_scopes": True,
+            "team_id": tid,
+            "agent_id": aid,
+        },
+    )
+    assert reset_res.status_code == 200
+    reset_data = reset_res.json()
+    assert reset_data["status"] == "ZERO_RESET_COMPLETE"
+    assert reset_data["remaining_memories"] == 0
+
+    # 2. Seed Multi-Scope Demo Baseline
+    seed_res = client.post(
+        "/api/studio/seed-demo",
+        json={"user_id": uid, "team_id": tid, "agent_id": aid, "org_id": oid},
+    )
+    assert seed_res.status_code == 200
+    seed_data = seed_res.json()
+    assert seed_data["counts"]["ORG"] >= 1
+    assert seed_data["counts"]["TEAM"] >= 1
+    assert seed_data["counts"]["AGENT"] >= 1
+    assert seed_data["counts"]["USER"] >= 1
+    assert len(seed_data["federated"]["conflicts_resolved"]) >= 1
+
+    # 3. Query /api/studio/scopes
+    scopes_res = client.get(
+        "/api/studio/scopes",
+        params={
+            "user_id": uid,
+            "team_id": tid,
+            "agent_id": aid,
+            "org_id": oid,
+            "query_text": "What Python package manager and security auth policy should we use?",
+        },
+    )
+    assert scopes_res.status_code == 200
+    scopes_data = scopes_res.json()
+    assert "scopes" in scopes_data
+    assert "federated" in scopes_data
+    assert "active_config" in scopes_data
+
+    # 4. Promote USER -> TEAM
+    promote_res = client.post(
+        "/api/studio/scopes/promote",
+        json={
+            "source_scope_type": "USER",
+            "source_scope_id": uid,
+            "memory_key": "python_package_manager",
+            "target_scope_type": "TEAM",
+            "target_scope_id": tid,
+        },
+    )
+    assert promote_res.status_code == 200
+    promote_data = promote_res.json()
+    assert promote_data["status"] == "PROMOTED"
+    assert promote_data["promoted_memory"]["scope_type"] == "TEAM"
+    assert promote_data["promoted_memory"]["memory_key"] == "python_package_manager"
+
+    # 5. Team Consensus Auto-Promotion
+    consensus_res = client.post(
+        "/api/studio/scopes/consensus",
+        json={
+            "team_id": tid,
+            "user_ids": ["user:alice", "user:bob"],
+            "min_consensus_users": 2,
+            "target_scope_type": "TEAM",
+            "target_scope_id": tid,
+        },
+    )
+    assert consensus_res.status_code == 200
+    consensus_data = consensus_res.json()
+    assert consensus_data["status"] == "CONSENSUS_EVALUATED"
+    assert consensus_data["promoted_count"] >= 1
+
+    # Teardown sandbox scopes
+    client.post(
+        "/api/studio/reset",
+        json={
+            "scope_id": uid,
+            "scope_type": "USER",
+            "reset_all_scopes": True,
+            "team_id": tid,
+            "agent_id": aid,
+        },
+    )
+
+
+def test_ui_service_studio_trajectory_extract_and_memory_crud_pack():
+    """Verify /api/studio/trajectories/extract, /api/studio/memories/upsert, /api/studio/memories/delete, /api/studio/memories/export, and /api/studio/memories/import."""
+    client = TestClient(api)
+    uid = "user:test_practitioner_88"
+    tid = "team:test_practitioner_88"
+    aid = "agent:test_practitioner_88"
+    oid = "org:default"
+
+    # 1. Extract Candidate Memories from Raw Transcript
+    raw_transcript = (
+        "USER: Never use pip install in this repo. Always use uv run pytest for tests.\n"
+        "AGENT: Understood, switching to uv.\n"
+        "USER: Also, Docker is not installed on my Apple Silicon Mac; use apple container or Cloud Run.\n"
+        "USER: Remember to always run terraform validate and terraform fmt before committing."
+    )
+    extract_res = client.post(
+        "/api/studio/trajectories/extract",
+        json={
+            "user_id": uid,
+            "raw_transcript": raw_transcript,
+        },
+    )
+    assert extract_res.status_code == 200
+    extract_data = extract_res.json()
+    assert extract_data["status"] == "CANDIDATES_EXTRACTED"
+    assert extract_data["candidate_count"] >= 3
+    keys_extracted = {c["memory_key"] for c in extract_data["candidates"]}
+    assert "python_package_manager" in keys_extracted
+    assert "container_runtime" in keys_extracted
+    assert "iac_validation_workflow" in keys_extracted
+
+    # 2. Upsert a Custom Scoped Memory via Inline Memory Designer endpoint
+    upsert_res = client.post(
+        "/api/studio/memories/upsert",
+        json={
+            "scope_type": "USER",
+            "scope_id": uid,
+            "memory_key": "custom_linter_rule",
+            "memory_value": "ruff check --fix",
+            "memory_type": "PREFERENCE",
+            "category": "tooling",
+            "crystallized_belief": "Developer runs ruff check --fix prior to pytest.",
+            "keywords": ["ruff", "linter", "python"],
+            "confidence": 0.97,
+        },
+    )
+    assert upsert_res.status_code == 200
+    upsert_data = upsert_res.json()
+    assert upsert_data["status"] == "MEMORY_UPSERTED"
+    assert upsert_data["record"]["memory_key"] == "custom_linter_rule"
+    assert len(upsert_data["record"]["embedding"]) == 768
+
+    # 3. Export Portable JSON Memory Pack
+    export_res = client.get(
+        "/api/studio/memories/export",
+        params={
+            "user_id": uid,
+            "team_id": tid,
+            "agent_id": aid,
+            "org_id": oid,
+            "scope_filter": "USER",
+        },
+    )
+    assert export_res.status_code == 200
+    pack_data = export_res.json()
+    assert pack_data["pack_version"] == "1.0"
+    assert pack_data["total_memories"] >= 1
+    assert any(m["memory_key"] == "custom_linter_rule" for m in pack_data["memories"])
+
+    # 4. Delete the Scoped Memory
+    del_res = client.post(
+        "/api/studio/memories/delete",
+        json={
+            "scope_type": "USER",
+            "scope_id": uid,
+            "memory_key": "custom_linter_rule",
+        },
+    )
+    assert del_res.status_code == 200
+    del_data = del_res.json()
+    assert del_data["status"] == "MEMORY_DELETED"
+    assert del_data["deleted"] is True
+
+    # 5. Re-Import via Portable JSON Memory Pack Import
+    import_res = client.post(
+        "/api/studio/memories/import",
+        json={"memories": pack_data["memories"]},
+    )
+    assert import_res.status_code == 200
+    import_data = import_res.json()
+    assert import_data["status"] == "MEMORY_PACK_IMPORTED"
+    assert import_data["imported_count"] >= 1
+
+    # Teardown test scope
+    client.post(
+        "/api/studio/reset",
+        json={
+            "scope_id": uid,
+            "scope_type": "USER",
+            "reset_all_scopes": False,
+        },
+    )
+
+
+def test_ui_service_studio_feedback_eval_and_alpha_evolve():
+    """Verify /api/studio/feedback, /api/studio/eval/cases, /api/studio/eval/generate, /api/studio/eval/run, and /api/studio/evolve/*."""
+    client = TestClient(api)
+
+    # 1. Record negative feedback (regression guard) and positive feedback
+    fb_bad = client.post(
+        "/api/studio/feedback",
+        json={
+            "session_id": "test-studio-fb-sess",
+            "user_id": "user:eval_test",
+            "prompt": "What Python tool should we run tests with?",
+            "agent_response": "Use global pip install.",
+            "rating": "bad",
+            "expected_fact": "test_runner = uv run pytest",
+            "failure_tag": "contradiction",
+        },
+    )
+    assert fb_bad.status_code == 200
+    fb_bad_data = fb_bad.json()
+    assert fb_bad_data["status"] == "FEEDBACK_RECORDED"
+    assert fb_bad_data["rating"] == "bad"
+    assert fb_bad_data["eval_case"]["scenario_type"] == "LIVE_FEEDBACK_CORRECTION"
+
+    fb_good = client.post(
+        "/api/studio/feedback",
+        json={
+            "session_id": "test-studio-fb-sess",
+            "user_id": "user:eval_test",
+            "prompt": "What database backs our crystalline memory?",
+            "agent_response": "Google Cloud Spanner.",
+            "rating": "good",
+            "expected_fact": "Google Cloud Spanner",
+        },
+    )
+    assert fb_good.status_code == 200
+    assert fb_good.json()["rating"] == "good"
+
+    # 2. Generate 4 adversarial archetypes
+    gen_res = client.post(
+        "/api/studio/eval/generate",
+        json={"topic": "enterprise agentic memory", "count": 4},
+    )
+    assert gen_res.status_code == 200
+    gen_data = gen_res.json()
+    assert gen_data["status"] == "GENERATED"
+    assert gen_data["generated_count"] == 4
+
+    # 3. List evaluation cases
+    cases_res = client.get("/api/studio/eval/cases")
+    assert cases_res.status_code == 200
+    cases_data = cases_res.json()
+    assert cases_data["count"] >= 4
+
+    # 4. Run 7-Metric + Matryoshka Evaluation Suite
+    eval_res = client.post(
+        "/api/studio/eval/run",
+        json={"alpha_quality_weight": 0.65},
+    )
+    assert eval_res.status_code == 200
+    scorecard = eval_res.json()
+    assert 0.0 <= scorecard["quality_score"] <= 1.0
+    assert 0.0 <= scorecard["token_efficiency_score"] <= 1.0
+    assert "metrics_breakdown" in scorecard
+    assert "matryoshka_comparison" in scorecard
+    for dim_key in ("128d", "256d", "512d", "768d"):
+        assert dim_key in scorecard["matryoshka_comparison"]
+
+    # 5. Run AlphaEvolve Evolutionary Search
+    evolve_res = client.post(
+        "/api/studio/evolve/run",
+        json={"generations": 1, "alpha_quality_weight": 0.65, "candidates_per_generation": 1},
+    )
+    assert evolve_res.status_code == 200
+    evolve_data = evolve_res.json()
+    assert evolve_data["status"] == "EVOLUTION_COMPLETE"
+    assert "champion" in evolve_data
+    assert "archive" in evolve_data
+    assert evolve_data["archive"]["populated_cells"] >= 1
+
+    # 6. Fetch MAP-Elites Archive
+    arch_res = client.get("/api/studio/evolve/archive")
+    assert arch_res.status_code == 200
+    arch_data = arch_res.json()
+    assert "archive" in arch_data
+    assert "active_config" in arch_data
+
+    # 7. Promote Champion to Active Runtime Config
+    champ_cfg = evolve_data["champion"]["config"]
+    prom_res = client.post(
+        "/api/studio/evolve/promote",
+        json={"config": champ_cfg, "config_id": champ_cfg["config_id"]},
+    )
+    assert prom_res.status_code == 200
+    prom_data = prom_res.json()
+    assert prom_data["status"] == "ACTIVE_CONFIG_PROMOTED"
+    assert prom_data["active_config"]["config_id"] == champ_cfg["config_id"]
+
+
+def test_ui_service_studio_4_intent_practitioner_workflow():
+    """Verify the 4-Intent Practitioner Workflow DOM & APIs:
+    - Contextual Top Command Bar groups (#cmdGroupStage1..4)
+    - Intent 1: /api/studio/ingest/config & /api/studio/ingest/raw
+    - Intent 2: /api/studio/categories & staged memory creation with trigger_conditions
+    - Intent 3: /api/studio/scenarios/retest (empirical trigger_count & token_telemetry)
+    - Intent 4: /api/studio/sync/status & /api/studio/sync/push to Cloud Spanner
+    """
+    client = TestClient(api)
+    uid = f"user:intent_test_{uuid.uuid4().hex[:6]}"
+    tid = f"team:intent_team_{uuid.uuid4().hex[:6]}"
+    aid = "agent:electric_sheep"
+    oid = "org:acme_enterprise"
+
+    try:
+        # 0. Verify Contextual Top Command Bar DOM in /studio
+        html = client.get("/studio").text
+        for group_id, stage_id in [
+            ("cmdGroupStage1", "stage-1-sandbox"),
+            ("cmdGroupStage2", "stage-2-scopes"),
+            ("cmdGroupStage3", "stage-3-eval"),
+            ("cmdGroupStage4", "stage-4-evolve"),
+        ]:
+            assert group_id in html
+            assert f'data-for-stage="{stage_id}"' in html
+        assert "ingestConfigCard" in html
+        assert "rawTelemetryTable" in html
+        assert "categoryTaxonomyCard" in html
+        assert "scenarioRetestCard" in html
+        assert "memoryTriggerMatrixCard" in html
+        assert "spannerSyncCenterCard" in html
+
+        # 1. Intent 1: Configure Ingest & Fetch Raw Telemetry Stream
+        cfg_get = client.get("/api/studio/ingest/config")
+        assert cfg_get.status_code == 200
+        assert "ingest_config" in cfg_get.json()
+
+        cfg_post = client.post(
+            "/api/studio/ingest/config",
+            json={
+                "source_stream": "CLOUD_SPANNER_AGENT_EVENTS",
+                "lookback_hours": 48,
+                "min_turn_tokens": 3,
+                "pii_scrubbing": True,
+                "auto_extract_signals": True,
+            },
+        )
+        assert cfg_post.status_code == 200
+        assert cfg_post.json()["ingest_config"]["lookback_hours"] == 48
+
+        raw_res = client.get("/api/studio/ingest/raw?session_id=all&limit=15")
+        assert raw_res.status_code == 200
+        raw_data = raw_res.json()
+        assert raw_data["status"] == "OK"
+        assert len(raw_data["raw_events"]) >= 1
+        first_ev = raw_data["raw_events"][0]
+        assert "event_id" in first_ev
+        assert "token_count" in first_ev
+        assert "detected_signal" in first_ev
+
+        # 2. Intent 2: Author Custom Category & Stage a Memory with Trigger Conditions
+        cat_get = client.get("/api/studio/categories")
+        assert cat_get.status_code == 200
+        assert cat_get.json()["count"] >= 4
+
+        cat_post = client.post(
+            "/api/studio/categories",
+            json={
+                "category_id": "cost_governance",
+                "label": "Cost Governance",
+                "default_scope": "TEAM",
+                "default_match_mode": "HYBRID_COSINE_AND_KEYWORD",
+                "min_cosine_similarity": 0.76,
+                "description": "Token and cloud spend guardrails",
+            },
+        )
+        assert cat_post.status_code == 200
+        assert any(c["category_id"] == "cost_governance" for c in cat_post.json()["categories"])
+
+        upsert_res = client.post(
+            "/api/studio/memories/upsert",
+            json={
+                "scope_type": "USER",
+                "scope_id": uid,
+                "memory_key": "test_runner",
+                "memory_value": "uv run pytest",
+                "memory_type": "PREFERENCE",
+                "category": "cost_governance",
+                "crystallized_belief": "Always execute Python tests using uv run pytest.",
+                "keywords": ["uv", "pytest", "python", "test"],
+                "confidence": 0.98,
+                "sync_immediately": False,
+                "trigger_conditions": {
+                    "match_mode": "HYBRID_COSINE_AND_KEYWORD",
+                    "min_cosine_similarity": 0.70,
+                    "required_keywords": ["pytest", "uv"],
+                    "auto_inject_scopes": ["USER"],
+                },
+            },
+        )
+        assert upsert_res.status_code == 200
+        up_rec = upsert_res.json()["record"]
+        assert up_rec["sync_status"] == "STAGED"
+        assert up_rec["token_footprint"] >= 6
+        assert up_rec["trigger_conditions"]["match_mode"] == "HYBRID_COSINE_AND_KEYWORD"
+
+        # 3. Intent 3: Re-Test Scenario & Verify Trigger Hit Increment + Token Telemetry
+        retest_res = client.post(
+            "/api/studio/scenarios/retest",
+            json={
+                "prompt": "How should we run our Python pytest suite locally?",
+                "expected_fact": "uv run pytest",
+                "user_id": uid,
+                "team_id": tid,
+                "agent_id": aid,
+                "org_id": oid,
+            },
+        )
+        assert retest_res.status_code == 200
+        rt_data = retest_res.json()
+        assert rt_data["status"] == "SCENARIO_RETEST_COMPLETE"
+        assert rt_data["triggered_count"] >= 1
+        assert rt_data["expected_fact_matched"] is True
+        assert rt_data["token_telemetry"]["injected_memory_tokens"] > 0
+        triggered_keys = [m["memory_key"] for m in rt_data["triggered_memories"]]
+        assert "test_runner" in triggered_keys
+
+        # 4. Intent 4: Inspect Sync Status & Push Staged Memories to Cloud Spanner
+        sync_status_res = client.get(
+            f"/api/studio/sync/status?user_id={uid}&team_id={tid}&agent_id={aid}&org_id={oid}"
+        )
+        assert sync_status_res.status_code == 200
+        st_data = sync_status_res.json()
+        assert st_data["staged_count"] >= 1
+
+        sync_push_res = client.post(
+            "/api/studio/sync/push",
+            json={
+                "user_id": uid,
+                "team_id": tid,
+                "agent_id": aid,
+                "org_id": oid,
+            },
+        )
+        assert sync_push_res.status_code == 200
+        push_data = sync_push_res.json()
+        assert push_data["status"] == "SPANNER_SYNC_COMMITTED"
+        assert push_data["synced_count"] >= 1
+        assert "transaction_tag" in push_data
+
+        # Verify staged count is now 0 after Spanner commit
+        sync_after = client.get(
+            f"/api/studio/sync/status?user_id={uid}&team_id={tid}&agent_id={aid}&org_id={oid}"
+        ).json()
+        assert sync_after["staged_count"] == 0
+    finally:
+        # Automated teardown of test scopes
+        client.post(
+            "/api/studio/reset",
+            json={"scope_id": uid, "scope_type": "USER", "reset_all_scopes": False},
+        )
+        client.post(
+            "/api/studio/reset",
+            json={"scope_id": tid, "scope_type": "TEAM", "reset_all_scopes": False},
+        )
+
+
+def test_studio_ten_workspaces_and_master_detail_contracts():
+    """Verify the 10-workspace Enterprise Memory Studio DOM, CSS palette guardrails, and all 10 backend API contracts."""
+    from pathlib import Path
+
+    client = TestClient(api)
+
+    # 1. DOM & CSS Contract
+    res = client.get("/studio")
+
+    assert res.status_code == 200
+    html = res.text
+
+    for required_token in (
+        "app-bar",
+        "app-bar-content",
+        "app-title-group",
+        "app-nav",
+        "app-body-layout",
+        "studioInspectorDrawer",
+        "inspectorDetailTitle",
+        "inspectorDetailBody",
+    ):
+        assert required_token in html, f"Missing required layout/drawer token '{required_token}' in studio.html"
+
+    expected_workspaces = (
+        "sessions",
+        "tree",
+        "playground",
+        "eval",
+        "entities",
+        "categories",
+        "ingest",
+        "extractors",
+        "backend",
+        "security",
+    )
+    for ws in expected_workspaces:
+        assert f'data-workspace="workspace-{ws}"' in html, f"Missing workspace switcher data-workspace='workspace-{ws}'"
+        assert f'id="workspace-{ws}"' in html, f"Missing workspace section id='workspace-{ws}'"
+
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    forbidden_hexes = ("#f59e0b", "#fef3c7", "#d97706")
+    for asset_name in ("studio.html", "style.css", "studio.js"):
+        content_lower = (static_dir / asset_name).read_text(encoding="utf-8").lower()
+        for bad_hex in forbidden_hexes:
+            assert bad_hex not in content_lower, f"Forbidden amber/yellow hex {bad_hex} found in {asset_name}"
+
+    for forbidden_jargon in (
+        "6 planes",
+        "4 core",
+        "content-visibility: auto",
+        "1. Session Logs",
+        "2. Memory Tree",
+        "3. Playground",
+        "4. Eval &amp; Evolve",
+        "5. Entities &amp; Scopes",
+        "6. Categories",
+        "7. Data Ingest",
+        "8. Extractors",
+        "9. Memory Backend",
+        "10. Security &amp; RBAC",
+    ):
+        assert forbidden_jargon not in html, f"Forbidden jargon or numbered prefix '{forbidden_jargon}' found in studio.html"
+
+    # 2. Workspace 1: Ingested Sessions, AI Summaries & Usefulness Ratings
+    sess_res = client.get("/api/studio/sessions")
+    assert sess_res.status_code == 200
+    sess_data = sess_res.json()
+    assert len(sess_data["sessions"]) >= 1
+    first_sess = sess_data["sessions"][0]
+    assert "turns" in first_sess
+    assert "extracted_memories" in first_sess
+    assert "summary" in first_sess
+    sid = first_sess["session_id"]
+
+    sum_res = client.post(f"/api/studio/sessions/{sid}/summarize")
+    assert sum_res.status_code == 200
+    assert sum_res.json().get("summary_text")
+
+    rate_res = client.post(
+        f"/api/studio/sessions/{sid}/usefulness",
+        json={"rating": "helpful", "notes": "Verified in pytest"},
+    )
+    assert rate_res.status_code == 200
+    assert rate_res.json()["rating"] == "helpful"
+
+    # 3. Workspace 2: Hierarchical Memory Tree & Staged Commits
+    tree_res = client.get("/api/studio/tree")
+    assert tree_res.status_code == 200
+    tree_data = tree_res.json()
+    assert "files" in tree_data
+    assert "tree" in tree_data
+    assert "staged_commits" in tree_data
+
+    stage_res = client.post(
+        "/api/studio/tree/stage",
+        json={
+            "scope_type": "USER",
+            "scope_id": "user:developer",
+            "category": "technical",
+            "memory_key": "pytest_temp_tree_node",
+            "after_value": "Temporary tree node for pytest stage/commit/discard verification.",
+            "confidence": 0.96,
+            "diff_summary": "Automated contract test",
+        },
+    )
+    assert stage_res.status_code == 200
+    staged_obj = stage_res.json()["staged"]
+    cid = staged_obj["staged_id"]
+
+    commit_res = client.post("/api/studio/tree/commit", json={"staged_id": cid})
+    assert commit_res.status_code == 200
+    assert commit_res.json()["status"] == "COMMITTED"
+
+    # Stage a second commit to verify discard
+    stage_res_2 = client.post(
+        "/api/studio/tree/stage",
+        json={
+            "scope_type": "USER",
+            "scope_id": "user:developer",
+            "category": "technical",
+            "memory_key": "pytest_discard_node",
+            "after_value": "Should be discarded.",
+        },
+    )
+    assert stage_res_2.status_code == 200
+    cid_2 = stage_res_2.json()["staged"]["staged_id"]
+    discard_res = client.post("/api/studio/tree/discard", json={"staged_id": cid_2})
+    assert discard_res.status_code == 200
+    assert discard_res.json()["status"] == "DISCARDED"
+
+    # Delete the temporary node
+    del_node_res = client.delete(
+        "/api/studio/tree/node?scope_type=USER&scope_id=user:developer&memory_key=pytest_temp_tree_node"
+    )
+    assert del_node_res.status_code == 200
+
+    # 4. Workspace 3 & 4: Playground Scopes, 7-Metric Eval & AlphaEvolve Contracts
+    scopes_res = client.get("/api/studio/scopes?user_id=user:developer&team_id=team:platform-eng")
+    assert scopes_res.status_code == 200
+    fed = scopes_res.json()["federated"]
+    assert "formatted_prompt_context" in fed
+    assert "resolved_memories" in fed
+
+    eval_res = client.post("/api/studio/eval/run", json={"alpha_quality_weight": 0.65})
+    assert eval_res.status_code == 200
+    eval_json = eval_res.json()
+    assert "scorecard" in eval_json
+    assert "slice_comparison" in eval_json
+    assert len(eval_json["slice_comparison"]["slices"]) >= 4
+
+    evolve_res = client.get("/api/studio/evolve/archive")
+    assert evolve_res.status_code == 200
+    evolve_json = evolve_res.json()
+    assert "archive_summary" in evolve_json
+    assert isinstance(evolve_json["archive_summary"]["cells"], list)
+
+    # 5. Workspace 5: Entities Registry CRUD
+    ent_list = client.get("/api/studio/entities")
+    assert ent_list.status_code == 200
+    assert len(ent_list.json()["entities"]) >= 4
+
+    ent_upsert = client.post(
+        "/api/studio/entities",
+        json={
+            "scope_type": "AGENT",
+            "scope_id": "agent:pytest-temp-verifier",
+            "display_name": "Pytest Temp Verifier Agent",
+            "parent_scope_id": "team:platform-eng",
+            "owner": "QA Automation",
+            "description": "Temporary test entity",
+        },
+    )
+    assert ent_upsert.status_code == 200
+    assert ent_upsert.json()["entity"]["scope_id"] == "agent:pytest-temp-verifier"
+
+    ent_del = client.delete("/api/studio/entities/AGENT/agent:pytest-temp-verifier")
+    assert ent_del.status_code == 200
+
+    # 6. Workspace 6: Categories & Progressive Disclosure CRUD
+    cat_list = client.get("/api/studio/categories")
+    assert cat_list.status_code == 200
+    cats = cat_list.json()["categories"]
+    assert len(cats) >= 5
+    for required_cat_key in ("folder_path", "discovery_mode", "recall_trigger", "retention_ttl", "conflict_policy"):
+        assert required_cat_key in cats[0], f"Missing {required_cat_key} in category object"
+
+    cat_upsert = client.post(
+        "/api/studio/categories",
+        json={
+            "category_id": "pytest_custom_cat",
+            "label": "Pytest Custom Category",
+            "folder_path": "/memories/pytest_custom/",
+            "discovery_mode": "PROGRESSIVE_KEYWORD_AND_COSINE",
+            "recall_trigger": "When running contract verification",
+            "retention_ttl": "90_DAYS_SLIDING",
+            "conflict_policy": "USER_OVERRIDES_TEAM",
+            "default_threshold": 0.74,
+        },
+    )
+    assert cat_upsert.status_code == 200
+    assert cat_upsert.json()["category"]["category_id"] == "pytest_custom_cat"
+
+    cat_del = client.delete("/api/studio/categories/pytest_custom_cat")
+    assert cat_del.status_code == 200
+
+    # 7. Workspace 7: Ingestion Services & Raw Stream
+    svc_list = client.get("/api/studio/ingest/services")
+    assert svc_list.status_code == 200
+    assert len(svc_list.json()["services"]) >= 1
+
+    svc_upsert = client.post(
+        "/api/studio/ingest/services",
+        json={
+            "service_id": "svc-pytest-connector",
+            "name": "Pytest Telemetry Connector",
+            "connector_type": "REST_WEBHOOK",
+            "endpoint_uri": "https://example.internal/ingest",
+            "chunk_window_turns": 8,
+            "min_extraction_confidence": 0.88,
+            "pii_redaction_mode": "STRICT_HASH",
+        },
+    )
+    assert svc_upsert.status_code == 200
+    assert svc_upsert.json()["service"]["service_id"] == "svc-pytest-connector"
+
+    raw_stream = client.get("/api/studio/ingest/raw-stream")
+    assert raw_stream.status_code == 200
+    assert len(raw_stream.json()["events"]) >= 1
+
+    # 8. Workspace 8: Memory Extractors & AI Co-Designer Chat
+    ext_list = client.get("/api/studio/extractors")
+    assert ext_list.status_code == 200
+    extractors = ext_list.json()["extractors"]
+    assert len(extractors) >= 1
+    first_ext_id = extractors[0]["extractor_id"]
+    assert isinstance(extractors[0]["few_shot_examples"][0], dict)
+    assert "input" in extractors[0]["few_shot_examples"][0]
+
+    ext_upsert = client.post(
+        "/api/studio/extractors",
+        json={
+            "extractor_id": first_ext_id,
+            "name": extractors[0]["name"],
+            "model_name": "gemini-3.8-flash",
+            "target_category": "workflow",
+            "human_params": extractors[0].get("human_params", {}),
+            "system_prompt": extractors[0].get("system_prompt", ""),
+        },
+    )
+    assert ext_upsert.status_code == 200
+
+    chat_res = client.post(
+        f"/api/studio/extractors/{first_ext_id}/chat",
+        json={"message": "Raise strictness to 0.93 and focus on explicit developer corrections."},
+    )
+    assert chat_res.status_code == 200
+    cd_reply = chat_res.json()["co_designer_reply"]
+    assert "assistant_reply" in cd_reply
+    assert "updated_human_params" in cd_reply
+    assert "updated_system_prompt" in cd_reply
+
+    # 9. Workspace 9: Backend Architecture, Test Agent Write & Point-in-Time Rollback
+    backend_res = client.get("/api/studio/backend/status")
+    assert backend_res.status_code == 200
+    b_data = backend_res.json()
+    assert "online_store" in b_data
+    assert "offline_store" in b_data
+    assert "agent_mutation_log" in b_data
+
+    write_res = client.post(
+        "/api/studio/backend/test-agent-write",
+        json={
+            "source_agent": "agent:pytest-writer",
+            "scope_type": "USER",
+            "scope_id": "user:developer",
+            "category": "workflow",
+            "memory_key": "pytest_rollback_key",
+            "after_value": "Agent written value before rollback",
+            "rationale": "Testing point-in-time rollback",
+        },
+    )
+    assert write_res.status_code == 200
+    mut_id = write_res.json()["mutation"]["mutation_id"]
+
+    rb_res = client.post(f"/api/studio/backend/mutations/{mut_id}/rollback")
+    assert rb_res.status_code == 200
+    assert rb_res.json()["status"] == "ROLLED_BACK"
+
+    # 10. Workspace 10: Security, Governance & RBAC Access Simulator
+    pol_list = client.get("/api/studio/security/policies")
+    assert pol_list.status_code == 200
+    assert len(pol_list.json()["policies"]) >= 1
+
+    pol_upsert = client.post(
+        "/api/studio/security/policies",
+        json={
+            "policy_id": "pol-pytest-auditor",
+            "role_name": "Pytest Security Auditor",
+            "principal": "group:qa-auditors@example.internal",
+            "allowed_scopes": ["ORG", "TEAM"],
+            "allowed_actions": ["READ", "SIMULATE"],
+            "pii_redaction_level": "STRICT_HASH",
+            "effect": "ALLOW",
+        },
+    )
+    assert pol_upsert.status_code == 200
+
+    sim_res = client.post(
+        "/api/studio/security/simulate",
+        json={
+            "principal": "user:developer",
+            "action": "WRITE",
+            "scope": "ORG",
+            "target_scope_id": "org:default",
+        },
+    )
+    assert sim_res.status_code == 200
+    sim_data = sim_res.json()
+    assert sim_data["decision"] in ("ALLOW", "DENY")
+    assert "allowed" in sim_data
+    assert "rationale" in sim_data
+    assert "scope_path" in sim_data
+
+
+def test_studio_toolbar_dropdowns_and_scroll_integrity() -> None:
+    """Verify Studio toolbar dropdowns, vertical scrolling CSS rules, and wired toolbar button listeners."""
+    import re
+    from pathlib import Path
+
+    client = TestClient(api)
+    studio_res = client.get("/studio")
+    assert studio_res.status_code == 200
+    html = studio_res.text
+
+    # 1. Verify dropdown menus & current view indicator in studio.html
+    for expected_id in (
+        "workflowStageDropdown",
+        "stageActionsDropdown",
+        "engineConfigDropdown",
+        "toolbarViewModeBadge",
+        "toolbarCurrentTitle",
+        "toolbarCurrentSubtitle",
+        "activeStageDropdownLabel",
+    ):
+        assert f'id="{expected_id}"' in html, f"Missing expected toolbar element #{expected_id} in studio.html"
+
+    # 2. Verify vertical scroll rules and .studio-scroll-pane in style.css
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    css_text = (static_dir / "style.css").read_text(encoding="utf-8")
+
+    pane_match = re.search(
+        r"body\.studio-workbench-body\s+\.single-pane-container,\s*\.studio-main-pane,\s*\.studio-workspace-canvas\s*\{([^}]+)\}",
+        css_text,
+    )
+    assert pane_match is not None, "Missing .single-pane-container rule block in style.css"
+    pane_body = pane_match.group(1)
+    assert "overflow-y: auto" in pane_body
+    assert ".studio-scroll-pane" in css_text
+
+    # 3. Verify all toolbar action button IDs are wired in studio.js
+    js_text = (static_dir / "studio.js").read_text(encoding="utf-8")
+
+    for btn_id in (
+        "refreshRawStreamCmdBtn",
+        "saveIngestConfigCmdBtn",
+        "openCategoryCreatorCmdBtn",
+        "intentJumpToScenarioCmdBtn",
+        "runScenarioRetestCmdBtn",
+        "intentSynthesizeAdversarialCmdBtn",
+        "pushToSpannerCmdBtn",
+    ):
+        assert btn_id in js_text, f"Toolbar button ID {btn_id} must be wired in studio.js"
+
+
+def test_full_viewport_scaling_and_responsive_breakpoints() -> None:
+    """Verify full-viewport QHD/4K/Ultrawide scaling and narrow-viewport responsive rules."""
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    css_text = (static_dir / "style.css").read_text(encoding="utf-8")
+    js_text = (static_dir / "studio.js").read_text(encoding="utf-8")
+
+    # 1. Verify artificial 1500px / 1800px max-width caps are removed from .app-bar-content and .app-body-layout
+    assert ".app-bar-content {\n  max-width: 100%;" in css_text or "max-width: 100%;" in css_text
+    assert ".app-body-layout {\n  max-width: 100%;" in css_text or "width: 100%;" in css_text
+    assert "grid-template-columns: clamp(236px, 14vw, 272px) minmax(0, 1fr) clamp(320px, 20vw, 420px)" in css_text
+
+    # 2. Verify vertical height scaling and #wsSessionsTable column proportions
+    assert "max-height: clamp(320px, calc(100dvh - 340px), 860px)" in css_text
+    assert "#wsSessionsTable th:nth-child(2)" in css_text
+    assert "min-width: 280px" in css_text
+
+    # 3. Verify container queries and responsive media queries
+    assert "@container studio-canvas (max-width: 920px)" in css_text
+    assert ".studio-split-pane-2col" in css_text
+    assert "@container studio-canvas (max-width: 860px)" in css_text
+    assert "@container studio-canvas (max-width: 520px)" in css_text
+    assert "@media (max-width: 1200px)" in css_text
+    assert ".studio-inspector-drawer:not(.collapsed)" in css_text
+    assert "@media (max-width: 860px)" in css_text
+    assert "@media (max-width: 820px)" in css_text
+
+    # 4. Verify responsive matchMedia auto-collapse in studio.js
+    assert 'window.matchMedia("(max-width: 1200px)")' in js_text
+    assert 'window.matchMedia("(max-width: 900px)")' in js_text
 

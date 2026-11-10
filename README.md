@@ -73,14 +73,17 @@ PREFERENCE_AGENT_URL=http://localhost:8082
 # PREFERENCE_AGENT_URL=https://preference-agent-<hash>.<region>.run.app
 ```
 
-### 2. Web UI Control Center (Browser Access)
+### 2. Web UI Control Center & Enterprise Memory Studio
 - **Local Control Center**: `http://localhost:8080`
-- **Cloud Run Control Center**: Open `$UI_SERVICE_URL` (configured from your `.env` file or deployment output) in any browser to interact with the **InterviewAgent**, view live **BigQuery Telemetry Logs**, execute a **Dream Harvest**, inspect stored **Google Cloud Spanner Memory**, and test the **PreferenceAgent** fast-path Spanner cache hits.
+- **Enterprise Memory Studio**: `http://localhost:8080/studio`
+- **Cloud Run Control Center**: Open `$UI_SERVICE_URL` in any browser to interact with the **InterviewAgent**, view live **BigQuery Telemetry Logs**, execute a **Dream Harvest**, inspect stored **Google Cloud Spanner Memory**, and test the **PreferenceAgent** fast-path Spanner cache hits.
+- **Cloud Run Memory Studio**: Open `$UI_SERVICE_URL/studio` to explore multi-scope enterprise memory hierarchy (ORG/TEAM/AGENT/USER), run cold-start zero sandbox resets, execute the 7-metric adversarial evaluation engine, and run AlphaEvolve Quality-Diversity optimization.
 
 ### 3. Service Base URLs
 | Service Name | Example Cloud Run URL (From `.env`) | Local Development URL |
 | :--- | :--- | :--- |
 | **UI Service (Control Center)** | `https://ui-service-<hash>.<region>.run.app` (`$UI_SERVICE_URL`) | `http://localhost:8080` |
+| **Enterprise Memory Studio** | `https://ui-service-<hash>.<region>.run.app/studio` | `http://localhost:8080/studio` |
 | **InterviewAgent** | `https://interview-agent-<hash>.<region>.run.app` (`$INTERVIEW_AGENT_URL`) | `http://localhost:8081` |
 | **PreferenceAgent** | `https://preference-agent-<hash>.<region>.run.app` (`$PREFERENCE_AGENT_URL`) | `http://localhost:8082` |
 
@@ -90,11 +93,18 @@ All endpoints return structured JSON and can be called programmatically via `cur
 | Endpoint | Method | Description | Example Payload |
 | :--- | :--- | :--- | :--- |
 | `/health` | `GET` | Health & model check | N/A |
+| `/studio` | `GET` | Serve Enterprise Memory Studio UI | N/A |
 | `/api/interview/query` | `POST` | Chat with InterviewAgent & record BigQuery telemetry | `{"user_id": "user-01", "session_id": "sess-01", "prompt": "My favorite language is Python"}` |
 | `/api/logs/{session_id}` | `GET` | Retrieve session telemetry logs from BigQuery | N/A |
 | `/api/harvest` | `POST` | Trigger Dream Harvest (summarize BQ logs -> sync to Spanner) | `{"user_id": "user-01", "session_id": "sess-01"}` |
 | `/api/spanner/preferences/{user_id}` | `GET` | Fetch stored user profile preferences from Spanner | N/A |
 | `/api/preference/query` | `POST` | Query PreferenceAgent with fast Spanner cache hit (< 10ms) | `{"user_id": "user-01", "session_id": "sess-01", "prompt": "What is my favorite language?"}` |
+| `/api/studio/scopes` | `GET` | Retrieve 4-tier enterprise memory matrix (ORG/TEAM/AGENT/USER) | N/A |
+| `/api/studio/reset` | `POST` | Cold-Start Zero Reset: wipe sandbox memories to start from zero | `{"scope_id": "user:default", "scope_type": "USER"}` |
+| `/api/studio/seed-demo` | `POST` | Seed multi-scope enterprise demo memories into Spanner | `{"user_id": "user:default"}` |
+| `/api/studio/eval/run` | `POST` | Run 7-metric adversarial evaluation suite against active config | `{"alpha_quality_weight": 0.65}` |
+| `/api/studio/evolve/archive` | `GET` | Fetch AlphaEvolve MAP-Elites QD archive & active MemoryConfig | N/A |
+| `/api/studio/evolve/run` | `POST` | Run AlphaEvolve evolutionary optimization across generations | `{"generations": 3}` |
 
 ### 5. Agent Prompt & Response Payloads (Code Block Formatting)
 

@@ -15,9 +15,9 @@ from src.common.config import get_config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("adk.llm_judge")
 
-UI_SERVICE_URL = os.environ.get("UI_SERVICE_URL", "https://ui-service-834476222725.us-central1.run.app")
-INTERVIEW_AGENT_URL = os.environ.get("INTERVIEW_AGENT_URL", "https://interview-agent-834476222725.us-central1.run.app")
-PREFERENCE_AGENT_URL = os.environ.get("PREFERENCE_AGENT_URL", "https://preference-agent-834476222725.us-central1.run.app")
+UI_SERVICE_URL = os.environ.get("UI_SERVICE_URL", "http://localhost:8080")
+INTERVIEW_AGENT_URL = os.environ.get("INTERVIEW_AGENT_URL", "http://localhost:8081")
+PREFERENCE_AGENT_URL = os.environ.get("PREFERENCE_AGENT_URL", "http://localhost:8082")
 
 
 def test_post(url: str, payload: dict) -> Dict[str, Any]:
@@ -51,7 +51,7 @@ def evaluate_with_llm_judge(
 
     judge_prompt = f"""
 You are an expert AI Evaluator and LLM-as-a-Judge assessing an end-to-end multi-agent demonstration for the Ai4 talk: 'Do AI Agents Dream of Binary Sheep'.
-We executed a live interaction against production Google Cloud Run services (`davenport-boutique`).
+We executed a live interaction against production Google Cloud Run services (`{config.project_id}`).
 
 === TRANSCRIPT & PIPELINE DATA ===
 1. [Stage 1 - Waking Life InterviewAgent]
@@ -89,15 +89,16 @@ Return a valid JSON object with keys: "personality_score", "helpfulness_score", 
 
 
 def run_e2e_live_evaluation():
+    config = get_config()
     print("=" * 80)
-    print("  LIVE GCP END-TO-END LLM-AS-A-JUDGE EVALUATION (davenport-boutique)  ")
+    print(f"  LIVE GCP END-TO-END LLM-AS-A-JUDGE EVALUATION ({config.project_id})  ")
     print("=" * 80)
 
     user_id = f"llm-judge-user-{int(time.time())}"
     session_id = f"session-llm-judge-{int(time.time())}"
 
     # Step 1: Waking Life Interview
-    interview_prompt = "Hello! My name is Jason, my favorite programming language is Python, and my job role is Principal Cloud Architect."
+    interview_prompt = "Hello! My name is Alex, my favorite programming language is Python, and my job role is Principal Cloud Architect."
     logger.info(f"[Step 1] Sending prompt to live InterviewAgent: {interview_prompt}")
     r1 = test_post(
         f"{UI_SERVICE_URL}/api/interview/query",

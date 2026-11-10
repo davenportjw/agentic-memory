@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Deploy all 3 Google ADK 2.0 services to Google Cloud Run from source using root Dockerfile
 set -euo pipefail
+export CLOUDSDK_CONTEXT_AWARE_USE_CLIENT_CERTIFICATE=false
+export CLOUDSDK_CONTEXT_AWARE_USE_ECP_HTTP_PROXY=false
 
 # Automatically load local .env file if present (ignored by git)
 if [ -f .env ]; then

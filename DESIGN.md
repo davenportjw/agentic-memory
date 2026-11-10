@@ -100,6 +100,16 @@ All user interfaces MUST strictly adhere to the light-mode color tokens defined 
   4. Modal headers (`.modal-header`) MUST specify `display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 16px;` to guarantee the title group and close button never wrap.
 - **Why this works**: By default, `<dialog>` elements have `display: none` in the browser user-agent stylesheet when closed, making it impossible for them to appear inline at the bottom of the page. When `.showModal()` is called, they render in the Top Layer with native focus traps and Escape key dismissal.
 
+### 3.1.5 Dynamic Full-Viewport Scaling & Multi-Breakpoint Responsiveness
+- **Fluid Full-Page Scaling (Zero Artificial Max-Width Caps)**:
+  - `.app-bar-content`, `.app-body-layout`, and `.app-body-layout.nav-collapsed` use `max-width: 100%; width: 100%;` with fluid horizontal padding (`clamp(16px, 2vw, 32px)` / `clamp(16px, 2.2vw, 36px)`) so QHD (`2560px`), 4K (`3840px`), and Ultrawide monitors utilize 100% of the viewport without blank side margins.
+  - The Studio 3-column workbench (`body.studio-workbench-body .app-body-layout, .studio-body-layout, .studio-workbench-layout`) resets inherited padding/gap (`max-width: 100%; width: 100%; margin: 0; padding: 0; gap: 0;`) and uses fluid `clamp(...)` tracks: `grid-template-columns: clamp(236px, 14vw, 272px) minmax(0, 1fr) clamp(320px, 20vw, 420px);` (collapsing cleanly when `#leftNavSidebar.collapsed` or `#studioInspectorDrawer.collapsed` is active).
+  - Data tables (`.raw-telemetry-table-wrap` and `#wsSessionsTable`) scale vertically via `max-height: clamp(320px, calc(100dvh - 340px), 860px)` and allocate `42%` (`min-width: 280px`) to the session title/summary column so episodic summaries never squish into narrow columns.
+- **Container Queries & Responsive Breakpoints**:
+  - `@container studio-canvas (max-width: 920px)` collapses both `.studio-split-2col` and `.studio-split-pane-2col` to `1fr`, while `(max-width: 860px)` and `(max-width: 520px)` reflow `.studio-kpi-row` from 4 columns to 2 columns and 1 column.
+  - `@media (max-width: 1200px)` transitions the Studio workbench to a 2-column grid (`224px minmax(0, 1fr)`) and converts `.studio-inspector-drawer:not(.collapsed)` into a fixed right slide-over drawer (`width: min(380px, 90vw)`), paired with `window.matchMedia("(max-width: 1200px)")` auto-collapse in `studio.js`.
+  - `@media (max-width: 860px)` and `@media (max-width: 820px)` stack `.app-body-layout` into a single column across all pages (`index.html`, `how-it-works.html`, `studio.html`) and allow `.app-bar-content` to wrap cleanly on mobile/tablet screens.
+
 ### 3.2 Split Navigation / Stage Progression Layout (`.app-body-layout`)
 The control center follows a responsive split-pane architecture:
 ```
@@ -153,7 +163,7 @@ The control center follows a responsive split-pane architecture:
 - **Required Layout & Component Structure**:
   1. **Responsive 4-Column CSS Grid (`.arch-pipeline-grid`)**: The architectural pipeline MUST use `display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;`, allocating equal 25% columns to each stage card (`STEP 1 • WAKING LIFE`, `STEP 2 • REM SLEEP`, `STEP 3 • CONSOLIDATION`, `STEP 4 • AGENT RECALL`).
   2. **Integrated Flow Transition Tags (`.arch-stage-flow-tag`)**: Instead of standalone arrow sibling elements between columns, flow transitions (`→ BigQuery`, `→ GenAI`, `→ Spanner`, `✓ < 10ms`) MUST be rendered inside each card's top header row (`.arch-stage-top`), preserving grid column widths.
-  3. **Stage Accent Borders**: Each `.arch-stage-box` MUST incorporate a 4px top accent indicator (`::before`) colored by stage role (Blue for BigQuery Episodic Traces, Indigo for Vertex AI REM Synthesis, Emerald for Spanner Crystalline Memory, and Primary Blue for Sub-10ms Fast Lookup).
+  3. **Stage Accent Borders**: Each `.arch-stage-box` MUST incorporate a 4px top accent indicator (`::before`) colored by stage role (Blue for BigQuery Episodic Traces, Indigo for Gemini platform REM Synthesis, Emerald for Spanner Crystalline Memory, and Primary Blue for Sub-10ms Fast Lookup).
   4. **Responsive Collapse**: At viewports `max-width: 1050px`, the grid MUST collapse to `repeat(2, 1fr)`, and at `max-width: 640px` to `1fr`.
 - **Why this works**: CSS Grid gives every architectural stage a clean, predictable card width, while embedded flow tags eliminate visual clutter and ensure executive-grade readability across all screen sizes.
 
@@ -195,6 +205,61 @@ The control center follows a responsive split-pane architecture:
   - Fast-Path Badge: `.chip-success` with text `Spanner Fast Cache` and animated pulsing status dot (`Sub-10ms Fast Lookup`).
   - Chat Box (`#preferenceChatBox`) rendering instantaneous cache hits alongside latency metrics.
 
+### 4.6 Enterprise Memory Studio (`/studio`) Architecture: 10-Workspace Master-Detail Workbench & 4-Intent Practitioner Workflow
+- **Role**: Intent-Driven Practitioner Memory Workbench (`/studio` and `studio.html`, viewport-locked `100dvh`, zero outer document scrolling) combining the **10-Workspace Master-Detail Architecture** (`STUDIO PIPELINE` + `ADMIN CONFIGURATION`) with the **4-Intent Practitioner Workflow**:
+  - **STUDIO PIPELINE (4 Workspaces)**:
+    1. **Session Logs & Attribution (`#workspace-sessions`)**: Session transcript stream (`GET /api/studio/sessions`), automatic/manual session summarization (`POST /api/studio/sessions/summarize`), and **Usefulness Attribution** (`POST /api/studio/sessions/usefulness`, recording `Useful: K / M memories` and linked belief IDs).
+    2. **Memory Tree & Staged Commits (`#workspace-tree`)**: 4-Tier Hierarchical Memory Tree (`ORG -> TEAM -> AGENT -> USER` via `GET /api/studio/tree`) with a **Top Pending Staged Commits Bar** (`#treePendingCommitsBar`) and git-like staging/commit controls (`POST /api/studio/tree/stage`, `POST /api/studio/tree/commit`, `POST /api/studio/tree/discard`, `DELETE /api/studio/tree/node/{preference_id}`). Semantic status pills use Emerald (`#0f9d58` for `NEW`), Indigo (`#6366f1` for `MODIFIED`), Red (`#d93025` for `CONFLICT`), and Teal (`#0d9488` for `SYNCED`)—strictly zero yellow/amber warning noise.
+    3. **Multi-Scope Playground (`#workspace-playground`)**: Interactive Context Assembly & Prompt Injection simulator (`POST /api/studio/playground/context` and `/api/studio/chat`) showing assembled `ORG/TEAM/AGENT/USER` hierarchy blocks, cosine similarity scores, and token footprint.
+    4. **Adversarial Evaluation & Optimization (`#workspace-eval`)**: 7-Metric Quality Suite (`POST /api/studio/eval/run`) and AlphaEvolve MAP-Elites Pareto Frontier (`POST /api/studio/evolve/run`).
+  - **ADMIN CONFIGURATION (6 Workspaces)**:
+    5. **Entities & Scope Hierarchy (`#workspace-entities`)**: Managed entity registry across `ORGANIZATION`, `TEAM`, `AGENT`, and `USER` scopes (`GET/POST /api/studio/entities`, `DELETE /api/studio/entities/{entity_id}`).
+    6. **Memory Categories & Retention (`#workspace-categories`)**: Custom taxonomy categories with extraction instructions, slot schemas, and decay policies (`GET/POST /api/studio/categories`, `DELETE /api/studio/categories/{category_id}`).
+    7. **Data Ingest & Live Telemetry (`#workspace-ingest`)**: Live ingestion connectors (`antigravity_gcs`, `bigquery_traces`, `mcp_events`, `pubsub_bus` via `GET/POST /api/studio/ingest/services`) and high-frequency telemetry stream rows styled with `content-visibility: auto; contain-intrinsic-size: 0 36px;`.
+    8. **Memory Extractors & Co-Designer (`#workspace-extractors`)**: Custom extraction prompt rules (`GET/POST /api/studio/extractors`) paired with the **Interactive Gemini 3.8 Flash Extractor Co-Designer Chat** (`POST /api/studio/extractors/chat`) that returns synthesized `system_prompt` and `slot_schema_json` ready for one-click form population.
+    9. **Memory Backend & Write-Back (`#workspace-backend`)**: Dual-plane storage topology (`GET /api/studio/backend/status`), **Live Agent Write-Back (`upsert_memory`)** (`POST /api/studio/backend/agent-write`), and **Mutation Audit & One-Click Rollback** (`POST /api/studio/backend/rollback`) to revert erroneous agent mutations.
+    10. **Security & Access Control (`#workspace-security`)**: Tree-conditioned path access policies (`GET/POST /api/studio/security/policies`) and an interactive **Permission Simulator** (`POST /api/studio/security/simulate`) evaluating `ALLOW`/`DENY` decisions across `ORG/TEAM/AGENT/USER` tree paths.
+- **4-Intent Practitioner Workflow Stages (`#stage-1-sandbox` .. `#stage-4-evolve`)**:
+  1. **Intent 1 (`#stage-1-sandbox`) — `Ingest & Raw Data`**: Configure telemetry ingestion (`GET/POST /api/studio/ingest/config`), inspect raw episodic turns (`GET /api/studio/ingest/raw`), extract candidate memories with AI (`POST /api/studio/trajectories/extract`), and test live traces.
+  2. **Intent 2 (`#stage-2-scopes`) — `Design & Categories`**: Author custom categories (`GET/POST /api/studio/categories`), design memories with explicit trigger conditions (`match_mode`, `min_cosine_similarity`) and token cost preview (`POST /api/studio/memories/upsert`), and inspect the 4-Scope Memory Bank (`ORG > TEAM > AGENT > USER`) showing empirical trigger counts (`⚡ Nx Triggered`), trigger conditions, token footprint, and `STAGED` vs `SYNCED` database status.
+  3. **Intent 3 (`#stage-3-eval`) — `Trigger & Token Lab`**: Re-test specific prompt scenarios (`POST /api/studio/scenarios/retest`) to inspect which memories triggered vs. were suppressed, verify trigger reasons and cosine similarity, audit token budget usage, and inspect the Empirical Memory Trigger Telemetry Matrix (`#memoryTriggerMatrixCard`).
+  4. **Intent 4 (`#stage-4-evolve`) — `Sync & Optimize`**: Review staged vs. synced memories (`GET /api/studio/sync/status`), commit staged memories to Cloud Spanner with 768d Matryoshka embeddings (`POST /api/studio/sync/push`), and evolve hyperparameters via AlphaEvolve MAP-Elites (`POST /api/studio/evolve/run`).
+- **Secondary Top Intent Navigation Bar & Single-Row Command Bar (`header.studio-command-bar`)**:
+  - The studio command bar is structured as a sticky, single-row command toolbar (`header.studio-command-bar`) with plain-English contextual controls and dropdown menus:
+    - **Guided 4-Step Workflow Dropdown (`#workflowStageDropdown`)**: A `<details class="toolbar-dropdown">` element pairing `span#activeStageDropdownLabel` with the 4 practitioner intent stages (`nav#studioIntentTopNav` with `a.left-nav-item.studio-intent-tab[data-stage="stage-1-sandbox".."stage-4-evolve"]`):
+      - Step 1: Ingest & Raw Data (`#stage-1-sandbox`) — *Load & Inspect Sessions*
+      - Step 2: Author Memories & Rules (`#stage-2-scopes`) — *Author Memories & Rules*
+      - Step 3: Test Triggers & Token Cost (`#stage-3-eval`) — *Test Triggers & Token Cost*
+      - Step 4: Save to Database & Optimize (`#stage-4-evolve`) — *Save to Database & Optimize*
+    - **Current View Indicator**: Displays `span#toolbarViewModeBadge` (`WORKSPACE` or `GUIDED STEP`), `strong#toolbarCurrentTitle`, and `span#toolbarCurrentSubtitle` providing clear plain-English orientation across both 10-workspace and 4-step modes.
+    - **Contextual Actions & Tools Dropdown (`#stageActionsDropdown`)**: A primary `<details class="toolbar-dropdown">` popover exposing contextual action groups (`.studio-cmd-group[data-for-stage="..."]`):
+      - `#cmdGroupStage1` (`data-for-stage="stage-1-sandbox"`): `🤖 Extract Memories from Logs` (`#openTrajectoryIngestCmdBtn`), `🔄 Reload Session Stream` (`#refreshRawStreamCmdBtn`), `💾 Save Ingest Settings` (`#saveIngestConfigCmdBtn`).
+      - `#cmdGroupStage2` (`data-for-stage="stage-2-scopes"`): `➕ Create New Memory` (`#openMemoryDesignerCmdBtn`), `🏷️ Create Memory Category` (`#openCategoryCreatorCmdBtn`), `🤝 Promote Shared Team Rules` (`#intentRunConsensus`), `📊 Test Triggers & Token Usage →` (`#intentJumpToScenarioCmdBtn`).
+      - `#cmdGroupStage3` (`data-for-stage="stage-3-eval"`): `⚡ Run Prompt Trigger Test` (`#runScenarioRetestCmdBtn`), `🛡️ Generate 4 Stress-Test Prompts` (`#intentSynthesizeAdversarialCmdBtn`), `🧪 Run Full Quality Benchmark` (`#intentRunRedTeam`).
+      - `#cmdGroupStage4` (`data-for-stage="stage-4-evolve"`): `🚀 Save Staged Memories to Spanner` (`#pushToSpannerCmdBtn`), `📦 Export / Import Memory Pack` (`#openMemoryPackCmdBtn`), `🧬 Auto-Tune Retrieval Settings` (`#intentRunAlphaEvolve`).
+    - **Active Engine Popover Dropdown (`#engineConfigDropdown`)**: Shows live telemetry readout badge (`#cmdBarStagedSyncBadge`), active config ID (`#topbarConfigId`), Matryoshka detail slice (`#topbarConfigSlice`), and format (`#topbarConfigFormat`).
+- **Scrollable Center Studio Workspace Canvas (`.single-pane-container`)**:
+  - The active workspace container (`body.studio-workbench-body .single-pane-container, .studio-main-pane, .studio-workspace-canvas`) enforces `overflow-y: auto`, `min-height: 0`, and `height: 100%`, while split panes use `.studio-scroll-pane` with `align-items: start` and auto-expanding views (`.studio-workspace-view.active-workspace` with `overflow: visible; flex: 1 0 auto;`), preventing page cutoff and ensuring smooth vertical scrolling down to the bottom of all cards.
+- **Left Rail: 10-Workspace Selector, Scope Pills, File/Data System Explorer & Live Memory Tree (`aside#leftNavSidebar`)**:
+  - **10-Workspace Navigation Selector (`#studio10WorkspaceNav`)**: Grouped into `STUDIO PIPELINE` (4 workspaces) and `ADMIN CONFIGURATION` (6 workspaces) with live count badges (`#wsBadgeSessions`, `#wsBadgeTree`, `#wsBadgeEntities`, `#wsBadgeCategories`).
+  - **Active Scope & Identity Pills (`#leftScopePillsContainer`)**: Houses the 5 scope filter pills (`.left-scope-pill` for `ALL`, `ORG`, `TEAM`, `AGENT`, `USER` with live counts `#leftCountScopeAll`..`#leftCountScopeUser`) and editable scope identity pills (`#userIdInput`, `#teamIdInput`, `#agentIdInput`), keeping `.app-bar` clean and two-child compliant.
+  - **File & Data System Explorer (`#studioFileDataTree`)**: Tree explorer (`ul.left-nav-list.studio-file-tree`) providing one-click access to `/streams/telemetry` (`antigravity_gcs`, `bigquery_traces`, `live_stream`, `mcp_events`) and `/packs/portable` (`#fileTreeExportPackNode`, `#fileTreeImportPackNode`).
+  - **Live Memory Tree & Quick Editor (`#leftMemoryExplorerSection`)**: Displays live Spanner memories grouped by scope (`#leftMemoryTreeList`, filterable via `#leftMemoryTreeSearch`) and an inline quick editor (`#leftMemoryQuickEditor`) for instant create/edit/promote/delete (`#leftNewMemoryBtn`, `#leftQuickSaveMemoryBtn`, `#leftQuickPromoteBtn`, `#leftQuickDeleteBtn`).
+- **De-Anchored Main Workspaces & Right Context Detail / Commits Inspector Drawer (`aside#studioInspectorDrawer`)**:
+  - All main studio workspaces are de-anchored from hardcoded sample prompts, sample transcripts, and sample scenario values (`value=""` with clean instructional placeholders).
+  - **Right Context Detail & Inspector Rail (`aside.studio-inspector-drawer`)** provides 5 tabs:
+    - **Tab 1 (`🔍 Detail`, `#tabBtnContextDetail` / `#inspectorContextDetailPane`)**: Master-Detail context inspector displaying full structured detail and JSON for any clicked session, tree node, entity, category, extractor, mutation log, or RBAC policy.
+    - **Tab 2 (`📦 Commits`, `#tabBtnCommitsInspector` / `#inspectorCommitsPane`)**: Exclusively visible when the **Memory Tree (`#workspace-tree`)** workspace is active; lists all pending staged commits (`NEW`, `MODIFIED`, `CONFLICT`) with individual `Commit` and `Discard` controls.
+    - **Tab 3 (`⚙ Run`, `#tabBtnRunSettings` / `#inspectorRunSettingsPane`)**: Interactive runtime hyperparameter controls (Matryoshka Slice `128d/256d/512d/768d`, Prompt Injection Format, Retrieval Cosine Threshold slider, and Pareto `&alpha;` slider).
+    - **Tab 4 (`{ } JSON`, `#tabBtnJsonInspector` / `#inspectorJsonPane`)**: Raw JSON payload inspector for any clicked Spanner belief row, EvalCase, or MAP-Elites genome cell.
+    - **Tab 5 (`📖 Guide`, `#tabBtnStudioGuide` / `#inspectorGuidePane`)**: Accessible anytime via `#openStudioGuideBtn` (`📖 Tutorial & Guide`), housing the interactive walkthrough, sample prompt chips (`.studio-prompt-chip`), sample scenario chips (`.scenario-preset-btn`), sample transcript loader (`#loadSampleTranscriptGuideBtn`), and baseline seeders (`#seedMultiScopeBtn`, `#intentSeedMultiScope`, `#zeroResetBtn`).
+- **Core CSS Visibility, Container Queries & Input Invariants**:
+  - `.hidden { display: none !important; }` MUST be enforced globally so contextual command groups (`.studio-cmd-group`), tabbed inspector panes (`#inspectorContextDetailPane`, `#inspectorCommitsPane`, `#inspectorRunSettingsPane`, `#inspectorJsonPane`, `#inspectorGuidePane`), collapsible drawers, and status banners never stack or overlap simultaneously.
+  - `[data-studio-canvas="studio-workspace-canvas"]` sets `container-type: inline-size; container-name: studio-canvas; min-inline-size: 0; scrollbar-gutter: stable;` so responsive grids adapt cleanly when sidebars expand or collapse.
+  - `.studio-prompt-input { flex: 1 1 260px; min-width: 200px; }` ensures the docked prompt input expands cleanly alongside the route selector and submit button.
+  - Zero raw unrendered LaTeX strings (`$...$`) are permitted in HTML; mathematical notation uses clean HTML entities (`&alpha;`, `F<sub>&alpha;</sub>`, `&middot;`, `&minus;`).
+
+
 ---
 
 ## 5. Modern Web Development Best Practices
@@ -235,4 +300,4 @@ Synthesized from `modern-web-guidance` and industry standards:
    ```bash
    python3 -m scripts.validate_live_endpoints
    ```
-   to verify that all 7 live REST API endpoints in `davenport-boutique` respond correctly.
+   to verify that all 7 live REST API endpoints in the target GCP project respond correctly.

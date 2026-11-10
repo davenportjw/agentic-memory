@@ -18,13 +18,16 @@
           <span class="brand-icon">🐑</span>
           <span class="brand-name">Electric Sheep v2</span>
         </div>
-        <span class="model-badge">Gemini 3.8 Flash • Vertex AI global</span>
+        <span class="model-badge">Gemini 3.8 Flash • Gemini platform global</span>
         <nav class="app-nav" aria-label="Main Navigation">
-          <a href="index.html" class="nav-pill active">
+          <a href="index.html" class="nav-pill app-nav-link active">
             <span>Control Center</span>
           </a>
-          <a href="how-it-works.html" class="nav-pill">
-            <span>Architecture &amp; Docs</span>
+          <a href="studio.html" class="nav-pill app-nav-link">
+            <span>Memory Studio</span>
+          </a>
+          <a href="how-it-works.html" class="nav-pill app-nav-link">
+            <span>How It Works</span>
           </a>
         </nav>
       </div>
@@ -177,7 +180,7 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 id="stage-title-1">1. Waking Life: Episodic Trajectories</h2>
+              <h2 id="stage-title-1">Waking Life: Episodic Trajectories</h2>
               <p class="card-subtitle">Capture real-time developer workflows from Google Antigravity or converse via interactive dialogue.</p>
             </div>
             <div class="tab-group" role="tablist">
@@ -292,12 +295,32 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 id="stage-title-2">2. Telemetry Lakehouse (Google BigQuery)</h2>
+              <h2 id="stage-title-2">Telemetry Lakehouse (Google BigQuery)</h2>
               <p class="card-subtitle">Streaming audit trail of conversation turns, model thoughts, and tool executions.</p>
             </div>
-            <div class="btn-group">
+            <div class="btn-group" style="align-items: center; gap: 8px;">
+              <span id="lakehouseActiveScopeBadge" class="intent-pill pill-primary" title="Current lakehouse query scope">Scope: All Sessions</span>
               <button id="refreshLogsBtn" class="btn btn-secondary btn-sm">Refresh BigQuery Traces</button>
             </div>
+          </div>
+
+          <div class="filter-strip session-filter-strip">
+            <span class="filter-label">Scope:</span>
+            <div class="filter-pills" id="lakehouseScopePills">
+              <button type="button" id="lakehouseScopeAllBtn" class="intent-pill active" data-scope="ALL" title="Show all traces across all sessions in the telemetry lakehouse">All Sessions (Everything)</button>
+              <button type="button" id="lakehouseScopeActiveBtn" class="intent-pill" data-scope="ACTIVE" title="Filter to traces for the active session in top bar">Active Session</button>
+            </div>
+            <div class="session-filter-control-wrap" style="margin-left: 6px;">
+              <select id="lakehouseSessionSelect" class="input-inline lakehouse-session-select" aria-label="Filter BigQuery Traces by Session">
+                <option value="ALL">All Sessions (Global Lakehouse Traces)</option>
+              </select>
+              <div id="lakehouseSessionBadge" class="lakehouse-session-badge" style="display: none;">
+                <span class="intent-pill pill-primary" id="lakehouseBadgeSource">Source</span>
+                <span class="badge-session-id" id="lakehouseBadgeId">session-id</span>
+                <span class="badge-session-summary" id="lakehouseBadgeSummary">— ~5 word summary</span>
+              </div>
+            </div>
+            <span id="lakehouseSessionCount" class="lakehouse-session-count"></span>
           </div>
 
           <div class="filter-strip">
@@ -316,9 +339,9 @@
               <thead>
                 <tr>
                   <th style="width: 140px;">Event Type</th>
-                  <th style="width: 160px;">Agent / Source</th>
+                  <th style="width: 170px;">Agent / Session</th>
                   <th>Payload &amp; Message</th>
-                  <th style="width: 170px;">Timestamp</th>
+                  <th style="width: 150px;">Timestamp</th>
                 </tr>
               </thead>
               <tbody id="logsTableBody">
@@ -334,12 +357,24 @@
         <div class="card card-dream-glow">
           <div class="card-header">
             <div>
-              <h2 id="stage-title-3">3. Long-Term Memory Synthesis (Offline Consolidation)</h2>
-              <p class="card-subtitle">Offline memory consolidation via <strong>Gemini 3.8 Flash</strong> on Vertex AI. Distills short-term working context and crystallizes permanent user preferences into Cloud Spanner (inspired by biological memory consolidation during sleep).</p>
+              <h2 id="stage-title-3">Long-Term Memory Synthesis (Offline Consolidation)</h2>
+              <p class="card-subtitle">Offline memory consolidation via <strong>Gemini 3.8 Flash</strong> on Gemini platform. Distills short-term working context and crystallizes permanent user preferences into Cloud Spanner (inspired by biological memory consolidation during sleep).</p>
             </div>
             <div class="btn-group">
               <button id="harvestBtn" class="btn btn-harvest" title="Analyze active session logs and crystallize beliefs into Cloud Spanner">Consolidate Session Memory</button>
               <button id="multiHarvestBtn" class="btn btn-secondary btn-sm" title="Analyze all recorded user sessions to capture long-term intent and preferences across sessions">Consolidate All Sessions</button>
+            </div>
+          </div>
+
+          <!-- Scope Indicator Bar -->
+          <div class="filter-strip stage-scope-strip" style="margin-bottom: 14px; background: var(--surface-muted); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.82rem;">
+              <span class="filter-label" style="font-size: 0.76rem;">Target Scope:</span>
+              <span id="dreamScopeBadge" class="intent-pill pill-primary">Active Session (<code id="dreamScopeSessionVal">session-ui-001</code>)</span>
+              <span id="dreamScopeUserBadge" class="intent-pill pill-neutral">User: <code id="dreamScopeUserVal">demo-user-42</code></span>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary);">
+              <span id="dreamScopeHelp">🎯 Will consolidate active session <strong>session-ui-001</strong> into Spanner</span>
             </div>
           </div>
 
@@ -383,15 +418,15 @@
               <div class="contract-body">
                 <div class="nrem-stat-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px;">
                   <div class="nrem-stat-item" style="background: var(--surface-muted); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); text-align: center;">
-                    <span class="stat-label" style="display: block; font-size: 0.72rem; color: var(--text-muted);">Total Events</span>
+                    <span class="stat-label" style="display: block; font-size: 0.78rem; color: var(--text-muted);">Total Events</span>
                     <strong class="stat-value" id="nremEventsCount" style="font-size: 1.1rem; color: var(--text-primary);">0</strong>
                   </div>
                   <div class="nrem-stat-item" style="background: var(--surface-muted); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); text-align: center;">
-                    <span class="stat-label" style="display: block; font-size: 0.72rem; color: var(--text-muted);">Est. Tokens</span>
+                    <span class="stat-label" style="display: block; font-size: 0.78rem; color: var(--text-muted);">Est. Tokens</span>
                     <strong class="stat-value" id="nremTokenCount" style="font-size: 1.1rem; color: var(--color-primary);">0</strong>
                   </div>
                   <div class="nrem-stat-item" style="background: var(--surface-muted); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); text-align: center;">
-                    <span class="stat-label" style="display: block; font-size: 0.72rem; color: var(--text-muted);">Error Rate</span>
+                    <span class="stat-label" style="display: block; font-size: 0.78rem; color: var(--text-muted);">Error Rate</span>
                     <strong class="stat-value" id="nremErrorRate" style="font-size: 1.1rem; color: var(--text-secondary);">0.0%</strong>
                   </div>
                 </div>
@@ -460,12 +495,12 @@
             <summary>Telemetry Traces &amp; Gemini 3.8 Flash Prompt Inspector</summary>
             <div class="code-arch-content">
               <div class="query-block">
-                <strong>Execution Path:</strong> BigQuery logs extracted → Gemini 3.8 Flash Vertex AI (global) → Spanner <code>UserPreferences</code> &amp; <code>UserSessionSummaries</code>.
+                <strong>Execution Path:</strong> BigQuery logs extracted → Gemini 3.8 Flash Gemini platform (global) → Spanner <code>UserPreferences</code> &amp; <code>UserSessionSummaries</code>.
               </div>
               <div id="dreamPromptInspect" class="code-snippet-box">
                 <div class="code-header">
                   <span>Gemini 3.8 Flash Memory Synthesis Prompt Template</span>
-                  <span class="code-badge">Vertex AI (global)</span>
+                  <span class="code-badge">Gemini platform (global)</span>
                 </div>
                 <pre><code id="dreamPromptCode">-- Awaiting execution --</code></pre>
               </div>
@@ -479,10 +514,12 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 id="stage-title-4">4. Crystalline Memory Matrix (Cloud Spanner)</h2>
+              <h2 id="stage-title-4">Crystallized Memory Store (Cloud Spanner)</h2>
               <p class="card-subtitle">Globally consistent, high-availability developer beliefs in table <code>UserPreferences</code> and summaries in <code>UserSessionSummaries</code>.</p>
             </div>
-            <div class="btn-group">
+            <div class="btn-group" style="align-items: center; gap: 8px;">
+              <span id="spannerUserScopeBadge" class="intent-pill pill-primary">User: <code id="spannerUserScopeVal">demo-user-42</code></span>
+              <span id="spannerTotalCountBadge" class="intent-pill pill-neutral">0 Beliefs</span>
               <button id="refreshSpannerBtn" class="btn btn-secondary btn-sm">Refresh Spanner</button>
             </div>
           </div>
@@ -533,7 +570,7 @@
 
           <!-- Recent Session Summaries in Spanner -->
           <div class="summaries-block" style="margin-top: 18px;">
-            <h3 class="sub-heading">Executive Session Summaries (Spanner `UserSessionSummaries`)</h3>
+            <h3 class="sub-heading">Executive Session Summaries (Session Summaries)</h3>
             <div id="spannerSummariesList" class="summaries-list">
               <div class="empty-state">No session summaries found.</div>
             </div>
@@ -546,10 +583,13 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 id="stage-title-5">5. Sub-10ms Fast Recall &amp; MCP Protocol Playground</h2>
+              <h2 id="stage-title-5">Fast Recall &amp; MCP Protocol Playground</h2>
               <p class="card-subtitle">Zero-inference primary key lookup (sub-10ms) and live Model Context Protocol (MCP) server tool execution.</p>
             </div>
-            <span class="intent-pill pill-success">&lt;10ms Fast Cache</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span id="mcpUserScopeBadge" class="intent-pill pill-primary">User: <code id="mcpUserScopeVal">demo-user-42</code></span>
+              <span class="intent-pill pill-success">&lt;10ms Fast Cache</span>
+            </div>
           </div>
 
           <!-- Sub-Panel A: Sub-10ms Cache Interceptor -->
@@ -618,13 +658,13 @@
         <button type="button" class="modal-close-btn" id="githubModalCloseBtn">✕</button>
       </div>
       <div class="modal-body">
-        <p>Electric Sheep v2 provides autonomous biological sleep memory consolidation for agentic workflows using Vertex AI Gemini 3.8 Flash, BigQuery, and Cloud Spanner.</p>
+        <p>Electric Sheep v2 provides autonomous biological sleep memory consolidation for agentic workflows using Gemini platform (Gemini 3.8 Flash), BigQuery, and Cloud Spanner.</p>
         <div class="repo-url-box">
-          <code>https://github.com/davenportjw/electric-sheep</code>
+          <code>https://github.com/davenportjw/agentic-memory</code>
         </div>
       </div>
       <div class="modal-footer">
-        <a href="https://github.com/davenportjw/electric-sheep" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Open GitHub</a>
+        <a href="https://github.com/davenportjw/agentic-memory" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Open GitHub</a>
         <button type="button" class="btn btn-secondary" id="githubModalDismissBtn">Close</button>
       </div>
     </div>

@@ -1,24 +1,24 @@
 # Architecture & Production Endpoints Reference
 
-This document provides technical reference details for the **`electric-sheep` Google ADK 2.0 Multi-Agent Demo** deployed on Google Cloud Run (`davenport-boutique`).
+This document provides technical reference details for the **`electric-sheep` Google ADK 2.0 Multi-Agent Demo** deployed on Google Cloud Run (`GOOGLE_CLOUD_PROJECT`).
 
 ---
 
 ## 1. Google Cloud Run Microservices Table
 
-All three services are built from the root [Dockerfile](file:///Users/jasondavenport/GitHub/electric-sheep/Dockerfile) and switch entrypoints based on the `SERVICE_MODULE` environment variable:
+All three services are built from the root [Dockerfile](../../../Dockerfile) and switch entrypoints based on the `SERVICE_MODULE` environment variable:
 
 | Service Name | Cloud Run Base URL | IAM Auth Policy | `SERVICE_MODULE` |
 | :--- | :--- | :--- | :--- |
-| **`ui-service`** | `https://ui-service-834476222725.us-central1.run.app` | `--allow-unauthenticated` | `src.ui_service.server` |
-| **`interview-agent`** | `https://interview-agent-834476222725.us-central1.run.app` | `--no-allow-unauthenticated` | `src.interview_agent.server` |
-| **`preference-agent`** | `https://preference-agent-834476222725.us-central1.run.app` | `--no-allow-unauthenticated` | `src.preference_agent.server` |
+| **`ui-service`** | `https://ui-service-<PROJECT_NUMBER>.us-central1.run.app` | `--allow-unauthenticated` | `src.ui_service.server` |
+| **`interview-agent`** | `https://interview-agent-<PROJECT_NUMBER>.us-central1.run.app` | `--no-allow-unauthenticated` | `src.interview_agent.server` |
+| **`preference-agent`** | `https://preference-agent-<PROJECT_NUMBER>.us-central1.run.app` | `--no-allow-unauthenticated` | `src.preference_agent.server` |
 
 ---
 
 ## 2. Detailed REST API Schema Reference
 
-All endpoints return JSON and can be tested via `curl`, Python, or the automated verification suite ([validate_live_endpoints.py](file:///Users/jasondavenport/GitHub/electric-sheep/scripts/validate_live_endpoints.py)).
+All endpoints return JSON and can be tested via `curl`, Python, or the automated verification suite ([validate_live_endpoints.py](../../../scripts/validate_live_endpoints.py)).
 
 ### `/api/interview/query` (`POST`)
 - **Description**: Interacts with the `InterviewAgent` conversational profile builder and logs telemetry to BigQuery.

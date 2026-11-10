@@ -45,7 +45,7 @@ def run_demo():
     print(f" -> Session ID: {session_id}")
 
     interview_prompts = [
-        "Hi, my name is Jason",
+        "Hi, my name is Alex",
         "I am a Principal Cloud Architect",
         "My favorite programming language is Python",
         "I prefer using Google Cloud Spanner, BigQuery, and Terraform for infrastructure",

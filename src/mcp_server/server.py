@@ -181,6 +181,97 @@ def crystallize_live_preference(
     return f"Successfully crystallized `{preference_key} = {preference_value}` in Spanner for user '{user_id}' with commit timestamp."
 
 
+@server.tool()
+def federated_scoped_memory_lookup(
+    user_id: str = "demo-user-42",
+    team_id: str = "team:default",
+    agent_id: str = "agent:default",
+    org_id: str = "org:default",
+    query: str = "",
+    injection_format: str = "COMPACT_BULLET",
+    embedding_dimensions: int = 768,
+) -> str:
+    """Query federated memories across all 4 Enterprise scopes (ORG, TEAM, AGENT, USER) with deterministic conflict resolution.
+
+    Precedence Rules:
+    - INVARIANT_GUARDRAIL: ORG > TEAM > AGENT > USER (Org guardrails cannot be overridden by User)
+    - PREFERENCE: USER > TEAM > AGENT > ORG (User overrides Team/Org defaults while inheriting non-conflicting memories)
+
+    Args:
+        user_id: User scope identifier (e.g. 'user:alex' or 'demo-user-42').
+        team_id: Team scope identifier (default: 'team:default').
+        agent_id: Agent scope identifier (default: 'agent:default').
+        org_id: Organization global scope identifier (default: 'org:default').
+        query: Optional semantic vector query to filter relevant memories.
+        injection_format: Token compression format ('ATOMIC_KV', 'COMPACT_BULLET', or 'FULL_BELIEF').
+        embedding_dimensions: Matryoshka vector slicing dimension (128, 256, 512, or 768).
+    """
+    client = get_spanner()
+    result = client.federated_scoped_lookup(
+        user_id=user_id,
+        team_id=team_id,
+        agent_id=agent_id,
+        org_id=org_id,
+        query_text=query,
+        config={
+            "injection_format": injection_format,
+            "embedding_dimensions": embedding_dimensions,
+        },
+    )
+    memories = result.get("memories", [])
+    if not memories:
+        return f"No federated scoped memories found for ORG={org_id}, TEAM={team_id}, AGENT={agent_id}, USER={user_id}."
+
+    lines = [
+        f"### Federated 4-Scope Memory Context (`{result['injection_format']}` | `{result['embedding_dimensions']}d` | `{result['estimated_tokens']} tokens`, `{result['token_savings_pct']}%` saved):",
+        result.get("formatted_context", ""),
+    ]
+    conflicts = result.get("conflicts_resolved", [])
+    if conflicts:
+        lines.append("\n#### Conflict Precedence Resolutions:")
+        for c in conflicts:
+            lines.append(
+                f"- `{c['memory_key']}`: **{c['winning_scope']}** (`{c['winning_value']}`) overrode "
+                f"`{c['overridden_scope']}` (`{c['overridden_value']}`) via `{c['rule_applied']}`"
+            )
+    return "\n".join(lines)
+
+
+@server.tool()
+def promote_scoped_memory(
+    source_scope_type: str,
+    source_scope_id: str,
+    memory_key: str,
+    target_scope_type: str,
+    target_scope_id: str,
+    memory_type: str = "PREFERENCE",
+) -> str:
+    """Promote a crystallized memory up the 4-scope hierarchy (e.g., USER -> TEAM or TEAM -> ORG).
+
+    Args:
+        source_scope_type: Source scope type ('USER', 'AGENT', or 'TEAM').
+        source_scope_id: Source scope ID (e.g. 'user:alex').
+        memory_key: Canonical memory key to promote.
+        target_scope_type: Target scope type ('TEAM' or 'ORG').
+        target_scope_id: Target scope ID (e.g. 'team:data-science' or 'org:default').
+        memory_type: Memory type ('PREFERENCE', 'INVARIANT_GUARDRAIL', 'PROCEDURAL_SKILL', 'EPISODIC_FACT').
+    """
+    client = get_spanner()
+    promoted = client.promote_memory(
+        source_scope_type=source_scope_type,
+        source_scope_id=source_scope_id,
+        memory_key=memory_key,
+        target_scope_type=target_scope_type,
+        target_scope_id=target_scope_id,
+        memory_type=memory_type,
+    )
+    return (
+        f"Promoted `{promoted['memory_key']} = {promoted['memory_value']}` "
+        f"from `{promoted['promoted_from_scope']}` to `{promoted['scope_type']}:{promoted['scope_id']}` "
+        f"(SupportCount: {promoted['support_count']}, Type: {promoted['memory_type']})."
+    )
+
+
 def main():
     """Main entrypoint for MCP stdio transport."""
     server.run(transport="stdio")
@@ -188,3 +279,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

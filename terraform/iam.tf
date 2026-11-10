@@ -41,3 +41,11 @@ resource "google_project_iam_member" "cloudtrace_agent" {
   role    = "roles/cloudtrace.agent"
   member  = "serviceAccount:${google_service_account.agent_sa.email}"
 }
+
+# Grant Service Account Token Creator on itself so ADC IAM Credentials API can mint OIDC tokens
+resource "google_service_account_iam_member" "agent_sa_token_creator" {
+  service_account_id = google_service_account.agent_sa.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.agent_sa.email}"
+}
+

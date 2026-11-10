@@ -19,13 +19,16 @@
           <span class="brand-icon">🐑</span>
           <span class="brand-name">Electric Sheep v2</span>
         </div>
-        <span class="model-badge">Gemini 3.8 Flash • Vertex AI global</span>
+        <span class="model-badge">Gemini 3.8 Flash • Gemini platform global</span>
         <nav class="app-nav" aria-label="Main Navigation">
-          <a href="index.html" class="nav-pill">
+          <a href="index.html" class="nav-pill app-nav-link">
             <span>Control Center</span>
           </a>
-          <a href="how-it-works.html" class="nav-pill active">
-            <span>Architecture &amp; Docs</span>
+          <a href="studio.html" class="nav-pill app-nav-link">
+            <span>Memory Studio</span>
+          </a>
+          <a href="how-it-works.html" class="nav-pill app-nav-link active">
+            <span>How It Works</span>
           </a>
         </nav>
       </div>
@@ -171,7 +174,7 @@
             </p>
             <div class="hero-badges-row">
               <span class="hero-badge">Google ADK 2.0</span>
-              <span class="hero-badge">Gemini 3.8 Flash • Vertex AI global</span>
+              <span class="hero-badge">Gemini 3.8 Flash • Gemini platform global</span>
               <span class="hero-badge">Sub-10ms Point Lookup</span>
               <span class="hero-badge">BigQuery Telemetry Sink</span>
             </div>
@@ -216,7 +219,7 @@
               </div>
               <div class="arch-stage-icon">🧠</div>
               <div class="arch-stage-title">Belief Synthesis</div>
-              <div class="arch-stage-tech">Vertex AI (gemini-3.8-flash)</div>
+              <div class="arch-stage-tech">Gemini platform (gemini-3.8-flash)</div>
               <div class="arch-stage-meta">
                 <span class="chip chip-sm chip-indigo">Gemini 3.8 Flash</span>
                 <span class="chip chip-sm chip-gray">JSON Schema</span>
@@ -427,27 +430,27 @@ CLUSTER BY user_id, session_id;</pre>
           <!-- Live Metric Indicators Grid -->
           <div class="math-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
             <div class="math-metric-card" style="background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px;">
-              <span class="math-metric-label" style="display: block; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Raw Episode Tokens</span>
+              <span class="math-metric-label" style="display: block; font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Raw Episode Tokens</span>
               <div class="math-metric-val" id="mathTokensVal" style="font-size: 1.35rem; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono);">37,500</div>
-              <span class="math-metric-sub" style="font-size: 0.72rem; color: var(--text-secondary);">Avg ~1,500 tokens/turn</span>
+              <span class="math-metric-sub" style="font-size: 0.78rem; color: var(--text-secondary);">Avg ~1,500 tokens/turn</span>
             </div>
 
             <div class="math-metric-card" style="background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px;">
-              <span class="math-metric-label" style="display: block; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">TTFT Attention Latency</span>
+              <span class="math-metric-label" style="display: block; font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">TTFT Attention Latency</span>
               <div class="math-metric-val" id="mathTtftVal" style="font-size: 1.35rem; font-weight: 700; color: var(--color-warn); font-family: var(--font-mono);">700 ms</div>
-              <span class="math-metric-sub" style="font-size: 0.72rem; color: var(--text-secondary);">\(O(N)\) Quadratic KV growth</span>
+              <span class="math-metric-sub" style="font-size: 0.78rem; color: var(--text-secondary);">\(O(N)\) Quadratic KV growth</span>
             </div>
 
             <div class="math-metric-card" style="background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px;">
-              <span class="math-metric-label" style="display: block; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Spanner Point-Lookup</span>
+              <span class="math-metric-label" style="display: block; font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Spanner Point-Lookup</span>
               <div class="math-metric-val" style="font-size: 1.35rem; font-weight: 700; color: var(--color-success); font-family: var(--font-mono);">&lt; 8 ms</div>
-              <span class="math-metric-sub" style="font-size: 0.72rem; color: var(--text-secondary);">\(O(1)\) Primary key point lookup</span>
+              <span class="math-metric-sub" style="font-size: 0.78rem; color: var(--text-secondary);">\(O(1)\) Primary key point lookup</span>
             </div>
 
             <div class="math-metric-card" style="background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px;">
-              <span class="math-metric-label" style="display: block; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Information Compaction</span>
+              <span class="math-metric-label" style="display: block; font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Information Compaction</span>
               <div class="math-metric-val" id="mathCompactionVal" style="font-size: 1.35rem; font-weight: 700; color: var(--color-primary); font-family: var(--font-mono);">99.2%</div>
-              <span class="math-metric-sub" style="font-size: 0.72rem; color: var(--text-secondary);">Distilled into ~300 invariant tokens</span>
+              <span class="math-metric-sub" style="font-size: 0.78rem; color: var(--text-secondary);">Distilled into ~300 invariant tokens</span>
             </div>
           </div>
 
@@ -672,7 +675,7 @@ config = get_config()
     <span class="str">"""Records an explicit fact shared by the user."""</span>
     <span class="kw">return</span> <span class="str">f"Fact recorded: {question} = {answer}"</span>
 
-<span class="com"># ADK 2.0 Agent setup with Gemini 3.8 Flash on Vertex AI</span>
+<span class="com"># ADK 2.0 Agent setup with Gemini 3.8 Flash on Gemini platform</span>
 agent = Agent(
     name=<span class="str">"InterviewAgent"</span>,
     model=config.model_name,  <span class="com"># gemini-3.8-flash</span>
@@ -853,7 +856,7 @@ runner = Runner(app=agent_app, session_service=InMemorySessionService(), auto_cr
       
       <div class="modal-body">
         <p class="modal-desc">
-          Scan the QR code below with your mobile device or click the button to explore the open-source architecture, Vertex AI Dream Harvest pipelines, and Cloud Spanner Crystalline memory implementation on GitHub.
+          Scan the QR code below with your mobile device or click the button to explore the open-source architecture, Gemini platform Dream Harvest pipelines, and Cloud Spanner Crystalline memory implementation on GitHub.
         </p>
         
         <div class="qr-container">
@@ -864,12 +867,12 @@ runner = Runner(app=agent_app, session_service=InMemorySessionService(), auto_cr
         </div>
 
         <div class="repo-url-box">
-          <code>https://github.com/davenportjw/electric-sheep</code>
+          <code>https://github.com/davenportjw/agentic-memory</code>
         </div>
       </div>
 
       <div class="modal-footer">
-        <a href="https://github.com/davenportjw/electric-sheep" target="_blank" rel="noopener noreferrer" class="btn btn-primary modal-action-btn">
+        <a href="https://github.com/davenportjw/agentic-memory" target="_blank" rel="noopener noreferrer" class="btn btn-primary modal-action-btn">
           <span>Open GitHub Repository</span>
           <span>↗</span>
         </a>

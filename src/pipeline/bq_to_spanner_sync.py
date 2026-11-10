@@ -252,16 +252,16 @@ Rules:
 2. Extract the "intent_category": choose one of "onboarding", "exploratory", "architecture_design", "troubleshooting", "profile", "guardrail", or "general".
 3. Provide an "intent_confidence" float score between 0.0 and 1.0.
 4. Extract every distinct preference, technical skill, job role, favorite language, preferred tool, identity attribute, OR operational guardrail / procedural invariant (e.g., negative constraints like 'never use docker', 'always run terraform fmt', 'prefer uv for testing', physical/procedural rules).
-5. NEVER confuse or merge the user's name with their job role. For example, if the transcript mentions "My name is Jason, my favorite programming language is Python, and my job role is Principal Cloud Architect", extract:
-   - preference_key: "name", preference_value: "Jason", category: "profile"
+5. NEVER confuse or merge the user's name with their job role. For example, if the transcript mentions "My name is Alex, my favorite programming language is Python, and my job role is Principal Cloud Architect", extract:
+   - preference_key: "name", preference_value: "Alex", category: "profile"
    - preference_key: "favorite_language", preference_value: "Python", category: "technical"
    - preference_key: "job_role", preference_value: "Principal Cloud Architect", category: "role"
 6. For each preference record, provide:
    - "preference_key": canonical snake_case key (e.g., "favorite_language", "job_role", "name", "preferred_tools", "work_style", "guardrail_docker", "guardrail_terraform").
-   - "preference_value": concise exact value (e.g., "Python", "Principal Cloud Architect", "Jason", "Use Apple Container; prune dangling images").
+   - "preference_value": concise exact value (e.g., "Python", "Principal Cloud Architect", "Alex", "Use Apple Container; prune dangling images").
    - "category": "profile", "technical", "role", "infrastructure", "preference", "guardrail", or "procedural".
    - "confidence": float between 0.0 and 1.0.
-   - "crystallized_belief": A complete natural language semantic belief statement (e.g., "The user Jason works as a Principal Cloud Architect specializing in cloud infrastructure." or "The user's favorite programming language is Python." or "Always run terraform validate and terraform fmt when modifying infrastructure.").
+   - "crystallized_belief": A complete natural language semantic belief statement (e.g., "The user Alex works as a Principal Cloud Architect specializing in cloud infrastructure." or "The user's favorite programming language is Python." or "Always run terraform validate and terraform fmt when modifying infrastructure.").
    - "keywords": A comma-separated list of semantic search keywords and synonyms (e.g., "python, language, programming, code, coding", or "architect, principal, cloud, role, job, title, career", or "guardrail, docker, container, rules, policy").
 7. Also provide a 2-sentence overall profile summary.
 

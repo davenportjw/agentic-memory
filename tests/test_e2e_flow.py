@@ -19,11 +19,11 @@ def test_complete_e2e_multi_agent_flow():
         json={
             "user_id": user_id,
             "session_id": session_id,
-            "prompt": "Hi, my name is Jason",
+            "prompt": "Hi, my name is Alex",
         },
     )
     assert r1.status_code == 200
-    assert "Jason" in r1.json()["response"]
+    assert "Alex" in r1.json()["response"]
 
     r2 = client.post(
         "/api/interview/query",

@@ -10,11 +10,199 @@ document.addEventListener("DOMContentLoaded", () => {
   const userIdInput = document.getElementById("userIdInput");
   const sessionIdInput = document.getElementById("sessionIdInput");
 
+  // --- Stage 2 BigQuery Telemetry Lakehouse Elements ---
+  const refreshLogsBtn = document.getElementById("refreshLogsBtn");
+  const logsTableBody = document.getElementById("logsTableBody");
+  const logFilters = document.querySelectorAll("#logFilters .intent-pill");
+  const lakehouseSessionSelect = document.getElementById("lakehouseSessionSelect");
+  const lakehouseSessionBadge = document.getElementById("lakehouseSessionBadge");
+  const lakehouseBadgeSource = document.getElementById("lakehouseBadgeSource");
+  const lakehouseBadgeId = document.getElementById("lakehouseBadgeId");
+  const lakehouseBadgeSummary = document.getElementById("lakehouseBadgeSummary");
+  const lakehouseSessionCount = document.getElementById("lakehouseSessionCount");
+
+  const lakehouseScopeAllBtn = document.getElementById("lakehouseScopeAllBtn");
+  const lakehouseScopeActiveBtn = document.getElementById("lakehouseScopeActiveBtn");
+  const lakehouseActiveScopeBadge = document.getElementById("lakehouseActiveScopeBadge");
+
+  let lakehouseSessionsMap = new Map();
+
   function getParams() {
     return {
-      user_id: (userIdInput.value || "demo-user-42").trim(),
-      session_id: (sessionIdInput.value || "session-ui-001").trim(),
+      user_id: (userIdInput ? userIdInput.value : "demo-user-42").trim() || "demo-user-42",
+      session_id: (sessionIdInput ? sessionIdInput.value : "session-ui-001").trim() || "session-ui-001",
     };
+  }
+
+  function ensureSessionInDropdown(sid) {
+    if (!lakehouseSessionSelect || !sid || sid === "ALL") return;
+    let opt = Array.from(lakehouseSessionSelect.options).find((o) => o.value === sid);
+    if (!opt) {
+      opt = document.createElement("option");
+      opt.value = sid;
+      opt.textContent = `[Active] ${sid}`;
+      lakehouseSessionSelect.appendChild(opt);
+    }
+    return opt;
+  }
+
+  function updateLakehouseBadge() {
+    const isActiveScope = lakehouseScopeActiveBtn && lakehouseScopeActiveBtn.classList.contains("active");
+    const { session_id } = getParams();
+    const selectedVal = lakehouseSessionSelect ? lakehouseSessionSelect.value : "ALL";
+
+    if (isActiveScope) {
+      if (lakehouseActiveScopeBadge) {
+        lakehouseActiveScopeBadge.textContent = `Scope: Active Session (${session_id})`;
+        lakehouseActiveScopeBadge.className = "intent-pill pill-neutral";
+      }
+      if (lakehouseSessionBadge) {
+        lakehouseSessionBadge.style.display = "inline-flex";
+        const sessionInfo = lakehouseSessionsMap.get(session_id);
+        if (sessionInfo) {
+          if (lakehouseBadgeSource) lakehouseBadgeSource.textContent = sessionInfo.source || "active";
+          if (lakehouseBadgeId) lakehouseBadgeId.textContent = sessionInfo.session_id;
+          if (lakehouseBadgeSummary) lakehouseBadgeSummary.textContent = sessionInfo.summary ? `— ${sessionInfo.summary}` : "";
+        } else {
+          if (lakehouseBadgeSource) lakehouseBadgeSource.textContent = "active";
+          if (lakehouseBadgeId) lakehouseBadgeId.textContent = session_id;
+          if (lakehouseBadgeSummary) lakehouseBadgeSummary.textContent = "";
+        }
+      }
+      return;
+    }
+
+    if (!selectedVal || selectedVal === "ALL") {
+      if (lakehouseSessionBadge) lakehouseSessionBadge.style.display = "none";
+      if (lakehouseActiveScopeBadge) {
+        lakehouseActiveScopeBadge.textContent = "Scope: All Sessions (Everything)";
+        lakehouseActiveScopeBadge.className = "intent-pill pill-primary";
+      }
+      return;
+    }
+
+    if (lakehouseActiveScopeBadge) {
+      lakehouseActiveScopeBadge.textContent = `Scope: ${selectedVal}`;
+      lakehouseActiveScopeBadge.className = "intent-pill pill-neutral";
+    }
+
+    if (lakehouseSessionBadge) {
+      const sessionInfo = lakehouseSessionsMap.get(selectedVal);
+      if (sessionInfo) {
+        lakehouseSessionBadge.style.display = "inline-flex";
+        if (lakehouseBadgeSource) lakehouseBadgeSource.textContent = sessionInfo.source || "lakehouse";
+        if (lakehouseBadgeId) lakehouseBadgeId.textContent = sessionInfo.session_id;
+        if (lakehouseBadgeSummary) lakehouseBadgeSummary.textContent = sessionInfo.summary ? `— ${sessionInfo.summary}` : "";
+      } else {
+        lakehouseSessionBadge.style.display = "inline-flex";
+        if (lakehouseBadgeSource) lakehouseBadgeSource.textContent = "session";
+        if (lakehouseBadgeId) lakehouseBadgeId.textContent = selectedVal;
+        if (lakehouseBadgeSummary) lakehouseBadgeSummary.textContent = "";
+      }
+    }
+  }
+
+  // --- Centralized Scope & Reactivity Manager ---
+  function debounce(func, wait = 300) {
+    let timeout;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+  }
+
+  function updateAllScopeIndicators() {
+    const { user_id, session_id } = getParams();
+    const dreamSessionVal = document.getElementById("dreamScopeSessionVal");
+    const dreamUserVal = document.getElementById("dreamScopeUserVal");
+    const dreamHelp = document.getElementById("dreamScopeHelp");
+    const spannerUserVal = document.getElementById("spannerUserScopeVal");
+    const mcpUserVal = document.getElementById("mcpUserScopeVal");
+
+    if (dreamSessionVal) dreamSessionVal.textContent = session_id;
+    if (dreamUserVal) dreamUserVal.textContent = user_id;
+    if (dreamHelp) dreamHelp.innerHTML = `🎯 Will consolidate active session <strong>${escapeHtml(session_id)}</strong> into Spanner`;
+    if (spannerUserVal) spannerUserVal.textContent = user_id;
+    if (mcpUserVal) mcpUserVal.textContent = user_id;
+
+    updateLakehouseBadge();
+  }
+
+  function syncMcpToolArgs() {
+    if (!mcpToolSelect || !mcpArgInput) return;
+    const val = mcpToolSelect.value;
+    const { user_id, session_id } = getParams();
+    if (val === "get_user_crystallized_beliefs") {
+      mcpArgInput.value = JSON.stringify({ user_id });
+    } else if (val === "search_agent_memories") {
+      mcpArgInput.value = JSON.stringify({ query: "what is my job role and language?", user_id, limit: 5 });
+    } else if (val === "get_recent_session_memory") {
+      mcpArgInput.value = JSON.stringify({ user_id, session_id });
+    } else if (val === "crystallize_live_preference") {
+      mcpArgInput.value = JSON.stringify({
+        user_id,
+        preference_key: "testing_framework",
+        preference_value: "uv run pytest",
+        category: "tooling",
+        crystallized_belief: "The user strictly requires uv run pytest for all test suites.",
+      });
+    }
+  }
+
+  function setSessionId(newSessionId, triggerFetch = true) {
+    if (!newSessionId) return;
+    if (sessionIdInput) sessionIdInput.value = newSessionId;
+    if (byotSessionId && byotSessionId.value !== newSessionId) {
+      byotSessionId.value = newSessionId;
+    }
+    const isActiveScope = lakehouseScopeActiveBtn && lakehouseScopeActiveBtn.classList.contains("active");
+    if (lakehouseSessionSelect) {
+      ensureSessionInDropdown(newSessionId);
+      if (isActiveScope) {
+        lakehouseSessionSelect.value = newSessionId;
+      }
+    }
+    updateAllScopeIndicators();
+    syncMcpToolArgs();
+    if (triggerFetch && isActiveScope) {
+      fetchLogs(newSessionId);
+    }
+  }
+
+  const onUserIdChanged = debounce(() => {
+    updateAllScopeIndicators();
+    syncMcpToolArgs();
+    fetchSpannerPrefs();
+    fetchSpannerGuardrails();
+    fetchSpannerSummaries();
+  }, 350);
+
+  const onSessionIdChanged = debounce(() => {
+    const sid = (sessionIdInput ? sessionIdInput.value : "").trim();
+    if (byotSessionId && byotSessionId.value !== sid) {
+      byotSessionId.value = sid;
+    }
+    const isActiveScope = lakehouseScopeActiveBtn && lakehouseScopeActiveBtn.classList.contains("active");
+    if (lakehouseSessionSelect && sid) {
+      ensureSessionInDropdown(sid);
+      if (isActiveScope) {
+        lakehouseSessionSelect.value = sid;
+      }
+    }
+    updateAllScopeIndicators();
+    syncMcpToolArgs();
+    if (isActiveScope && sid) {
+      fetchLogs(sid);
+    }
+  }, 350);
+
+  if (userIdInput) {
+    userIdInput.addEventListener("input", onUserIdChanged);
+    userIdInput.addEventListener("change", onUserIdChanged);
+  }
+  if (sessionIdInput) {
+    sessionIdInput.addEventListener("input", onSessionIdChanged);
+    sessionIdInput.addEventListener("change", onSessionIdChanged);
   }
 
   // --- Left Navigation Collapsible Sidebar ---
@@ -144,6 +332,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const byotStatusText = document.getElementById("byotStatusText");
   const byotDropzone = document.getElementById("byotDropzone");
 
+  if (byotSessionId) {
+    byotSessionId.addEventListener("input", () => {
+      setSessionId(byotSessionId.value, false);
+    });
+    byotSessionId.addEventListener("change", () => {
+      setSessionId(byotSessionId.value, false);
+    });
+  }
+
   const PRESETS = {
     python: `[
   {"event_type": "USER_PROMPT", "message": "Can you run pytest to test the Spanner preference client and ensure uv is used?"},
@@ -164,7 +361,7 @@ document.addEventListener("DOMContentLoaded", () => {
   {"event_type": "TOOL_CALL", "message": "run_command(CommandLine='terraform fmt && terraform validate')"},
   {"event_type": "TOOL_RESULT", "message": "Success! The configuration is valid."},
   {"event_type": "AGENT_RESPONSE", "message": "Terraform formatting and validation passed with zero errors."}
-]`
+]`,
   };
 
   const loadPresetPythonBtn = document.getElementById("loadPresetPythonBtn");
@@ -181,7 +378,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (loadPresetPythonBtn) {
     loadPresetPythonBtn.addEventListener("click", () => {
       byotContent.value = PRESETS.python;
-      byotSessionId.value = "byot-python-uv-001";
+      setSessionId("byot-python-uv-001");
       byotFormat.value = "json";
       setActivePreset(loadPresetPythonBtn);
     });
@@ -189,7 +386,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (loadPresetDockerBtn) {
     loadPresetDockerBtn.addEventListener("click", () => {
       byotContent.value = PRESETS.docker;
-      byotSessionId.value = "byot-docker-guardrail-002";
+      setSessionId("byot-docker-guardrail-002");
       byotFormat.value = "json";
       setActivePreset(loadPresetDockerBtn);
     });
@@ -197,7 +394,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (loadPresetTerraformBtn) {
     loadPresetTerraformBtn.addEventListener("click", () => {
       byotContent.value = PRESETS.terraform;
-      byotSessionId.value = "byot-terraform-policy-003";
+      setSessionId("byot-terraform-policy-003");
       byotFormat.value = "json";
       setActivePreset(loadPresetTerraformBtn);
     });
@@ -225,7 +422,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const reader = new FileReader();
       reader.onload = (evt) => {
         byotContent.value = evt.target.result;
-        byotSessionId.value = "byot-" + file.name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+        const sid = "byot-" + file.name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+        setSessionId(sid);
         if (byotFormat) {
           if (file.name.endsWith(".jsonl")) byotFormat.value = "jsonl";
           else if (file.name.endsWith(".json")) byotFormat.value = "json";
@@ -237,13 +435,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (byotDropzone) {
-    ["dragenter", "dragover"].forEach(evtName => {
+    ["dragenter", "dragover"].forEach((evtName) => {
       byotDropzone.addEventListener(evtName, (e) => {
         e.preventDefault();
         byotDropzone.classList.add("drag-over");
       });
     });
-    ["dragleave", "drop"].forEach(evtName => {
+    ["dragleave", "drop"].forEach((evtName) => {
       byotDropzone.addEventListener(evtName, (e) => {
         e.preventDefault();
         byotDropzone.classList.remove("drag-over");
@@ -257,7 +455,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const reader = new FileReader();
         reader.onload = (evt) => {
           byotContent.value = evt.target.result;
-          byotSessionId.value = "byot-" + file.name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+          const sid = "byot-" + file.name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 30);
+          setSessionId(sid);
           if (byotFormat) {
             if (file.name.endsWith(".jsonl")) byotFormat.value = "jsonl";
             else if (file.name.endsWith(".json")) byotFormat.value = "json";
@@ -295,8 +494,8 @@ document.addEventListener("DOMContentLoaded", () => {
             user_id: user_id,
             session_id: targetSession,
             content: rawText,
-            format: format
-          })
+            format: format,
+          }),
         });
         const data = await res.json();
         if (data.status === "success") {
@@ -304,8 +503,9 @@ document.addEventListener("DOMContentLoaded", () => {
             byotStatusText.textContent = `✓ Ingested ${data.turns_ingested} turns to BigQuery!`;
             byotStatusText.className = "byot-status-badge pill-success";
           }
-          sessionIdInput.value = targetSession;
-          fetchLogs();
+          setSessionId(targetSession);
+          await fetchLakehouseSessions();
+          fetchLogs(targetSession);
         } else {
           if (byotStatusText) {
             byotStatusText.textContent = `Error: ${data.detail || "Failed to ingest"}`;
@@ -358,7 +558,7 @@ document.addEventListener("DOMContentLoaded", () => {
         sessionSelect.appendChild(opt);
       });
       if (data.sessions.length > 0) {
-        sessionIdInput.value = data.sessions[0].session_id;
+        setSessionId(data.sessions[0].session_id, false);
         loadSessionTurns(data.sessions[0].session_id);
       }
     } catch (err) {
@@ -428,7 +628,7 @@ document.addEventListener("DOMContentLoaded", () => {
   sessionSelect.addEventListener("change", () => {
     const sid = sessionSelect.value;
     if (sid) {
-      sessionIdInput.value = sid;
+      setSessionId(sid, true);
       loadSessionTurns(sid);
     }
   });
@@ -454,8 +654,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.status === "success") {
         metaStatus.textContent = `Ingested (${data.turns_ingested} turns)`;
         metaStatus.className = "intent-pill pill-success";
-        sessionIdInput.value = session_id;
-        fetchLogs();
+        setSessionId(session_id, true);
       } else {
         metaStatus.textContent = `Error: ${data.detail || "Ingest failed"}`;
         metaStatus.className = "intent-pill pill-warn";
@@ -513,19 +712,117 @@ document.addEventListener("DOMContentLoaded", () => {
     box.scrollTop = box.scrollHeight;
   }
 
-  // --- Stage 2 BigQuery Telemetry Lakehouse ---
-  const refreshLogsBtn = document.getElementById("refreshLogsBtn");
-  const logsTableBody = document.getElementById("logsTableBody");
-  const logFilters = document.querySelectorAll("#logFilters .intent-pill");
+  // --- Stage 2 BigQuery Telemetry Lakehouse Scope & Controller ---
+  function setLakehouseScope(scopeType) {
+    if (scopeType === "ALL") {
+      if (lakehouseScopeAllBtn) lakehouseScopeAllBtn.classList.add("active");
+      if (lakehouseScopeActiveBtn) lakehouseScopeActiveBtn.classList.remove("active");
+      if (lakehouseSessionSelect) lakehouseSessionSelect.value = "ALL";
+      updateLakehouseBadge();
+      fetchLogs("ALL");
+    } else {
+      const { session_id } = getParams();
+      if (lakehouseScopeActiveBtn) lakehouseScopeActiveBtn.classList.add("active");
+      if (lakehouseScopeAllBtn) lakehouseScopeAllBtn.classList.remove("active");
+      ensureSessionInDropdown(session_id);
+      if (lakehouseSessionSelect) {
+        lakehouseSessionSelect.value = session_id;
+      }
+      updateLakehouseBadge();
+      fetchLogs(session_id);
+    }
+  }
 
-  async function fetchLogs() {
-    const { session_id } = getParams();
+  if (lakehouseScopeAllBtn) {
+    lakehouseScopeAllBtn.addEventListener("click", () => setLakehouseScope("ALL"));
+  }
+  if (lakehouseScopeActiveBtn) {
+    lakehouseScopeActiveBtn.addEventListener("click", () => setLakehouseScope("ACTIVE"));
+  }
+
+  async function fetchLakehouseSessions() {
+    if (!lakehouseSessionSelect) return;
     try {
-      const res = await fetch(`/api/logs/${encodeURIComponent(session_id)}`);
+      const res = await fetch("/api/lakehouse/sessions");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const sessions = data.sessions || [];
+
+      lakehouseSessionsMap.clear();
+      const currentSelected = lakehouseSessionSelect.value || "ALL";
+
+      lakehouseSessionSelect.innerHTML = '<option value="ALL">All Sessions (Global Lakehouse Traces)</option>';
+
+      sessions.forEach((s) => {
+        lakehouseSessionsMap.set(s.session_id, s);
+        const opt = document.createElement("option");
+        opt.value = s.session_id;
+        const sourceLabel = s.source ? `[${s.source}] ` : "";
+        const summaryLabel = s.summary ? ` — ${s.summary}` : "";
+        const countLabel = s.event_count ? ` (${s.event_count} events)` : "";
+        opt.textContent = `${sourceLabel}${s.session_id}${summaryLabel}${countLabel}`;
+        lakehouseSessionSelect.appendChild(opt);
+      });
+
+      if (lakehouseSessionCount) {
+        lakehouseSessionCount.textContent = `${sessions.length} sessions discovered`;
+      }
+
+      const isActiveScope = lakehouseScopeActiveBtn && lakehouseScopeActiveBtn.classList.contains("active");
+      const { session_id } = getParams();
+
+      if (isActiveScope) {
+        ensureSessionInDropdown(session_id);
+        lakehouseSessionSelect.value = session_id;
+      } else if (lakehouseSessionsMap.has(currentSelected)) {
+        lakehouseSessionSelect.value = currentSelected;
+      } else {
+        lakehouseSessionSelect.value = "ALL";
+      }
+      updateLakehouseBadge();
+    } catch (err) {
+      console.warn("Could not load lakehouse sessions:", err);
+    }
+  }
+
+  if (lakehouseSessionSelect) {
+    lakehouseSessionSelect.addEventListener("change", () => {
+      const selectedVal = lakehouseSessionSelect.value;
+      const { session_id } = getParams();
+      if (selectedVal === "ALL") {
+        if (lakehouseScopeAllBtn) lakehouseScopeAllBtn.classList.add("active");
+        if (lakehouseScopeActiveBtn) lakehouseScopeActiveBtn.classList.remove("active");
+      } else if (selectedVal === session_id) {
+        if (lakehouseScopeActiveBtn) lakehouseScopeActiveBtn.classList.add("active");
+        if (lakehouseScopeAllBtn) lakehouseScopeAllBtn.classList.remove("active");
+      } else {
+        if (lakehouseScopeActiveBtn) lakehouseScopeActiveBtn.classList.remove("active");
+        if (lakehouseScopeAllBtn) lakehouseScopeAllBtn.classList.remove("active");
+      }
+      updateLakehouseBadge();
+      fetchLogs(selectedVal);
+    });
+  }
+
+  async function fetchLogs(explicitSessionId = null) {
+    let targetSession = explicitSessionId;
+    if (!targetSession) {
+      const isActiveScope = lakehouseScopeActiveBtn && lakehouseScopeActiveBtn.classList.contains("active");
+      if (isActiveScope) {
+        const { session_id } = getParams();
+        targetSession = session_id || "ALL";
+      } else if (lakehouseSessionSelect && lakehouseSessionSelect.value) {
+        targetSession = lakehouseSessionSelect.value;
+      } else {
+        targetSession = "ALL";
+      }
+    }
+    try {
+      const res = await fetch(`/api/logs/${encodeURIComponent(targetSession)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       currentLogs = data.logs || [];
-      renderLogsTable();
+      renderLogsTable(targetSession);
     } catch (err) {
       console.error("Error fetching logs:", err);
       logsTableBody.innerHTML = `<tr><td colspan="4" class="empty-state" style="color: var(--color-warn);">Failed to load traces: ${escapeHtml(err.message)}</td></tr>`;
@@ -533,7 +830,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function renderLogsTable() {
+  function renderLogsTable(targetSession = "ALL") {
     logsTableBody.innerHTML = "";
     const filtered = currentLogs.filter((l) => {
       if (currentFilter === "ALL") return true;
@@ -541,16 +838,28 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (filtered.length === 0) {
-      logsTableBody.innerHTML = `<tr><td colspan="4" class="empty-state">No matching logs found for session '${getParams().session_id}'.</td></tr>`;
+      const sessionLabel = targetSession === "ALL" ? "in the telemetry lakehouse" : `for session '${targetSession}'`;
+      logsTableBody.innerHTML = `<tr><td colspan="4" class="empty-state">No matching logs found ${sessionLabel}.</td></tr>`;
       return;
     }
+
+    const { session_id: activeSessionId } = getParams();
 
     filtered.forEach((log) => {
       const tr = document.createElement("tr");
       const tsShort = log.timestamp ? log.timestamp.substring(11, 19) : "--:--:--";
+      const logSession = log.session_id || "";
+      const isActiveSession = logSession && logSession === activeSessionId;
+      const sessionBadge = logSession
+        ? `<div style="margin-top: 3px;"><span class="intent-pill ${isActiveSession ? 'pill-primary' : 'pill-neutral'}" style="font-size: 0.68rem; padding: 1px 6px;" title="Session: ${escapeHtml(logSession)}">${escapeHtml(logSession.length > 20 ? logSession.substring(0, 18) + '...' : logSession)}</span></div>`
+        : "";
+
       tr.innerHTML = `
         <td><span class="intent-pill pill-neutral">${log.event_type}</span></td>
-        <td><strong>${escapeHtml(log.agent_name || "antigravity")}</strong></td>
+        <td>
+          <strong>${escapeHtml(log.agent_name || "antigravity")}</strong>
+          ${sessionBadge}
+        </td>
         <td>${escapeHtml(log.message || "")}</td>
         <td style="font-family: var(--font-mono); font-size: 0.78rem;">${tsShort}</td>
       `;
@@ -563,7 +872,11 @@ document.addEventListener("DOMContentLoaded", () => {
       logFilters.forEach((p) => p.classList.remove("active"));
       pill.classList.add("active");
       currentFilter = pill.getAttribute("data-filter");
-      renderLogsTable();
+      const isActiveScope = lakehouseScopeActiveBtn && lakehouseScopeActiveBtn.classList.contains("active");
+      const currentTarget = isActiveScope
+        ? (getParams().session_id || "ALL")
+        : (lakehouseSessionSelect ? lakehouseSessionSelect.value : "ALL");
+      renderLogsTable(currentTarget);
     });
   });
 
@@ -572,7 +885,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const orig = refreshLogsBtn.textContent;
     refreshLogsBtn.textContent = "Refreshing...";
     try {
-      await fetchLogs();
+      await Promise.all([fetchLakehouseSessions(), fetchLogs()]);
       refreshLogsBtn.textContent = "Refreshed ✓";
     } catch {
       refreshLogsBtn.textContent = "Refresh Failed ✗";
@@ -601,10 +914,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const { user_id, session_id } = getParams();
     harvestBtn.disabled = true;
     multiHarvestBtn.disabled = true;
+
+    const dreamScopeBadge = document.getElementById("dreamScopeBadge");
+    const dreamScopeHelp = document.getElementById("dreamScopeHelp");
+    if (dreamScopeBadge) {
+      dreamScopeBadge.textContent = isMulti ? "All Sessions (Cross-Session Synthesis)" : `Active Session (${session_id})`;
+      dreamScopeBadge.className = isMulti ? "intent-pill pill-neutral" : "intent-pill pill-primary";
+    }
+    if (dreamScopeHelp) {
+      dreamScopeHelp.innerHTML = isMulti
+        ? `🌐 Consolidating <strong>all historical sessions</strong> for user <strong>${escapeHtml(user_id)}</strong> into Spanner`
+        : `🎯 Consolidating active session <strong>${escapeHtml(session_id)}</strong> into Spanner`;
+    }
+
     harvestStatus.innerHTML = `
       <div class="dream-placeholder">
         <span class="dream-icon">⚙️</span>
-        <p><strong>Memory Synthesis in Progress:</strong> Distilling session logs and crystallizing long-term beliefs with <strong>Gemini 3.8 Flash</strong> on Gemini platform...</p>
+        <p><strong>Memory Synthesis in Progress (${isMulti ? "All Sessions" : session_id}):</strong> Distilling telemetry lakehouse logs and crystallizing long-term beliefs with <strong>Gemini 3.8 Flash</strong> on Gemini platform...</p>
       </div>
     `;
 
@@ -734,14 +1060,19 @@ document.addEventListener("DOMContentLoaded", () => {
         dreamPromptCode.textContent = data.prompt_used;
       }
 
-      fetchSpannerPrefs();
-      fetchSpannerGuardrails();
-      fetchSpannerSummaries();
+      // Downstream refresh: update Spanner Crystalline Matrix and BigQuery Lakehouse traces
+      await Promise.allSettled([
+        fetchSpannerPrefs(),
+        fetchSpannerGuardrails(),
+        fetchSpannerSummaries(),
+        fetchLakehouseSessions(),
+        fetchLogs(),
+      ]);
     } catch (err) {
       harvestStatus.innerHTML = `
         <div class="dream-placeholder" style="border-color: var(--color-warn); background-color: #fef2f2;">
           <span class="dream-icon">⚠️</span>
-          <div><strong>Memory Consolidation Failed:</strong> ${err}</div>
+          <div><strong>Memory Consolidation Failed:</strong> ${escapeHtml(err.message || String(err))}</div>
         </div>
       `;
     } finally {
@@ -790,6 +1121,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderSpannerTable() {
     spannerTableBody.innerHTML = "";
+    const spannerTotalCountBadge = document.getElementById("spannerTotalCountBadge");
+    if (spannerTotalCountBadge) {
+      spannerTotalCountBadge.textContent = `${currentPrefs.length} Belief${currentPrefs.length === 1 ? "" : "s"}`;
+    }
+
     const filtered = currentPrefs.filter((p) => {
       if (currentCategory === "ALL") return true;
       return (p.category || "").toLowerCase() === currentCategory.toLowerCase();
@@ -962,25 +1298,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const mcpOutputContent = document.getElementById("mcpOutputContent");
   const mcpLatencyBadge = document.getElementById("mcpLatencyBadge");
 
-  mcpToolSelect.addEventListener("change", () => {
-    const val = mcpToolSelect.value;
-    const { user_id, session_id } = getParams();
-    if (val === "get_user_crystallized_beliefs") {
-      mcpArgInput.value = JSON.stringify({ user_id });
-    } else if (val === "search_agent_memories") {
-      mcpArgInput.value = JSON.stringify({ query: "what is my job role and language?", user_id, limit: 5 });
-    } else if (val === "get_recent_session_memory") {
-      mcpArgInput.value = JSON.stringify({ user_id, session_id });
-    } else if (val === "crystallize_live_preference") {
-      mcpArgInput.value = JSON.stringify({
-        user_id,
-        preference_key: "testing_framework",
-        preference_value: "uv run pytest",
-        category: "tooling",
-        crystallized_belief: "The user strictly requires uv run pytest for all test suites.",
-      });
-    }
-  });
+  if (mcpToolSelect) {
+    mcpToolSelect.addEventListener("change", syncMcpToolArgs);
+  }
 
   executeMcpBtn.addEventListener("click", async () => {
     executeMcpBtn.disabled = true;
@@ -1018,7 +1338,13 @@ document.addEventListener("DOMContentLoaded", () => {
       mcpOutputContent.textContent = data.result || JSON.stringify(data, null, 2);
       mcpLatencyBadge.textContent = `Latency: ${data.latency_ms}ms (Target: ${data.sla})`;
       mcpLatencyBadge.className = "intent-pill pill-success";
-      fetchSpannerPrefs();
+      
+      // Refresh all Spanner sections on MCP execution
+      await Promise.allSettled([
+        fetchSpannerPrefs(),
+        fetchSpannerGuardrails(),
+        fetchSpannerSummaries(),
+      ]);
     } catch (err) {
       mcpOutputContent.textContent = `MCP Execution Error: ${err.message || err}`;
       mcpLatencyBadge.textContent = "Latency: Error";
@@ -1078,7 +1404,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- Initial Boot ---
+  updateAllScopeIndicators();
+  syncMcpToolArgs();
   fetchAntigravitySessions();
+  fetchLakehouseSessions();
   fetchLogs();
   fetchSpannerPrefs();
   fetchSpannerGuardrails();

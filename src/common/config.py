@@ -4,6 +4,13 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 
 @dataclass
 class AppConfig:
@@ -35,7 +42,12 @@ class AppConfig:
 
 def get_config() -> AppConfig:
     """Load configuration from environment variables with sensible defaults."""
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT", os.environ.get("PROJECT_ID", "davenport-boutique"))
+    project_id = (
+        os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or os.environ.get("PROJECT_ID")
+        or os.environ.get("GCP_PROJECT")
+        or "your-gcp-project-id"
+    )
     region = os.environ.get("GOOGLE_CLOUD_REGION", os.environ.get("REGION", "us-central1"))
     bq_dataset_id = os.environ.get("BQ_DATASET_ID", "adk_agent_telemetry")
     bq_table_id = os.environ.get("BQ_TABLE_ID", "agent_logs")
@@ -68,6 +80,7 @@ def get_config() -> AppConfig:
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
     os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
     os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
+    os.environ.setdefault("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 
     return AppConfig(
         project_id=project_id,

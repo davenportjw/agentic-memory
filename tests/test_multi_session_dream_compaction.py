@@ -52,8 +52,8 @@ def test_multi_session_cross_session_dream_compaction():
         session_id="session-multi-01",
         agent_name="InterviewAgent",
         event_type="USER_PROMPT",
-        message="Hello! My name is Jason and my favorite programming language is Python",
-        payload={"prompt": "Hello! My name is Jason and my favorite programming language is Python"},
+        message="Hello! My name is Alex and my favorite programming language is Python",
+        payload={"prompt": "Hello! My name is Alex and my favorite programming language is Python"},
     )
 
     # Session 2: Role and infrastructure tool preference

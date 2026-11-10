@@ -1,0 +1,2511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enterprise Memory Studio • Electric Sheep v2</title>
+  <meta name="description" content="Enterprise Agentic Memory Studio: AI Studio & LM Studio inspired workbench for Cold-Start Zero Reset, Multi-Scope Spanner Hierarchy (ORG/TEAM/AGENT/USER), 7-Metric Adversarial Evaluation, and AlphaEvolve MAP-Elites Optimization.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2.4">
+</head>
+<body class="studio-workbench-body">
+  <!-- Academic Cleanroom Top Bar (2-Child Standard per DESIGN.md Section 3.1.1) -->
+  <header class="app-bar">
+    <div class="app-bar-content">
+      <div class="app-title-group">
+        <div class="brand-badge">
+          <span class="brand-icon">🐑</span>
+          <span class="brand-name">Electric Sheep v2</span>
+        </div>
+        <span class="model-badge">Gemini 3.8 Flash • Memory Studio</span>
+        <nav class="app-nav" aria-label="Main Navigation">
+          <a href="index.html" class="nav-pill app-nav-link">
+            <span>Control Center</span>
+          </a>
+          <a href="studio.html" class="nav-pill app-nav-link active">
+            <span>Memory Studio</span>
+          </a>
+          <a href="how-it-works.html" class="nav-pill app-nav-link">
+            <span>How It Works</span>
+          </a>
+        </nav>
+      </div>
+
+      <div class="session-info">
+        <button type="button" id="githubPopoutBtn" class="github-nav-btn" aria-label="View GitHub Repository" title="View Source &amp; Scan QR Code">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>GitHub</span>
+        </button>
+
+        <a href="/logout" class="signout-btn" title="Sign Out of Control Center">
+          <span>Sign Out</span>
+        </a>
+
+        <div class="info-tooltip-container">
+          <button type="button" id="sessionInfoBtn" class="info-icon-btn" title="Explain Enterprise Scope Hierarchy" aria-label="Scope Hierarchy Info" aria-describedby="sessionInfoTooltip">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            </svg>
+          </button>
+          <div id="sessionInfoTooltip" class="info-tooltip hidden" role="tooltip">
+            <div class="info-tooltip-header">
+              <span>ℹ️</span> <span>4-Tier Enterprise Scope Hierarchy</span>
+            </div>
+            <div class="info-tooltip-body">
+              <div class="info-tooltip-item">
+                <span class="info-tooltip-badge">ORG (org:default)</span>
+                <p><strong>Immutable Guardrails:</strong> Organization-wide security invariants (<code>ORG &gt; TEAM &gt; AGENT &gt; USER</code>).</p>
+              </div>
+              <div class="info-tooltip-item">
+                <span class="info-tooltip-badge">TEAM &amp; AGENT</span>
+                <p><strong>Shared Conventions &amp; Skills:</strong> Auto-promoted team consensus rules and agent formatting skills.</p>
+              </div>
+              <div class="info-tooltip-item">
+                <span class="info-tooltip-badge">USER (user:default)</span>
+                <p><strong>Personal Preferences:</strong> Overrides legacy Org/Team defaults for non-guardrail preferences (<code>USER &gt; TEAM &gt; ORG</code>).</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 3-Pane Studio Workbench Layout (Left Scope/Data/Memory Rail + Center Active Workbench + Right Run Settings/Inspector/Guide Rail) -->
+  <main class="app-body-layout" data-studio-layout="studio-workbench-layout" id="appBodyLayout">
+    <!-- ====================================================================
+         PANE 1: Left Scope Pills, File/Data System & Memory Hierarchy Explorer
+         ==================================================================== -->
+    <aside class="left-nav" data-studio-rail="studio-left-rail" id="leftNavSidebar" aria-label="Memory Studio Data &amp; Scope Explorer">
+      <div class="left-nav-header">
+        <div class="left-nav-header-row">
+          <span class="nav-title">MEMORY STUDIO</span>
+          <button type="button" id="leftNavToggleBtn" class="left-nav-collapse-btn" title="Collapse / Expand Sidebar" aria-label="Toggle Left Navigation">
+            <svg class="collapse-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="10 13 5 8 10 3"></polyline>
+            </svg>
+          </button>
+        </div>
+        <span class="nav-subtitle">10-Workspace Enterprise Workbench</span>
+      </div>
+
+      <!-- SECTION 0: 10-Workspace Navigation Selector (4 Pipeline + 6 Admin Workspaces) -->
+      <nav class="studio-rail-section studio-workspace-nav-section" id="studio10WorkspaceNav" aria-label="10-Workspace Studio Navigation">
+        <div class="studio-rail-section-header">
+          <span class="rail-section-title">STUDIO PIPELINE</span>
+        </div>
+        <div class="studio-workspace-nav-group" role="tablist" aria-label="Core Studio Pipeline Workspaces">
+          <button type="button" class="left-nav-item studio-workspace-nav-btn active" data-workspace="workspace-sessions" role="tab" aria-selected="true">
+            <span class="nav-tool-icon" aria-hidden="true">📋</span>
+            <span class="nav-item-title">Session Logs</span>
+            <span class="ws-nav-badge" id="wsBadgeSessions">3</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-tree" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">🌳</span>
+            <span class="nav-item-title">Memory Tree</span>
+            <span class="ws-nav-badge ws-nav-badge-indigo" id="wsBadgeTreeStaged">0 staged</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-playground" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">💬</span>
+            <span class="nav-item-title">Playground</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-eval" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">🧬</span>
+            <span class="nav-item-title">Eval &amp; Evolve</span>
+          </button>
+        </div>
+
+        <div class="studio-rail-section-header mt-8">
+          <span class="rail-section-title">ADMIN CONFIGURATION</span>
+        </div>
+        <div class="studio-workspace-nav-group" role="tablist" aria-label="Admin &amp; Control Plane Workspaces">
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-entities" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">🏢</span>
+            <span class="nav-item-title">Entities &amp; Scopes</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-categories" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">🏷️</span>
+            <span class="nav-item-title">Categories</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-ingest" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">📥</span>
+            <span class="nav-item-title">Data Ingest</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-extractors" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">🤖</span>
+            <span class="nav-item-title">Extractors</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-backend" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">🗄️</span>
+            <span class="nav-item-title">Memory Backend</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-security" role="tab" aria-selected="false">
+            <span class="nav-tool-icon" aria-hidden="true">🛡️</span>
+            <span class="nav-item-title">Security &amp; RBAC</span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- SECTION A: Left Scope Pills & Active Scope IDs -->
+      <div class="studio-rail-section" id="leftScopePillsContainer">
+        <div class="studio-rail-section-header">
+          <span class="rail-section-title">ACTIVE SCOPE PILLS</span>
+          <span class="text-xs font-mono text-muted" id="railMemoryCountText">0 mem • 0 evals</span>
+        </div>
+        <div class="left-scope-pills-row" role="group" aria-label="Quick Scope Filter Pills">
+          <button type="button" class="left-scope-pill active" data-scope-filter="ALL">
+            ALL <span class="scope-count-pill" id="leftCountScopeAll">0</span>
+          </button>
+          <button type="button" class="left-scope-pill" data-scope-filter="ORG">
+            <span class="scope-dot dot-org"></span>ORG <span class="scope-count-pill" id="leftCountScopeOrg">0</span>
+          </button>
+          <button type="button" class="left-scope-pill" data-scope-filter="TEAM">
+            <span class="scope-dot dot-team"></span>TEAM <span class="scope-count-pill" id="leftCountScopeTeam">0</span>
+          </button>
+          <button type="button" class="left-scope-pill" data-scope-filter="AGENT">
+            <span class="scope-dot dot-agent"></span>AGENT <span class="scope-count-pill" id="leftCountScopeAgent">0</span>
+          </button>
+          <button type="button" class="left-scope-pill" data-scope-filter="USER">
+            <span class="scope-dot dot-user"></span>USER <span class="scope-count-pill" id="leftCountScopeUser">0</span>
+          </button>
+        </div>
+
+        <div class="left-scope-context-inputs">
+          <div class="left-scope-id-pill">
+            <label for="userIdInput">USER</label>
+            <input type="text" id="userIdInput" value="user:default" class="input-inline" title="Cloud Spanner USER Scope ID">
+          </div>
+          <div class="left-scope-id-pill">
+            <label for="teamIdInput">TEAM</label>
+            <input type="text" id="teamIdInput" value="team:default" class="input-inline" title="Cloud Spanner TEAM Scope ID">
+          </div>
+          <div class="left-scope-id-pill">
+            <label for="agentIdInput">AGENT</label>
+            <input type="text" id="agentIdInput" value="agent:default" class="input-inline" title="Cloud Spanner AGENT Scope ID">
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION B: File / Data System Explorer -->
+      <div class="studio-rail-section" id="studioFileDataTree">
+        <div class="studio-rail-section-header">
+          <span class="rail-section-title">FILE / DATA SYSTEM</span>
+          <span class="badge badge-slate">Sources</span>
+        </div>
+        <ul class="left-nav-list studio-file-tree" role="tree" aria-label="Telemetry Streams and Portable Memory Packs">
+          <li class="file-tree-folder" role="treeitem" aria-expanded="true">
+            <div class="file-tree-folder-label">📁 /streams/telemetry</div>
+            <ul class="file-tree-children" role="group">
+              <li class="file-tree-item active" data-stream-source="antigravity_gcs" role="treeitem" tabindex="0" title="Load Antigravity GCS JSONL Telemetry Stream">
+                <span class="file-tree-icon">📄</span>
+                <span class="file-tree-name">antigravity_gcs.jsonl</span>
+                <span class="file-tree-badge">GCS</span>
+              </li>
+              <li class="file-tree-item" data-stream-source="bigquery_traces" role="treeitem" tabindex="0" title="Load BigQuery Agentic Telemetry Table">
+                <span class="file-tree-icon">📄</span>
+                <span class="file-tree-name">bigquery_traces.tbl</span>
+                <span class="file-tree-badge">BQ</span>
+              </li>
+              <li class="file-tree-item" data-stream-source="live_stream" role="treeitem" tabindex="0" title="Load Combined Live Session Socket Stream">
+                <span class="file-tree-icon">📄</span>
+                <span class="file-tree-name">live_stream.sock</span>
+                <span class="file-tree-badge">LIVE</span>
+              </li>
+              <li class="file-tree-item" data-stream-source="mcp_events" role="treeitem" tabindex="0" title="Load MCP Tool Invocation Log Stream">
+                <span class="file-tree-icon">📄</span>
+                <span class="file-tree-name">mcp_events.log</span>
+                <span class="file-tree-badge">MCP</span>
+              </li>
+            </ul>
+          </li>
+          <li class="file-tree-folder" role="treeitem" aria-expanded="true">
+            <div class="file-tree-folder-label">📁 /packs/portable</div>
+            <ul class="file-tree-children" role="group">
+              <li class="file-tree-item" id="fileTreeExportPackNode" data-pack-action="export" role="treeitem" tabindex="0" title="Export Portable JSON Memory Pack">
+                <span class="file-tree-icon">📦</span>
+                <span class="file-tree-name">export_memory_pack.json</span>
+              </li>
+              <li class="file-tree-item" id="fileTreeImportPackNode" data-pack-action="import" role="treeitem" tabindex="0" title="Import Portable JSON Memory Pack">
+                <span class="file-tree-icon">📥</span>
+                <span class="file-tree-name">import_memory_pack.json</span>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+
+      <!-- SECTION C: Live Memory Hierarchy Visualization & Inline Quick-Editor -->
+      <div class="studio-rail-section studio-memory-explorer-section" id="leftMemoryExplorerSection">
+        <div class="studio-rail-section-header">
+          <span class="rail-section-title">MEMORY EXPLORER</span>
+          <button type="button" id="leftNewMemoryBtn" class="btn btn-primary btn-xs" title="Author a New Scoped Memory">+ New</button>
+        </div>
+        <input
+          type="search"
+          id="leftMemoryTreeSearch"
+          class="studio-input studio-input-sm w-full"
+          placeholder="Filter ORG / TEAM / AGENT / USER keys..."
+          aria-label="Search memory hierarchy"
+        >
+        <div id="leftMemoryTreeList" class="left-memory-tree-list" role="tree" aria-label="Live Scoped Memory Hierarchy">
+          <div class="text-xs text-muted">No memories loaded yet. Use <strong>+ New</strong> or open <strong>📖 Tutorial &amp; Guide</strong> to seed a sample baseline.</div>
+        </div>
+
+        <!-- Inline Quick Memory Editor Drawer inside Left Rail -->
+        <div id="leftMemoryQuickEditor" class="left-memory-quick-editor hidden">
+          <div class="quick-editor-header">
+            <span class="quick-editor-title">Quick Memory Editor</span>
+            <button type="button" id="closeLeftQuickEditorBtn" class="btn-close" aria-label="Close Quick Editor">✕</button>
+          </div>
+          <div class="quick-editor-body">
+            <div class="studio-field">
+              <label for="leftQuickEditKey">Key (<code>snake_case</code>)</label>
+              <input type="text" id="leftQuickEditKey" class="studio-input studio-input-sm font-mono w-full" placeholder="e.g. python_test_runner">
+            </div>
+            <div class="studio-field">
+              <label for="leftQuickEditValue">Directive / Value</label>
+              <input type="text" id="leftQuickEditValue" class="studio-input studio-input-sm w-full" placeholder="e.g. Always run uv run pytest -v">
+            </div>
+            <div class="studio-form-row-2">
+              <div class="studio-field">
+                <label for="leftQuickEditScope">Scope</label>
+                <select id="leftQuickEditScope" class="studio-select studio-select-sm w-full">
+                  <option value="USER">USER</option>
+                  <option value="TEAM">TEAM</option>
+                  <option value="AGENT">AGENT</option>
+                  <option value="ORG">ORG</option>
+                </select>
+              </div>
+              <div class="studio-field">
+                <label for="leftQuickEditCategory">Category</label>
+                <select id="leftQuickEditCategory" class="studio-select studio-select-sm w-full">
+                  <option value="technical">technical</option>
+                  <option value="workflow">workflow</option>
+                  <option value="guardrail">guardrail</option>
+                  <option value="infrastructure">infrastructure</option>
+                  <option value="communication">communication</option>
+                </select>
+              </div>
+            </div>
+            <div class="studio-form-row-2">
+              <div class="studio-field">
+                <label for="leftQuickEditKeywords">Keywords</label>
+                <input type="text" id="leftQuickEditKeywords" class="studio-input studio-input-sm w-full" placeholder="uv, pytest">
+              </div>
+              <div class="studio-field">
+                <label for="leftQuickEditConfidence">Confidence</label>
+                <input type="number" id="leftQuickEditConfidence" class="studio-input studio-input-sm font-mono w-full" min="0.1" max="1.0" step="0.01" value="0.98">
+              </div>
+            </div>
+            <div class="quick-editor-actions">
+              <button type="button" id="leftQuickSaveMemoryBtn" class="btn btn-primary btn-xs">💾 Save &amp; Stage</button>
+              <button type="button" id="leftQuickPromoteBtn" class="btn btn-secondary btn-xs" title="Promote Scope (USER → TEAM → ORG)">↑ Promote</button>
+              <button type="button" id="leftQuickDeleteBtn" class="btn btn-danger-outline btn-xs" title="Delete Memory">🗑 Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ====================================================================
+         PANE 2: Center Studio Workspace Canvas (Viewport-Locked, Tab-Switched)
+         ==================================================================== -->
+    <section class="single-pane-container" data-studio-canvas="studio-workspace-canvas" aria-label="Active Studio Workspace">
+      <!-- Secondary Top Navigation Bar across the Intent Stream + Contextual Stage Commands -->
+      <header class="studio-command-bar" aria-label="Secondary Top Intent Navigation &amp; Contextual Commands">
+        <div class="toolbar-left-group">
+          <div class="toolbar-current-view">
+            <span class="badge badge-indigo" id="toolbarViewModeBadge">WORKSPACE</span>
+            <strong id="toolbarCurrentTitle" class="toolbar-view-title">Session Logs &amp; Attribution</strong>
+            <span id="toolbarCurrentSubtitle" class="toolbar-view-subtitle text-xs text-secondary">Browse session turns, inspect memory attribution, and see which memories helped</span>
+          </div>
+
+          <div class="studio-intent-pills">
+            <!-- Guided 4-Step Workflow Dropdown -->
+            <details class="toolbar-dropdown" id="workflowStageDropdown">
+              <summary class="toolbar-dropdown-btn" aria-label="Guided 4-Step Workflow">
+                <span>🧭 Guided Workflow</span>
+                <span class="toolbar-dropdown-active-pill" id="activeStageDropdownLabel">Step 1: Ingest</span>
+                <span class="dropdown-caret" aria-hidden="true">▾</span>
+              </summary>
+              <nav id="studioIntentTopNav" class="studio-intent-top-nav toolbar-dropdown-menu" role="tablist" aria-label="Practitioner Intent Pipeline">
+                <a href="#stage-1-sandbox" class="nav-item left-nav-item studio-intent-tab active" data-stage="stage-1-sandbox" role="tab" aria-selected="true" title="1. Ingest &amp; Telemetry (Configure Ingest Rules, Inspect Raw Telemetry &amp; Trace)">
+                  <span class="nav-tool-icon" aria-hidden="true">📥</span>
+                  <span class="dropdown-item-body">
+                    <span class="nav-item-title">Step 1: Load &amp; Inspect Sessions</span>
+                    <small class="menu-item-desc">Import chat logs and extract candidate memories with AI</small>
+                  </span>
+                </a>
+                <a href="#stage-2-scopes" class="nav-item left-nav-item studio-intent-tab" data-stage="stage-2-scopes" role="tab" aria-selected="false" title="2. Memory &amp; Categories (AI Extraction, Manual Authoring &amp; Trigger Rules)">
+                  <span class="nav-tool-icon" aria-hidden="true">🧠</span>
+                  <span class="dropdown-item-body">
+                    <span class="nav-item-title">Step 2: Author Memories &amp; Rules</span>
+                    <small class="menu-item-desc">Create or edit memories, categories, and trigger conditions</small>
+                  </span>
+                </a>
+                <a href="#stage-3-eval" class="nav-item left-nav-item studio-intent-tab" data-stage="stage-3-eval" role="tab" aria-selected="false" title="3. Trigger &amp; Token Eval (Trigger Counts, Conditions &amp; Token Re-Tester)">
+                  <span class="nav-tool-icon" aria-hidden="true">📊</span>
+                  <span class="dropdown-item-body">
+                    <span class="nav-item-title">Step 3: Test Triggers &amp; Token Cost</span>
+                    <small class="menu-item-desc">Run test prompts to verify which memories fire and how many tokens they use</small>
+                  </span>
+                </a>
+                <a href="#stage-4-evolve" class="nav-item left-nav-item studio-intent-tab" data-stage="stage-4-evolve" role="tab" aria-selected="false" title="4. Spanner Sync &amp; Evolve (Push Staged Memories to Spanner &amp; AlphaEvolve)">
+                  <span class="nav-tool-icon" aria-hidden="true">🗄</span>
+                  <span class="dropdown-item-body">
+                    <span class="nav-item-title">Step 4: Save to Database &amp; Optimize</span>
+                    <small class="menu-item-desc">Commit staged changes to Cloud Spanner and auto-tune retrieval settings</small>
+                  </span>
+                </a>
+              </nav>
+            </details>
+
+            <div class="studio-active-intent-meta hidden">
+              <span class="badge badge-indigo" id="activeStudioModeLabel">Ingest &amp; Raw Data</span>
+              <span class="text-xs text-secondary" id="activeStudioIntentDesc">Configure ingest sources, inspect raw telemetry turns, and extract candidate memories.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="toolbar-actions-group">
+          <!-- Contextual Quick Actions Dropdown -->
+          <details class="toolbar-dropdown" id="stageActionsDropdown">
+            <summary class="toolbar-dropdown-btn toolbar-dropdown-btn-primary" aria-label="Quick Actions and Tools">
+              <span>⚡ Actions &amp; Tools</span>
+              <span class="dropdown-caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="toolbar-dropdown-menu toolbar-actions-menu">
+              <!-- Contextual Commands for Intent 1: Ingest & Raw Data -->
+              <div class="studio-cmd-group" id="cmdGroupStage1" data-for-stage="stage-1-sandbox">
+                <div class="dropdown-group-label">Step 1: Session &amp; Ingest Actions</div>
+                <button type="button" class="intent-pill intent-pill-primary toolbar-menu-item" id="openTrajectoryIngestCmdBtn" title="Mine real BigQuery &amp; Antigravity trajectories into structured candidate memories">
+                  <span class="menu-item-title">🤖 Extract Memories from Logs</span>
+                  <small class="menu-item-desc">Use Gemini AI to find reusable rules in recent sessions</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="refreshRawStreamCmdBtn" title="Reload raw telemetry turns from BigQuery Lakehouse &amp; Antigravity session logs">
+                  <span class="menu-item-title">🔄 Reload Session Stream</span>
+                  <small class="menu-item-desc">Fetch the latest raw conversation turns from BigQuery</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="saveIngestConfigCmdBtn" title="Persist current ingest pipeline configuration">
+                  <span class="menu-item-title">💾 Save Ingest Settings</span>
+                  <small class="menu-item-desc">Save your current log filter and privacy rules</small>
+                </button>
+              </div>
+
+              <!-- Contextual Commands for Intent 2: Design Memories & Categories -->
+              <div class="studio-cmd-group hidden" id="cmdGroupStage2" data-for-stage="stage-2-scopes">
+                <div class="dropdown-group-label">Step 2: Authoring &amp; Category Actions</div>
+                <button type="button" class="intent-pill intent-pill-primary toolbar-menu-item" id="openMemoryDesignerCmdBtn" title="Author or edit a scoped memory &amp; trigger condition">
+                  <span class="menu-item-title">➕ Create New Memory</span>
+                  <small class="menu-item-desc">Write a new memory rule and choose when it should trigger</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="openCategoryCreatorCmdBtn" title="Define a new memory category and default trigger threshold rule">
+                  <span class="menu-item-title">🏷️ Create Memory Category</span>
+                  <small class="menu-item-desc">Add a custom topic category with its own match threshold</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="intentRunConsensus" title="Detect shared beliefs across user:alice &amp; user:bob and auto-promote to TEAM">
+                  <span class="menu-item-title">🤝 Promote Shared Team Rules</span>
+                  <small class="menu-item-desc">Find habits shared by multiple users and promote them to Team scope</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="intentJumpToScenarioCmdBtn" title="Jump to Intent 3 to test how memories trigger and measure token usage">
+                  <span class="menu-item-title">📊 Test Triggers &amp; Token Usage →</span>
+                  <small class="menu-item-desc">Switch to Step 3 to see how your memories behave on test prompts</small>
+                </button>
+              </div>
+
+              <!-- Contextual Commands for Intent 3: Memory Bank, Triggers & Scenario Re-Tester -->
+              <div class="studio-cmd-group hidden" id="cmdGroupStage3" data-for-stage="stage-3-eval">
+                <div class="dropdown-group-label">Step 3: Evaluation &amp; Testing Actions</div>
+                <button type="button" class="intent-pill intent-pill-primary toolbar-menu-item" id="runScenarioRetestCmdBtn" title="Execute the current scenario prompt to see which memories trigger and measure token footprint">
+                  <span class="menu-item-title">⚡ Run Prompt Trigger Test</span>
+                  <small class="menu-item-desc">Test the sample prompt to see which memories match and count tokens</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="intentSynthesizeAdversarialCmdBtn" title="Synthesize 4 adversarial red-team archetypes into the scenario bank">
+                  <span class="menu-item-title">🛡️ Generate 4 Stress-Test Prompts</span>
+                  <small class="menu-item-desc">Create tricky edge-case prompts to test for false triggers</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="intentRunRedTeam" title="Execute the full 7-metric &amp; Matryoshka slice evaluation benchmark">
+                  <span class="menu-item-title">🧪 Run Full Quality Benchmark</span>
+                  <small class="menu-item-desc">Score recall accuracy, latency, and safety across all 7 metrics</small>
+                </button>
+              </div>
+
+              <!-- Contextual Commands for Intent 4: Spanner Database Sync & Runtime Genome -->
+              <div class="studio-cmd-group hidden" id="cmdGroupStage4" data-for-stage="stage-4-evolve">
+                <div class="dropdown-group-label">Step 4: Database Sync &amp; Optimization</div>
+                <button type="button" class="intent-pill intent-pill-primary toolbar-menu-item" id="pushToSpannerCmdBtn" title="Commit all staged memories and 768-dim vectors into Cloud Spanner">
+                  <span class="menu-item-title">🚀 Save Staged Memories to Spanner</span>
+                  <small class="menu-item-desc">Commit pending memory changes and embeddings to the live database</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="openMemoryPackCmdBtn" title="Export or import a portable JSON Memory Pack across scopes">
+                  <span class="menu-item-title">📦 Export / Import Memory Pack</span>
+                  <small class="menu-item-desc">Download or upload memories as a portable JSON file</small>
+                </button>
+                <button type="button" class="intent-pill toolbar-menu-item" id="intentRunAlphaEvolve" title="Execute AlphaEvolve MAP-Elites optimization across Matryoshka dimensions &amp; token formats">
+                  <span class="menu-item-title">🧬 Auto-Tune Retrieval Settings</span>
+                  <small class="menu-item-desc">Search for the best vector size and prompt format (AlphaEvolve)</small>
+                </button>
+              </div>
+            </div>
+          </details>
+
+          <div class="studio-telemetry-readout">
+            <span class="badge badge-teal" id="cmdBarStagedSyncBadge" title="Pending staged changes vs. memories saved in Cloud Spanner">
+              0 Staged • 0 Synced
+            </span>
+
+            <details class="toolbar-dropdown" id="engineConfigDropdown">
+              <summary class="toolbar-dropdown-btn toolbar-dropdown-btn-subtle" title="View active retrieval engine settings">
+                <span class="signal-dot dot-emerald">●</span>
+                <span>Engine: <strong id="topbarConfigId">baseline-default</strong></span>
+                <span class="dropdown-caret" aria-hidden="true">▾</span>
+              </summary>
+              <div class="toolbar-dropdown-menu toolbar-dropdown-menu-right toolbar-engine-popover">
+                <div class="dropdown-group-label">Active Retrieval Settings</div>
+                <div class="engine-kv-row">
+                  <span class="engine-kv-label">Preset Name</span>
+                  <strong class="mono">baseline-default</strong>
+                </div>
+                <div class="engine-kv-row">
+                  <span class="engine-kv-label">Vector Detail (Matryoshka Slice)</span>
+                  <strong id="topbarConfigSlice" class="mono">768d</strong>
+                </div>
+                <div class="engine-kv-row">
+                  <span class="engine-kv-label">Prompt Injection Format</span>
+                  <strong id="topbarConfigFormat" class="mono">COMPACT_BULLET</strong>
+                </div>
+                <p class="text-xs text-secondary" style="margin:6px 0 0 0;">
+                  Controls how memories are matched and formatted into the AI prompt. Click <strong>⚙️ Run Settings</strong> to customize.
+                </p>
+              </div>
+            </details>
+
+            <button type="button" id="openStudioGuideBtn" class="btn btn-secondary btn-xs" title="Open Interactive Walkthrough Tutorial &amp; Sample Loaders">
+              📖 Interactive Guide
+            </button>
+            <button type="button" id="toggleInspectorBtn" class="btn btn-secondary btn-xs" title="Toggle Right Inspector &amp; Run Settings Drawer">
+              ⚙️ Run Settings
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Live Action Feedback Banner -->
+      <div id="zeroResetStatus" class="studio-status-strip hidden" role="status" aria-live="polite"></div>
+
+      <!-- ==================================================================
+           10-WORKSPACE ENTERPRISE MASTER-DETAIL WORKBENCH (PHASE 3)
+           ================================================================== -->
+
+      <!-- WORKSPACE 1 of 10: Session Logs, Episodic Summaries & Memory Usefulness Attribution -->
+      <section class="studio-workspace-view active-workspace" id="workspace-sessions" role="tabpanel" aria-label="Session Logs &amp; Usefulness Attribution">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Session Logs &amp; Usefulness Attribution</h2>
+            <p class="ws-subtitle">Inspect agentic sessions, run 1-click Gemini 3.8 Flash episodic summarization + candidate extraction, and verify which triggered memories were helpful.</p>
+          </div>
+          <div class="ws-header-actions">
+            <input type="search" id="wsSessionSearchInput" class="studio-input studio-input-sm" placeholder="Search sessions, summaries, or keys...">
+            <select id="wsSessionScopeSelect" class="studio-select studio-select-sm" aria-label="Filter Sessions by Scope">
+              <option value="ALL">All Scopes</option>
+              <option value="ORG">ORG</option>
+              <option value="TEAM">TEAM</option>
+              <option value="AGENT">AGENT</option>
+              <option value="USER">USER</option>
+            </select>
+            <button type="button" id="wsRefreshSessionsBtn" class="btn btn-secondary btn-xs">🔄 Refresh Sessions</button>
+          </div>
+        </div>
+
+        <div class="studio-kpi-row mb-8">
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Captured Sessions</span>
+            <span class="studio-kpi-val" id="wsSessionsTotalCount">0</span>
+            <span class="studio-kpi-sub">Live Spanner + Lakehouse</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Summarized &amp; Mined</span>
+            <span class="studio-kpi-val" id="wsSessionsSummarizedCount">0</span>
+            <span class="studio-kpi-sub">Gemini 3.8 Flash Episodic</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Memories Triggered</span>
+            <span class="studio-kpi-val" id="wsSessionsTriggeredTotal">0</span>
+            <span class="studio-kpi-sub">In-Turn Context Injections</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Verified Helpful Rate</span>
+            <span class="studio-kpi-val" id="wsSessionsHelpfulRate">—</span>
+            <span class="studio-kpi-sub">Closed-Loop Attribution</span>
+          </div>
+        </div>
+
+        <div class="studio-audit-card">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Master Session Stream (Click any session to inspect turns, summary &amp; usefulness attribution in Right Drawer)</span>
+            <span class="badge badge-indigo">Closed-Loop Feedback</span>
+          </div>
+          <div class="raw-telemetry-table-wrap">
+            <table class="math-comparison-table" id="wsSessionsTable">
+              <thead>
+                <tr>
+                  <th>Session ID / Scope</th>
+                  <th>Session Title &amp; Episodic Summary</th>
+                  <th>Turns</th>
+                  <th>Memory Usefulness Attribution</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="wsSessionsTableBody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">Loading live sessions from Cloud Spanner...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 2 of 10: Memory Tree & Top Pending Staged Commits Bar -->
+      <section class="studio-workspace-view hidden" id="workspace-tree" role="tabpanel" aria-label="Memory Tree &amp; Staged Commits">
+        <div class="ws-master-header ws-header">
+          <div>
+            <h2 class="ws-title">Memory Tree &amp; Staged Commits</h2>
+            <p class="ws-subtitle">Browse the 4-tier hierarchical memory tree across <code>ORG &gt; TEAM &gt; AGENT &gt; USER</code> scopes, stage working-tree modifications, and commit verified nodes to Cloud Spanner.</p>
+          </div>
+        </div>
+
+        <!-- Prominent Top Pending Commits Bar (High-Visibility Git-Style Staging Bar) -->
+        <div class="tree-pending-commits-bar" id="treePendingCommitsBar" role="region" aria-label="Pending Staged Memory Commits">
+          <div class="pending-commits-left">
+            <span class="pending-commits-title">⚡ Pending Staged Commits</span>
+            <span class="commit-status-pill commit-pill-new" id="treeStagedNewBadge">0 NEW</span>
+            <span class="commit-status-pill commit-pill-modified" id="treeStagedModifiedBadge">0 MODIFIED</span>
+            <span class="commit-status-pill commit-pill-conflict" id="treeStagedConflictBadge">0 CONFLICT</span>
+            <span class="text-xs text-secondary" id="treeSyncedSummaryText">• 0 Synced in Spanner</span>
+          </div>
+          <div class="pending-commits-actions">
+            <button type="button" id="wsTreeOpenStageModalBtn" class="btn btn-secondary btn-xs">➕ Stage New Node</button>
+            <button type="button" id="wsTreeOpenCommitsInspectorBtn" class="btn btn-secondary btn-xs">🔍 Inspect Staged Diffs</button>
+            <button type="button" id="wsTreeDiscardAllBtn" class="btn btn-danger-outline btn-xs">✕ Discard All Staged</button>
+            <button type="button" id="wsTreeCommitAllBtn" class="btn btn-primary btn-xs">✓ Commit All Staged to Spanner</button>
+          </div>
+        </div>
+
+        <!-- Collapsible Inline Form to Stage a New or Modified Memory Node -->
+        <div id="wsTreeStageFormCard" class="studio-audit-card mb-8 hidden">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Stage Memory Node (Git-Style Working Tree Buffer before Spanner Commit)</span>
+            <button type="button" id="wsTreeCloseStageFormBtn" class="btn-close" aria-label="Close Stage Node Form">✕</button>
+          </div>
+          <div class="studio-designer-grid">
+            <div class="studio-field">
+              <label for="wsTreeStageScopeType">Scope Tier</label>
+              <select id="wsTreeStageScopeType" class="studio-select studio-select-sm">
+                <option value="USER">USER (user:default)</option>
+                <option value="AGENT">AGENT (agent:default)</option>
+                <option value="TEAM">TEAM (team:default)</option>
+                <option value="ORG">ORG (org:default)</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="wsTreeStageCategory">Category</label>
+              <select id="wsTreeStageCategory" class="studio-select studio-select-sm">
+                <option value="technical">technical</option>
+                <option value="guardrail">guardrail</option>
+                <option value="workflow">workflow</option>
+                <option value="infrastructure">infrastructure</option>
+                <option value="communication">communication</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="wsTreeStageKey">Memory Key (<code>snake_case</code>)</label>
+              <input type="text" id="wsTreeStageKey" class="studio-input studio-input-sm font-mono" placeholder="e.g. python_test_runner">
+            </div>
+            <div class="studio-field">
+              <label for="wsTreeStageValue">Target Value</label>
+              <input type="text" id="wsTreeStageValue" class="studio-input studio-input-sm" placeholder="e.g. uv run pytest">
+            </div>
+          </div>
+          <div class="studio-form-row-2 mt-8">
+            <div class="studio-field">
+              <label for="wsTreeStageBelief">Natural-Language Belief Statement</label>
+              <input type="text" id="wsTreeStageBelief" class="studio-input studio-input-sm" placeholder="e.g. Always execute Python tests via uv run pytest.">
+            </div>
+            <div class="studio-designer-actions">
+              <button type="button" id="wsTreeSubmitStageBtn" class="btn btn-primary btn-xs">📥 Add to Pending Staged Commits</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter & Search Bar for the 4-Tier Hierarchical Memory Tree -->
+        <div class="studio-audit-card">
+          <div class="card-header-compact">
+            <div class="studio-memory-search-bar">
+              <input type="search" id="wsTreeSearchInput" class="studio-input studio-input-sm" placeholder="Search ORG / TEAM / AGENT / USER nodes...">
+              <select id="wsTreeStatusFilter" class="studio-select studio-select-sm" aria-label="Filter Tree by Commit Status">
+                <option value="ALL">All Statuses (Synced + Staged)</option>
+                <option value="STAGED">Pending Staged Only (NEW / MODIFIED / CONFLICT)</option>
+                <option value="SYNCED">Committed in Spanner Only (SYNCED)</option>
+              </select>
+            </div>
+            <button type="button" id="wsTreeRefreshBtn" class="btn btn-secondary btn-xs">🔄 Refresh Tree</button>
+          </div>
+          <div id="wsTreeHierarchyContainer" class="ws-tree-hierarchy-container">
+            <div class="text-xs text-muted">Loading 4-tier hierarchical memory tree from Cloud Spanner...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 3 of 10: Playground & Live Federated Context Trace -->
+      <section class="studio-workspace-view hidden" id="workspace-playground" role="tabpanel" aria-label="Multi-Scope Playground &amp; Context Trace">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Multi-Scope Playground &amp; Context Trace</h2>
+            <p class="ws-subtitle">Test prompts against live Cloud Spanner memories across <code>ORG &gt; TEAM &gt; AGENT &gt; USER</code> and inspect the exact injected prompt context and token savings.</p>
+          </div>
+          <div class="ws-header-actions">
+            <select id="wsPgDimSelect" class="studio-select studio-select-sm" aria-label="Matryoshka Embedding Dimension">
+              <option value="768" selected>768d Full Slice</option>
+              <option value="512">512d Slice</option>
+              <option value="256">256d Slice</option>
+              <option value="128">128d Fast Slice</option>
+            </select>
+            <select id="wsPgFormatSelect" class="studio-select studio-select-sm" aria-label="Prompt Context Format">
+              <option value="COMPACT_BULLET" selected>COMPACT_BULLET</option>
+              <option value="MINIMAL_KV">MINIMAL_KV</option>
+              <option value="XML_TAGGED">XML_TAGGED</option>
+              <option value="FULL_BELIEF">FULL_BELIEF</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="studio-split-pane-2col">
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card mb-8">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Interactive Agentic Turn Probe</span>
+                <span class="badge badge-teal" id="wsPgTokenSavingsBadge">0% Token Savings</span>
+              </div>
+              <div id="wsPgTranscriptList" class="studio-chat-messages">
+                <div class="chat-turn system-welcome-turn">
+                  <div class="turn-badge">PLAYGROUND READY</div>
+                  <p class="turn-text">Enter a prompt below to execute a live federated lookup + Gemini 3.8 Flash synthesis with full scope conflict audit.</p>
+                </div>
+              </div>
+              <form id="wsPgPromptForm" class="studio-docked-prompt-bar mt-8">
+                <input type="text" id="wsPgPromptInput" class="studio-prompt-input" placeholder="Ask a question or state an architectural rule to test live memory injection..." required>
+                <button type="submit" id="wsPgSendBtn" class="btn btn-primary btn-sm">Run Turn ▶</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="studio-scroll-pane studio-audit-stack">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Injected Prompt Block (<code>&lt;enterprise_memory_context&gt;</code>)</span>
+                <span class="badge badge-indigo" id="wsPgResolvedCountBadge">0 Memories</span>
+              </div>
+              <pre id="wsPgContextPre" class="code-preview-box studio-context-pre-compact">// Run a turn or refresh scopes to inspect live Spanner prompt injection...</pre>
+            </div>
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Scope Precedence &amp; Conflict Resolution Audit</span>
+                <span class="badge badge-slate" id="wsPgConflictCountBadge">0 Overrides</span>
+              </div>
+              <div id="wsPgConflictList" class="studio-conflict-mini-list">
+                <div class="text-xs text-muted">No scope conflicts detected.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 4 of 10: 7-Metric Evaluation & AlphaEvolve MAP-Elites -->
+      <section class="studio-workspace-view hidden" id="workspace-eval" role="tabpanel" aria-label="Adversarial Evaluation &amp; Optimization">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Adversarial Evaluation &amp; Optimization</h2>
+            <p class="ws-subtitle">Benchmark retrieval accuracy, guardrail compliance, and token efficiency across <code>128d–768d</code> Matryoshka slices and evolve Pareto-optimal runtime genomes.</p>
+          </div>
+          <div class="ws-header-actions">
+            <button type="button" id="wsEvalSynthesizeAdvBtn" class="btn btn-secondary btn-xs">🛡️ + 4 Adversarial Cases</button>
+            <button type="button" id="wsEvalRunSuiteBtn" class="btn btn-primary btn-xs">🧪 Run 7-Metric Suite</button>
+            <button type="button" id="wsEvalRunAlphaEvolveBtn" class="btn btn-primary btn-xs">🧬 Run AlphaEvolve</button>
+          </div>
+        </div>
+
+        <div class="studio-kpi-row mb-8" id="wsEvalMetricsGrid">
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Pareto Fitness</span>
+            <span class="studio-kpi-val" id="wsEvalParetoVal">—</span>
+            <span class="studio-kpi-sub">Quality + Token Compression</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Retrieval Accuracy</span>
+            <span class="studio-kpi-val" id="wsEvalAccuracyVal">—</span>
+            <span class="studio-kpi-sub">Top-K Cosine Match</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Guardrail Compliance</span>
+            <span class="studio-kpi-val" id="wsEvalGuardrailVal">—</span>
+            <span class="studio-kpi-sub">ORG Invariant Enforcement</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Champion Genome</span>
+            <span class="studio-kpi-val" id="wsEvalChampionVal">baseline-default</span>
+            <span class="studio-kpi-sub" id="wsEvalChampionSub">768d • COMPACT_BULLET</span>
+          </div>
+        </div>
+
+        <div class="studio-split-pane-2col">
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Matryoshka Slice Benchmark (128d / 256d / 512d / 768d)</span>
+                <span class="badge badge-teal">Calibrated Benchmarks</span>
+              </div>
+              <table class="math-comparison-table">
+                <thead>
+                  <tr>
+                    <th>Slice</th>
+                    <th>Accuracy</th>
+                    <th>Conflict Res.</th>
+                    <th>Guardrail</th>
+                    <th>Pareto</th>
+                  </tr>
+                </thead>
+                <tbody id="wsEvalSliceTableBody">
+                  <tr>
+                    <td colspan="5" class="text-center text-muted">Click "Run 7-Metric Suite" to benchmark all 4 Matryoshka vector slices.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">AlphaEvolve 4×3 MAP-Elites Archive (Vector Dim × Token Niche)</span>
+                <span class="badge badge-indigo">Click Cell to Promote</span>
+              </div>
+              <div id="wsEvalMapElitesGrid" class="map-elites-table-wrapper">
+                <div class="empty-state-compact">Click <strong>🧬 Run AlphaEvolve</strong> to populate the MAP-Elites archive.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 5 of 10: Entities & Scope Hierarchy Management -->
+      <section class="studio-workspace-view hidden" id="workspace-entities" role="tabpanel" aria-label="Entities &amp; Scope Hierarchy">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Entities &amp; Scope Hierarchy</h2>
+            <p class="ws-subtitle">Register and manage <code>ORG</code>, <code>TEAM</code>, <code>AGENT</code>, and <code>USER</code> scope entities and parent-child inheritance links in Cloud Spanner.</p>
+          </div>
+          <div class="ws-header-actions">
+            <button type="button" id="wsRefreshEntitiesBtn" class="btn btn-secondary btn-xs">🔄 Refresh Entities</button>
+          </div>
+        </div>
+
+        <div class="studio-audit-card mb-8">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Register or Update Scope Entity</span>
+            <span class="badge badge-indigo">Entity Registry</span>
+          </div>
+          <div class="studio-designer-grid">
+            <div class="studio-field">
+              <label for="wsEntityScopeIdInput">Scope ID</label>
+              <input type="text" id="wsEntityScopeIdInput" class="studio-input studio-input-sm font-mono" placeholder="e.g. team:platform-ml">
+            </div>
+            <div class="studio-field">
+              <label for="wsEntityScopeTypeSelect">Scope Tier</label>
+              <select id="wsEntityScopeTypeSelect" class="studio-select studio-select-sm">
+                <option value="ORG">ORG</option>
+                <option value="TEAM" selected>TEAM</option>
+                <option value="AGENT">AGENT</option>
+                <option value="USER">USER</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="wsEntityDisplayNameInput">Display Name</label>
+              <input type="text" id="wsEntityDisplayNameInput" class="studio-input studio-input-sm" placeholder="e.g. Platform ML Engineering">
+            </div>
+            <div class="studio-field">
+              <label for="wsEntityParentScopeInput">Parent Scope ID</label>
+              <input type="text" id="wsEntityParentScopeInput" class="studio-input studio-input-sm font-mono" value="org:default" placeholder="e.g. org:default">
+            </div>
+          </div>
+          <div class="studio-form-row-2 mt-8">
+            <div class="studio-field">
+              <label for="wsEntityOwnerInput">Owner / Steward Email</label>
+              <input type="text" id="wsEntityOwnerInput" class="studio-input studio-input-sm font-mono" placeholder="e.g. ml-leads@example.internal">
+            </div>
+            <div class="studio-designer-actions">
+              <button type="button" id="wsCreateEntityBtn" class="btn btn-primary btn-xs">➕ Save Scope Entity</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="studio-audit-card">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Registered Enterprise Scope Entities (ORG → TEAM → AGENT / USER)</span>
+            <span class="badge badge-slate" id="wsEntitiesCountBadge">0 Entities</span>
+          </div>
+          <div class="raw-telemetry-table-wrap">
+            <table class="math-comparison-table">
+              <thead>
+                <tr>
+                  <th>Scope ID</th>
+                  <th>Tier</th>
+                  <th>Display Name &amp; Description</th>
+                  <th>Parent Scope</th>
+                  <th>Memories</th>
+                  <th>Owner</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="wsEntitiesTableBody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted">Loading enterprise entities from Cloud Spanner...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 6 of 10: Memory Categories & Trigger Threshold Rules -->
+      <section class="studio-workspace-view hidden" id="workspace-categories" role="tabpanel" aria-label="Memory Categories &amp; Retention Policies">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Memory Categories &amp; Retention Policies</h2>
+            <p class="ws-subtitle">Configure semantic categories, default cosine similarity retrieval thresholds, TTL retention windows, and automatic trajectory extraction flags.</p>
+          </div>
+          <div class="ws-header-actions">
+            <button type="button" id="wsRefreshCategoriesBtn" class="btn btn-secondary btn-xs">🔄 Refresh Categories</button>
+          </div>
+        </div>
+
+        <div class="studio-audit-card mb-8">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Define or Update Memory Category Rule</span>
+            <span class="badge badge-indigo">Category Taxonomy</span>
+          </div>
+          <div class="studio-designer-grid">
+            <div class="studio-field">
+              <label for="wsCatIdInput">Category ID (<code>snake_case</code>)</label>
+              <input type="text" id="wsCatIdInput" class="studio-input studio-input-sm font-mono" placeholder="e.g. cost_governance">
+            </div>
+            <div class="studio-field">
+              <label for="wsCatLabelInput">Display Label</label>
+              <input type="text" id="wsCatLabelInput" class="studio-input studio-input-sm" placeholder="e.g. FinOps &amp; Cost Governance">
+            </div>
+            <div class="studio-field">
+              <label for="wsCatThresholdInput">Default Cosine Threshold</label>
+              <input type="number" id="wsCatThresholdInput" class="studio-input studio-input-sm font-mono" min="0.30" max="0.95" step="0.05" value="0.68">
+            </div>
+            <div class="studio-field">
+              <label for="wsCatRetentionInput">Retention Window (Days)</label>
+              <input type="number" id="wsCatRetentionInput" class="studio-input studio-input-sm font-mono" min="1" max="3650" value="365">
+            </div>
+          </div>
+          <div class="studio-form-row-2 mt-8">
+            <div class="studio-field">
+              <label for="wsCatDescInput">Extraction &amp; Trigger Description</label>
+              <input type="text" id="wsCatDescInput" class="studio-input studio-input-sm" placeholder="Describe what signals belong in this category...">
+            </div>
+            <div class="studio-designer-actions">
+              <button type="button" id="wsCreateCategoryBtn" class="btn btn-primary btn-xs">💾 Save Category Rule</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="studio-audit-card">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Active Memory Taxonomy &amp; Retrieval Thresholds</span>
+            <span class="badge badge-slate" id="wsCategoriesCountBadge">0 Categories</span>
+          </div>
+          <div class="raw-telemetry-table-wrap">
+            <table class="math-comparison-table">
+              <thead>
+                <tr>
+                  <th>Category ID</th>
+                  <th>Label &amp; Extraction Rule</th>
+                  <th>Cosine Threshold</th>
+                  <th>Retention</th>
+                  <th>Auto-Extract</th>
+                  <th>Memories</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="wsCategoriesTableBody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted">Loading memory categories from Cloud Spanner...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 7 of 10: Data Ingest Services & Virtualized Stream Log -->
+      <section class="studio-workspace-view hidden" id="workspace-ingest" role="tabpanel" aria-label="Data Ingest &amp; Live Telemetry">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Data Ingest &amp; Live Telemetry</h2>
+            <p class="ws-subtitle">Configure GCS JSONL, BigQuery Lakehouse, and MCP event ingestion pipelines with zero-secrets PII scrubbing and inspect high-density stream logs.</p>
+          </div>
+          <div class="ws-header-actions">
+            <button type="button" id="wsRefreshIngestServicesBtn" class="btn btn-secondary btn-xs">🔄 Refresh Connectors</button>
+          </div>
+        </div>
+
+        <div class="studio-audit-card mb-8">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Configure Data Ingest Connector</span>
+            <span class="badge badge-indigo">Ingest Connectors</span>
+          </div>
+          <div class="studio-designer-grid">
+            <div class="studio-field">
+              <label for="wsIngestIdInput">Service ID</label>
+              <input type="text" id="wsIngestIdInput" class="studio-input studio-input-sm font-mono" placeholder="e.g. ingest:vertex-eval-logs">
+            </div>
+            <div class="studio-field">
+              <label for="wsIngestNameInput">Connector Name</label>
+              <input type="text" id="wsIngestNameInput" class="studio-input studio-input-sm" placeholder="e.g. Vertex Eval Telemetry">
+            </div>
+            <div class="studio-field">
+              <label for="wsIngestSourceTypeSelect">Source Protocol</label>
+              <select id="wsIngestSourceTypeSelect" class="studio-select studio-select-sm">
+                <option value="GCS_JSONL">GCS_JSONL</option>
+                <option value="BIGQUERY_TABLE">BIGQUERY_TABLE</option>
+                <option value="MCP_EVENT_STREAM">MCP_EVENT_STREAM</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="wsIngestPiiModeSelect">Guardrail &amp; Secret Scrubbing</label>
+              <select id="wsIngestPiiModeSelect" class="studio-select studio-select-sm">
+                <option value="STRICT_ZERO_SECRETS" selected>STRICT_ZERO_SECRETS</option>
+                <option value="STANDARD_PII">STANDARD_PII</option>
+              </select>
+            </div>
+          </div>
+          <div class="studio-form-row-2 mt-8">
+            <div class="studio-field">
+              <label for="wsIngestEndpointInput">Endpoint URI / Table Path</label>
+              <input type="text" id="wsIngestEndpointInput" class="studio-input studio-input-sm font-mono" placeholder="e.g. gs://your-vertex-staging-bucket/trajectories/*.jsonl">
+            </div>
+            <div class="studio-designer-actions">
+              <button type="button" id="wsSaveIngestServiceBtn" class="btn btn-primary btn-xs">💾 Save Connector</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="studio-split-pane-2col">
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Registered Ingest Connectors</span>
+                <span class="badge badge-teal" id="wsIngestServicesCountBadge">0 Active</span>
+              </div>
+              <table class="math-comparison-table">
+                <thead>
+                  <tr>
+                    <th>Connector</th>
+                    <th>Source &amp; Endpoint</th>
+                    <th>Window / Conf</th>
+                    <th>Events</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="wsIngestServicesTableBody">
+                  <tr>
+                    <td colspan="5" class="text-center text-muted">Loading ingest services...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Virtualized Live Telemetry Stream Log</span>
+                <span class="badge badge-slate">Live Stream</span>
+              </div>
+              <div id="wsIngestStreamLogList" class="ws-ingest-stream-log-list">
+                <div class="ingest-stream-log-row text-xs text-muted">Waiting for live telemetry stream rows...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 8 of 10: Memory Extractors & Interactive Gemini 3.8 Co-Designer Chat -->
+      <section class="studio-workspace-view hidden" id="workspace-extractors" role="tabpanel" aria-label="Memory Extractors &amp; Prompt Co-Designer">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Memory Extractors &amp; Prompt Co-Designer</h2>
+            <p class="ws-subtitle">Configure LLM extraction pipelines and collaborate with the interactive Gemini 3.8 Flash Co-Designer to refine system instructions and synthesize few-shot examples.</p>
+          </div>
+          <div class="ws-header-actions">
+            <button type="button" id="wsRefreshExtractorsBtn" class="btn btn-secondary btn-xs">🔄 Refresh Extractors</button>
+          </div>
+        </div>
+
+        <div class="studio-split-pane-2col">
+          <!-- Left Column: Extractor List & System Prompt Editor -->
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card mb-8">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Registered Memory Extractors</span>
+                <span class="badge badge-indigo" id="wsExtractorsCountBadge">0 Extractors</span>
+              </div>
+              <div id="wsExtractorsList" class="ws-extractors-list mb-8">
+                <div class="text-xs text-muted">Loading extractors from Cloud Spanner...</div>
+              </div>
+
+              <div class="studio-field mb-8">
+                <label for="wsExtractorNameInput">Active Extractor Name</label>
+                <input type="text" id="wsExtractorNameInput" class="studio-input studio-input-sm" placeholder="Extractor Name">
+                <input type="hidden" id="wsActiveExtractorIdInput" value="extractor:crystalline-default">
+              </div>
+              <div class="studio-form-row-2 mb-8">
+                <div class="studio-field">
+                  <label for="wsExtractorModelInput">Model Name</label>
+                  <input type="text" id="wsExtractorModelInput" class="studio-input studio-input-sm font-mono" value="gemini-3.8-flash">
+                </div>
+                <div class="studio-field">
+                  <label for="wsExtractorCategoriesInput">Target Categories (comma-separated)</label>
+                  <input type="text" id="wsExtractorCategoriesInput" class="studio-input studio-input-sm font-mono" value="technical, guardrail, workflow">
+                </div>
+              </div>
+              <div class="studio-field mb-8">
+                <label for="wsExtractorSystemPromptTextarea">Extractor System Prompt Instructions</label>
+                <textarea id="wsExtractorSystemPromptTextarea" rows="5" class="studio-textarea font-mono text-xs" placeholder="System instructions for candidate extraction..."></textarea>
+              </div>
+              <div class="studio-designer-actions">
+                <button type="button" id="wsSaveExtractorBtn" class="btn btn-primary btn-xs">💾 Save Extractor to Spanner</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Interactive Gemini 3.8 Flash Extractor Co-Designer Chat -->
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <div>
+                  <span class="card-title-sm">🤖 Gemini 3.8 Flash Extractor Co-Designer Chat</span>
+                  <span class="text-xs text-muted"> — Co-design extraction rules &amp; few-shot examples</span>
+                </div>
+                <span class="badge badge-teal">Live Spanner Sync</span>
+              </div>
+
+              <div class="preset-chips-row mb-8">
+                <button type="button" class="chip ws-extractor-chat-chip" data-chat-prompt="Tighten the extractor so it only extracts permanent architectural preferences and ignores one-off debugging commands.">
+                  ✨ Ignore one-off debug commands
+                </button>
+                <button type="button" class="chip ws-extractor-chat-chip" data-chat-prompt="Add a strict guardrail extraction rule for GCP ADC authentication and zero API keys.">
+                  🛡️ Enforce GCP ADC &amp; zero secrets
+                </button>
+              </div>
+
+              <div id="wsExtractorChatHistory" class="ws-extractor-chat-history">
+                <div class="chat-turn system-welcome-turn">
+                  <div class="turn-badge">CO-DESIGNER READY</div>
+                  <p class="turn-text">Ask Gemini 3.8 Flash how you want to refine the selected extractor. It will rewrite the system prompt and synthesize updated few-shot examples directly into Cloud Spanner.</p>
+                </div>
+              </div>
+
+              <form id="wsExtractorChatForm" class="studio-docked-prompt-bar mt-8">
+                <input type="text" id="wsExtractorChatInput" class="studio-prompt-input" placeholder="Describe how to improve this memory extractor..." required>
+                <button type="submit" id="wsExtractorChatSendBtn" class="btn btn-primary btn-sm">Co-Design ▶</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 9 of 10: Dual-Plane Memory Backend & Bidirectional Agent Write-Back Audit -->
+      <section class="studio-workspace-view hidden" id="workspace-backend" role="tabpanel" aria-label="Memory Backend &amp; Write-Back Audit">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Memory Backend &amp; Write-Back Audit</h2>
+            <p class="ws-subtitle">Monitor Online Store (Cloud Spanner) + Offline Analytical Store (BigQuery Lakehouse), test live mid-turn agent write-backs, and rollback unwanted mutations.</p>
+          </div>
+          <div class="ws-header-actions">
+            <button type="button" id="wsBackendRefreshBtn" class="btn btn-secondary btn-xs">🔄 Refresh Status</button>
+            <button type="button" id="wsBackendSyncBtn" class="btn btn-primary btn-xs">🚀 Trigger Dual-Plane Sync</button>
+          </div>
+        </div>
+
+        <!-- Dual-Plane Online + Offline Store Cards -->
+        <div class="studio-split-pane-2col mb-8">
+          <div class="studio-audit-card" id="wsBackendOnlineCard">
+            <div class="card-header-compact">
+              <span class="card-title-sm">⚡ Online Operational Plane (Cloud Spanner)</span>
+              <span class="badge badge-teal" id="wsOnlineStatusBadge">HEALTHY</span>
+            </div>
+            <div class="studio-config-kv"><span>Engine:</span> <code id="wsOnlineEngine">Google Cloud Spanner</code></div>
+            <div class="studio-config-kv"><span>Vector Index:</span> <code id="wsOnlineVectorSpec">768-dim Matryoshka (128d/256d/512d/768d)</code></div>
+            <div class="studio-config-kv"><span>Synced / Staged Nodes:</span> <code id="wsOnlineNodeCounts">0 synced • 0 staged</code></div>
+          </div>
+
+          <div class="studio-audit-card" id="wsBackendOfflineCard">
+            <div class="card-header-compact">
+              <span class="card-title-sm">📊 Offline Analytical Plane (BigQuery Lakehouse)</span>
+              <span class="badge badge-indigo" id="wsOfflineStatusBadge">HEALTHY</span>
+            </div>
+            <div class="studio-config-kv"><span>Engine:</span> <code id="wsOfflineEngine">Google BigQuery + GCS JSONL</code></div>
+            <div class="studio-config-kv"><span>Dataset:</span> <code id="wsOfflineDataset">your-gcp-project-id.agentic_memory_lakehouse</code></div>
+            <div class="studio-config-kv"><span>Ingest Pipelines:</span> <code id="wsOfflineConnectors">3 active streams</code></div>
+          </div>
+        </div>
+
+        <!-- Live Agent Write-Back Simulator Bar -->
+        <div class="studio-audit-card mb-8">
+          <div class="card-header-compact">
+            <span class="card-title-sm">⚡ Simulate Live Agent Mid-Turn Write-Back (<code>POST /api/studio/backend/test-agent-write</code>)</span>
+            <span class="badge badge-indigo">Write-Back &amp; Rollback</span>
+          </div>
+          <div class="studio-designer-grid">
+            <div class="studio-field">
+              <label for="wsAgentWriteSourceInput">Source Agent ID</label>
+              <input type="text" id="wsAgentWriteSourceInput" class="studio-input studio-input-sm font-mono" value="agent:code-reviewer">
+            </div>
+            <div class="studio-field">
+              <label for="wsAgentWriteScopeSelect">Target Scope</label>
+              <select id="wsAgentWriteScopeSelect" class="studio-select studio-select-sm">
+                <option value="USER" selected>USER (user:default)</option>
+                <option value="AGENT">AGENT (agent:default)</option>
+                <option value="TEAM">TEAM (team:default)</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="wsAgentWriteKeyInput">Memory Key</label>
+              <input type="text" id="wsAgentWriteKeyInput" class="studio-input studio-input-sm font-mono" value="runtime_linter_policy">
+            </div>
+            <div class="studio-field">
+              <label for="wsAgentWriteValInput">New Value Written by Agent</label>
+              <input type="text" id="wsAgentWriteValInput" class="studio-input studio-input-sm" value="ruff check --fix && uv run pytest">
+            </div>
+          </div>
+          <div class="studio-designer-actions mt-8">
+            <button type="button" id="wsAgentWriteBtn" class="btn btn-primary btn-xs">⚡ Execute Live Agent Write-Back</button>
+          </div>
+        </div>
+
+        <!-- Live Agent Mutation Audit Feed with 1-Click Rollback -->
+        <div class="studio-audit-card">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Live Agent Mutation Audit Feed (1-Click Rollback to Prior State)</span>
+            <span class="badge badge-slate" id="wsMutationsCountBadge">0 Mutations</span>
+          </div>
+          <div class="raw-telemetry-table-wrap">
+            <table class="math-comparison-table">
+              <thead>
+                <tr>
+                  <th>Mutation ID</th>
+                  <th>Source Agent</th>
+                  <th>Scope / Key</th>
+                  <th>Before → After Diff</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="wsBackendMutationsTableBody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">Loading live agent mutation log from Cloud Spanner...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE 10 of 10: Tree-Conditioned Security & RBAC Simulator -->
+      <section class="studio-workspace-view hidden" id="workspace-security" role="tabpanel" aria-label="Security &amp; Access Control Simulator">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Security &amp; Access Control Simulator</h2>
+            <p class="ws-subtitle">Enforce hierarchical access control conditioned on the <code>ORG → TEAM → AGENT → USER</code> scope tree and simulate effective permissions before deployment.</p>
+          </div>
+          <div class="ws-header-actions">
+            <button type="button" id="wsRefreshSecurityBtn" class="btn btn-secondary btn-xs">🔄 Refresh Policies</button>
+          </div>
+        </div>
+
+        <!-- Tree-Conditioned Effective Permission Simulator -->
+        <div class="studio-audit-card mb-8">
+          <div class="card-header-compact">
+            <span class="card-title-sm">🛡️ Effective Tree-Conditioned Permission Simulator (<code>POST /api/studio/security/simulate</code>)</span>
+            <span class="badge badge-indigo">Inherited Permissions</span>
+          </div>
+          <div class="studio-designer-grid">
+            <div class="studio-field">
+              <label for="wsRbacSimPrincipalInput">Principal (User / Group / Service Account)</label>
+              <input type="text" id="wsRbacSimPrincipalInput" class="studio-input studio-input-sm font-mono" value="serviceAccount:agent-worker@your-gcp-project-id.iam">
+            </div>
+            <div class="studio-field">
+              <label for="wsRbacSimActionSelect">Requested Operation</label>
+              <select id="wsRbacSimActionSelect" class="studio-select studio-select-sm">
+                <option value="WRITE_ORG">WRITE_ORG (Modify ORG Guardrail)</option>
+                <option value="DELETE_ORG">DELETE_ORG (Delete ORG Guardrail)</option>
+                <option value="PROMOTE_TEAM">PROMOTE_TEAM (Promote to TEAM)</option>
+                <option value="WRITE_USER">WRITE_USER (Write USER Memory)</option>
+                <option value="READ">READ (Federated Lookup)</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="wsRbacSimTargetScopeInput">Target Scope Node</label>
+              <input type="text" id="wsRbacSimTargetScopeInput" class="studio-input studio-input-sm font-mono" value="org:default">
+            </div>
+            <div class="studio-designer-actions">
+              <button type="button" id="wsRbacSimRunBtn" class="btn btn-primary btn-xs">🔍 Simulate Effective Permission</button>
+            </div>
+          </div>
+          <div id="wsRbacSimResultBox" class="ws-rbac-sim-result mt-8 hidden"></div>
+        </div>
+
+        <!-- Author New Tree-Conditioned RBAC Policy -->
+        <div class="studio-audit-card mb-8">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Author Tree-Conditioned RBAC Policy</span>
+            <span class="badge badge-slate">Access Policies</span>
+          </div>
+          <div class="studio-designer-grid">
+            <div class="studio-field">
+              <label for="wsRbacPolicyPrincipalInput">Principal</label>
+              <input type="text" id="wsRbacPolicyPrincipalInput" class="studio-input studio-input-sm font-mono" placeholder="e.g. group:ml-platform-leads@example.internal">
+            </div>
+            <div class="studio-field">
+              <label for="wsRbacPolicyRoleInput">Role Name</label>
+              <input type="text" id="wsRbacPolicyRoleInput" class="studio-input studio-input-sm" placeholder="e.g. Team Memory Steward">
+            </div>
+            <div class="studio-field">
+              <label for="wsRbacPolicyEffectSelect">Effect</label>
+              <select id="wsRbacPolicyEffectSelect" class="studio-select studio-select-sm">
+                <option value="ALLOW" selected>ALLOW</option>
+                <option value="DENY">DENY</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="wsRbacPolicyScopeInput">Target Scope Node</label>
+              <input type="text" id="wsRbacPolicyScopeInput" class="studio-input studio-input-sm font-mono" value="team:default">
+            </div>
+          </div>
+          <div class="studio-form-row-2 mt-8">
+            <div class="studio-field">
+              <label for="wsRbacPolicyActionsInput">Permitted / Denied Actions (comma-separated)</label>
+              <input type="text" id="wsRbacPolicyActionsInput" class="studio-input studio-input-sm font-mono" value="READ, STAGE, COMMIT, PROMOTE_TEAM">
+            </div>
+            <div class="studio-designer-actions">
+              <button type="button" id="wsSaveRbacPolicyBtn" class="btn btn-primary btn-xs">💾 Save RBAC Policy</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active RBAC Policies Table -->
+        <div class="studio-audit-card">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Active Tree-Conditioned RBAC Policies</span>
+            <span class="badge badge-slate" id="wsRbacPoliciesCountBadge">0 Policies</span>
+          </div>
+          <div class="raw-telemetry-table-wrap">
+            <table class="math-comparison-table">
+              <thead>
+                <tr>
+                  <th>Policy ID</th>
+                  <th>Principal &amp; Role</th>
+                  <th>Effect</th>
+                  <th>Target Scope &amp; Inheritance</th>
+                  <th>Actions</th>
+                  <th>PII Mask</th>
+                </tr>
+              </thead>
+              <tbody id="wsRbacPoliciesTableBody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">Loading RBAC security policies from Cloud Spanner...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           WORKSPACE 1: Ingest Configuration, Raw Telemetry Stream & Live Trace
+           ================================================================== -->
+      <section class="pipeline-stage studio-stage-panel active-stage hidden" id="stage-1-sandbox" role="tabpanel">
+        <!-- Ingest Pipeline Configuration & Raw Telemetry Stream Card -->
+        <div class="studio-audit-card mb-8" id="ingestConfigCard">
+          <div class="card-header-compact">
+            <div>
+              <span class="card-title-sm">1A. Ingest Pipeline Configuration &amp; Raw Telemetry Stream</span>
+              <span class="text-xs text-muted"> — Configure how raw sessions are chunked &amp; filtered before AI memory extraction</span>
+            </div>
+            <div class="studio-token-badges">
+              <span class="badge badge-slate" id="rawStreamCountBadge">0 Raw Turns</span>
+              <button type="button" id="refreshRawIngestBtn" class="btn btn-secondary btn-xs">🔄 Refresh Raw Data</button>
+              <button type="button" id="saveIngestConfigBtn" class="btn btn-primary btn-xs">💾 Save Ingest Config</button>
+            </div>
+          </div>
+
+          <!-- Compact Ingest Config Form Row -->
+          <div class="studio-designer-grid mb-8">
+            <div class="studio-field">
+              <label for="ingestSourceSelect">Telemetry Source Stream</label>
+              <select id="ingestSourceSelect" class="studio-select studio-select-sm">
+                <option value="BIGQUERY_AND_ANTIGRAVITY" selected>BigQuery Lakehouse + Antigravity JSONL</option>
+                <option value="BIGQUERY_LAKEHOUSE">BigQuery Agentic Telemetry Only</option>
+                <option value="ANTIGRAVITY_TRANSCRIPTS">Antigravity Transcript Logs Only</option>
+                <option value="MCP_EVENTS">MCP Tool Event Stream</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="ingestChunkWindowSelect">Turn Chunking Window</label>
+              <select id="ingestChunkWindowSelect" class="studio-select studio-select-sm">
+                <option value="3">3 Turns (Atomic Signals)</option>
+                <option value="5" selected>5 Turns (Balanced Context)</option>
+                <option value="10">10 Turns (Deep Episodic)</option>
+              </select>
+            </div>
+            <div class="studio-field">
+              <label for="ingestMinConfidenceInput">Min Extraction Confidence</label>
+              <input type="number" id="ingestMinConfidenceInput" class="studio-input studio-input-sm font-mono" min="0.50" max="0.99" step="0.05" value="0.75">
+            </div>
+            <div class="studio-field">
+              <label for="ingestPiiRedactionSelect">Guardrail &amp; Secret Filter</label>
+              <select id="ingestPiiRedactionSelect" class="studio-select studio-select-sm">
+                <option value="STRICT_ZERO_SECRETS" selected>Strict Zero-Secrets + PII Scrub</option>
+                <option value="STANDARD_PII">Standard PII Redaction</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Raw Telemetry Event Stream Table -->
+          <div class="raw-telemetry-table-wrap">
+            <table class="math-comparison-table" id="rawTelemetryTable">
+              <thead>
+                <tr>
+                  <th>Session / Scope</th>
+                  <th>Type</th>
+                  <th>Raw Telemetry Turn (Unprocessed Stream)</th>
+                  <th>Est. Tokens</th>
+                  <th>Detected Signal</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="rawTelemetryTableBody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">Loading raw telemetry stream from BigQuery Lakehouse &amp; session logs...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- AI Studio Style Collapsible "System Memory Context & Scope Audit" Drawer -->
+        <div class="studio-system-context-bar" id="playgroundSystemContextBox">
+          <div class="system-context-header">
+            <div class="system-context-title-group">
+              <span class="badge badge-indigo">SYSTEM MEMORY CONTEXT</span>
+              <span class="system-context-summary">
+                Live Federated Spanner Injection (<code id="activeFormatLabel">COMPACT_BULLET</code> • <code id="activeDimLabel">768d</code>)
+              </span>
+            </div>
+            <div class="system-context-badges">
+              <span class="quiet-param" id="playgroundConflictSummary">0 Conflicts Resolved</span>
+              <span class="quiet-sep">|</span>
+              <span class="badge badge-teal" id="playgroundTokenSavingsBadge">0% Token Savings</span>
+              <button type="button" id="toggleSystemContextBtn" class="btn-link-xs" aria-expanded="false">
+                Show Context Prompt ▼
+              </button>
+            </div>
+          </div>
+          <div id="playgroundSystemContextBody" class="system-context-body hidden">
+            <div class="system-context-split">
+              <div class="system-context-col">
+                <div class="context-col-label">Injected Prompt Block (<code>&lt;enterprise_memory_context&gt;</code>)</div>
+                <pre id="playgroundContextPre" class="code-preview-box studio-context-pre-compact">// Loading live Spanner memory context...</pre>
+              </div>
+              <div class="system-context-col">
+                <div class="context-col-label">Active Scope Precedence &amp; Overrides</div>
+                <div id="playgroundConflictMiniList" class="studio-conflict-mini-list">
+                  <div class="text-xs text-muted">No scope conflicts detected across active scopes.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Playground Split: Chat Stream (Center) + Collapsible Regression Case Builder / Trajectory Miner -->
+        <div class="studio-playground-main">
+          <div class="studio-chat-workbench">
+            <!-- Workspace Controls Bar (Unanchored; sample prompts live in Right Guide Pane) -->
+            <div class="studio-playground-toolbar">
+              <div class="preset-chips-row">
+                <span class="chips-label">Live Capture &amp; Extraction Controls:</span>
+                <span class="text-xs text-muted">Need sample prompts or guided presets? Open <strong>📖 Tutorial &amp; Guide</strong> in the right drawer.</span>
+              </div>
+
+              <div class="playground-toolbar-right">
+                <button type="button" id="toggleTrajectoryPanelBtn" class="btn btn-secondary btn-xs" title="Toggle AI Candidate Memory Extractor">
+                  🤖 AI Candidate Extractor
+                </button>
+                <button type="button" id="toggleManualFeedbackBuilderBtn" class="btn btn-secondary btn-xs" title="Open or close manual EvalCase regression converter">
+                  + Regression Builder (<span id="feedbackCaseCountBadge">0 Eval Cases</span>)
+                </button>
+              </div>
+            </div>
+
+            <!-- Trajectory Explorer & Candidate Memory Extractor Card -->
+            <div id="trajectoryExtractorCard" class="studio-audit-card mb-8">
+              <div class="card-header-compact">
+                <div>
+                  <span class="card-title-sm">1B. AI Candidate Memory &amp; Category Extractor</span>
+                  <span class="text-xs text-muted"> — Mine raw telemetry turns or custom transcripts into structured candidate memories</span>
+                </div>
+                <span class="badge badge-indigo" id="trajectoryCandidateCountBadge">0 Candidates</span>
+              </div>
+
+              <div class="studio-trajectory-toolbar">
+                <select id="trajectorySessionSelect" class="studio-select studio-select-sm" title="Select Lakehouse or Antigravity Session">
+                  <option value="ALL">All Recent Workspace Trajectories (BigQuery Lakehouse)</option>
+                </select>
+                <button type="button" id="extractTrajectoryCandidatesBtn" class="btn btn-primary btn-xs">
+                  ⚡ Extract Candidate Memories
+                </button>
+                <button type="button" id="toggleRawTrajectoryBtn" class="btn btn-secondary btn-xs">
+                  📋 Paste JSONL / Transcript
+                </button>
+
+                <div class="studio-signal-pills" role="group" aria-label="Trajectory Signal Filter">
+                  <button type="button" class="studio-signal-pill active" data-signal-filter="ALL">All Signals</button>
+                  <button type="button" class="studio-signal-pill" data-signal-filter="CORRECTION">Corrections</button>
+                  <button type="button" class="studio-signal-pill" data-signal-filter="PREFERENCE">Preferences</button>
+                  <button type="button" class="studio-signal-pill" data-signal-filter="TOOL_PATTERN">Tool Patterns</button>
+                  <button type="button" class="studio-signal-pill" data-signal-filter="GUARDRAIL">Guardrails</button>
+                </div>
+              </div>
+
+              <div id="rawTrajectoryDrawer" class="hidden mb-8">
+                <textarea
+                  id="rawTrajectoryInput"
+                  class="studio-input w-full font-mono text-xs"
+                  rows="3"
+                  placeholder="Paste raw JSONL or conversation transcript here..."
+                ></textarea>
+              </div>
+
+              <div id="trajectoryCandidatesList" class="studio-candidates-grid">
+                <div class="empty-state-compact">
+                  Select a session or click <strong>Extract Candidate Memories</strong> to mine explicit directives, corrections, and tool patterns into structured candidates before committing to <code>USER</code>, <code>TEAM</code>, or <code>ORG</code> scope.
+                </div>
+              </div>
+            </div>
+
+            <!-- Scrollable Conversation & Trace Stream -->
+            <div id="studioChatStream" class="studio-chat-stream">
+              <div class="empty-state-compact studio-empty-playground">
+                <strong>Prompt &amp; Recall Playground Ready</strong>
+                <p>Type a message below to test sub-10ms Cloud Spanner recall. Rate any response with <strong>👍 Reinforce</strong> or <strong>👎 Flag Regression</strong> to synthesize persistent <code>EvalCase</code> records.</p>
+              </div>
+            </div>
+
+            <!-- Docked AI Studio Prompt Input Bar -->
+            <form id="studioChatForm" class="studio-docked-prompt-bar">
+              <select id="studioAgentRouteSelect" class="studio-select-route" title="Select Target Agent Endpoint">
+                <option value="/api/preference/query" selected>⚡ PreferenceAgent (Spanner + ADK)</option>
+                <option value="/api/interview/chat">🎙️ InterviewAgent (Waking Capture)</option>
+              </select>
+              <input
+                type="text"
+                id="studioPromptInput"
+                class="studio-prompt-input"
+                placeholder="Ask the agent or state a preference to test recall and record 👍/👎 feedback..."
+                required
+              >
+              <button type="submit" id="studioSendPromptBtn" class="btn btn-primary">
+                Send &amp; Trace ↵
+              </button>
+            </form>
+          </div>
+
+          <!-- Toggleable Manual Feedback -> EvalCase Side Panel (Hidden by default to keep Playground clean) -->
+          <div id="manualFeedbackDrawer" class="studio-feedback-builder-card hidden">
+            <div class="card-header-compact">
+              <span class="card-title-sm">Direct Feedback → EvalCase</span>
+              <button type="button" id="closeManualFeedbackBtn" class="btn-close" aria-label="Close Regression Builder">✕</button>
+            </div>
+            <p class="text-xs text-secondary mb-8">
+              Convert any interaction or domain correction into a repeatable regression test case in Spanner.
+            </p>
+            <form id="directFeedbackForm" class="studio-compact-form">
+              <div class="studio-field">
+                <label for="fbPromptInput">Interaction Prompt / Query</label>
+                <input type="text" id="fbPromptInput" class="studio-input" value="" placeholder="Enter the user prompt or query to guard against..." required>
+              </div>
+              <div class="studio-field">
+                <label for="fbResponseInput">Observed Agent Response</label>
+                <input type="text" id="fbResponseInput" class="studio-input" value="" placeholder="Enter observed agent response (optional)...">
+              </div>
+              <div class="studio-form-row-2">
+                <div class="studio-field">
+                  <label for="fbRatingSelect">Feedback Signal</label>
+                  <select id="fbRatingSelect" class="studio-select">
+                    <option value="bad" selected>👎 Thumbs Down (Guard)</option>
+                    <option value="good">👍 Thumbs Up (Reinforce)</option>
+                  </select>
+                </div>
+                <div class="studio-field">
+                  <label for="fbFailureTagSelect">Archetype Tag</label>
+                  <select id="fbFailureTagSelect" class="studio-select">
+                    <option value="contradiction" selected>Contradiction</option>
+                    <option value="hallucination">Hallucination Trap</option>
+                    <option value="scope_conflict">Scope Conflict</option>
+                    <option value="reinforcement">Reinforcement</option>
+                  </select>
+                </div>
+              </div>
+              <div class="studio-field">
+                <label for="fbExpectedFactInput">Expected Ground-Truth Fact (<code>key = value</code>)</label>
+                <input type="text" id="fbExpectedFactInput" class="studio-input" value="" placeholder="e.g. key_name = expected_value" required>
+              </div>
+              <button type="submit" id="submitDirectFeedbackBtn" class="btn btn-primary btn-sm w-full mt-8">
+                Save EvalCase to Spanner
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           WORKSPACE 2: Design Memories, Categories & Trigger Conditions
+           ================================================================== -->
+      <section class="pipeline-stage studio-stage-panel" id="stage-2-scopes" role="tabpanel">
+        <!-- Compact Top Filter & Federated Search Bar -->
+        <div class="studio-pane-toolbar">
+          <div class="studio-scope-tabs" role="tablist" aria-label="Enterprise Memory Scopes">
+            <button type="button" class="scope-tab active" data-scope-filter="ALL">
+              All <span class="scope-count-pill" id="countScopeAll">0</span>
+            </button>
+            <button type="button" class="scope-tab" data-scope-filter="ORG">
+              <span class="scope-dot dot-org"></span> ORG <span class="scope-count-pill" id="countScopeOrg">0</span>
+            </button>
+            <button type="button" class="scope-tab" data-scope-filter="TEAM">
+              <span class="scope-dot dot-team"></span> TEAM <span class="scope-count-pill" id="countScopeTeam">0</span>
+            </button>
+            <button type="button" class="scope-tab" data-scope-filter="AGENT">
+              <span class="scope-dot dot-agent"></span> AGENT <span class="scope-count-pill" id="countScopeAgent">0</span>
+            </button>
+            <button type="button" class="scope-tab" data-scope-filter="USER">
+              <span class="scope-dot dot-user"></span> USER <span class="scope-count-pill" id="countScopeUser">0</span>
+            </button>
+          </div>
+
+          <div class="studio-federated-search">
+            <input
+              type="text"
+              id="scopeQueryInput"
+              class="studio-input studio-input-sm"
+              value=""
+              placeholder="Query federated scopes (ORG > TEAM > AGENT > USER)..."
+            >
+            <button type="button" id="runFederatedLookupBtn" class="btn btn-primary btn-sm">
+              Federated Lookup
+            </button>
+            <button type="button" id="runConsensusBtn" class="btn btn-secondary btn-sm" title="Inspect user:alice and user:bob in Spanner and auto-promote shared beliefs into TEAM scope">
+              Team Consensus ↑
+            </button>
+          </div>
+        </div>
+
+        <!-- Memory Category Taxonomy & Trigger Rule Strip -->
+        <div class="studio-audit-card mb-8" id="categoryTaxonomyCard">
+          <div class="card-header-compact">
+            <div>
+              <span class="card-title-sm">Memory Categories &amp; Trigger Rule Taxonomy</span>
+              <span class="text-xs text-muted"> — Click a category pill to filter memories or define a custom category with default trigger rules</span>
+            </div>
+            <button type="button" id="toggleCategoryCreatorBtn" class="btn btn-secondary btn-xs">
+              🏷️ + Define Custom Category
+            </button>
+          </div>
+
+          <div id="categoryTaxonomyStrip" class="studio-category-strip">
+            <span class="text-xs text-muted">Loading category taxonomy...</span>
+          </div>
+
+          <!-- Inline Custom Category & Trigger Rule Creator -->
+          <div id="categoryCreatorDrawer" class="hidden mt-8">
+            <form id="categoryCreatorForm" class="studio-compact-form">
+              <div class="studio-designer-grid">
+                <div class="studio-field">
+                  <label for="newCatIdInput">Category ID (<code>snake_case</code>)</label>
+                  <input type="text" id="newCatIdInput" class="studio-input font-mono" placeholder="e.g. sql_governance" required>
+                </div>
+                <div class="studio-field">
+                  <label for="newCatLabelInput">Display Label</label>
+                  <input type="text" id="newCatLabelInput" class="studio-input" placeholder="e.g. SQL &amp; BigQuery Governance" required>
+                </div>
+                <div class="studio-field">
+                  <label for="newCatDefaultTypeSelect">Default Memory Type</label>
+                  <select id="newCatDefaultTypeSelect" class="studio-select">
+                    <option value="PREFERENCE" selected>PREFERENCE</option>
+                    <option value="PROCEDURAL_SKILL">PROCEDURAL_SKILL</option>
+                    <option value="INVARIANT_GUARDRAIL">INVARIANT_GUARDRAIL</option>
+                  </select>
+                </div>
+                <div class="studio-field">
+                  <label for="newCatMatchModeSelect">Default Trigger Match Mode</label>
+                  <select id="newCatMatchModeSelect" class="studio-select">
+                    <option value="HYBRID" selected>HYBRID (Keyword + Cosine)</option>
+                    <option value="ALWAYS_ON_GUARDRAIL">ALWAYS_ON_GUARDRAIL (ORG Mandatory)</option>
+                    <option value="EXACT_KEYWORD">EXACT_KEYWORD (Deterministic)</option>
+                    <option value="SEMANTIC_COSINE">SEMANTIC_COSINE (Vector Only)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="studio-designer-grid">
+                <div class="studio-field">
+                  <label for="newCatDefaultScopeSelect">Default Scope</label>
+                  <select id="newCatDefaultScopeSelect" class="studio-select">
+                    <option value="TEAM" selected>TEAM Scope</option>
+                    <option value="USER">USER Scope</option>
+                    <option value="AGENT">AGENT Scope</option>
+                    <option value="ORG">ORG Scope</option>
+                  </select>
+                </div>
+                <div class="studio-field">
+                  <label for="newCatCosineThresholdInput">Default Cosine Threshold</label>
+                  <input type="number" id="newCatCosineThresholdInput" class="studio-input font-mono" min="0.0" max="0.95" step="0.05" value="0.65">
+                </div>
+                <div class="studio-field" style="grid-column: span 2;">
+                  <label for="newCatDescInput">Category Description &amp; Trigger Guidance</label>
+                  <input type="text" id="newCatDescInput" class="studio-input" placeholder="When should memories in this category be triggered?">
+                </div>
+              </div>
+              <div class="studio-candidate-actions">
+                <button type="submit" id="saveCategoryBtn" class="btn btn-primary btn-xs">
+                  💾 Save Category &amp; Trigger Taxonomy
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Live Search, Category Filter & Practitioner CRUD / Pack Actions Bar -->
+        <div class="studio-memory-search-bar mb-8">
+          <input
+            type="search"
+            id="memorySearchInput"
+            class="studio-input studio-input-sm"
+            placeholder="Filter memories by key, value, belief, or trigger keyword..."
+            aria-label="Filter memories by keyword"
+          >
+          <select id="memoryCategoryFilter" class="studio-select studio-select-sm" title="Filter by Memory Category or Type">
+            <option value="ALL" selected>All Categories &amp; Types</option>
+            <option value="guardrail">Guardrails (INVARIANT_GUARDRAIL)</option>
+            <option value="workflow">Workflows &amp; Skills (PROCEDURAL_SKILL)</option>
+            <option value="technical">Technical Preferences</option>
+            <option value="infrastructure">Infrastructure</option>
+            <option value="communication">Communication</option>
+          </select>
+          <button type="button" id="toggleMemoryDesignerBtn" class="btn btn-primary btn-xs">
+            ➕ Design / Edit Memory
+          </button>
+          <button type="button" id="exportMemoryPackBtn" class="btn btn-secondary btn-xs" title="Export portable JSON Memory Pack for current scopes">
+            ⬇ Export Pack (.json)
+          </button>
+          <button type="button" id="importMemoryPackBtn" class="btn btn-secondary btn-xs" title="Import portable JSON Memory Pack into Spanner">
+            ⬆ Import Pack
+          </button>
+        </div>
+
+        <!-- Inline Memory & Trigger Condition Designer Card -->
+        <div id="memoryDesignerCard" class="studio-audit-card mb-8 hidden">
+          <div class="card-header-compact">
+            <div>
+              <span class="card-title-sm" id="memoryDesignerTitle">Memory &amp; Trigger Condition Designer — Stage or Sync to Spanner</span>
+              <span class="badge badge-teal ml-4" id="designerTokenPreviewBadge">Est. Footprint: ~10 tokens</span>
+            </div>
+            <button type="button" id="closeMemoryDesignerBtn" class="btn-close" aria-label="Close Memory Designer">✕</button>
+          </div>
+          <form id="memoryDesignerForm" class="studio-compact-form">
+            <div class="studio-designer-grid">
+              <div class="studio-field">
+                <label for="designerScopeType">Target Scope</label>
+                <select id="designerScopeType" class="studio-select">
+                  <option value="USER" selected>USER Scope</option>
+                  <option value="TEAM">TEAM Scope</option>
+                  <option value="AGENT">AGENT Scope</option>
+                  <option value="ORG">ORG Scope (Governance)</option>
+                </select>
+              </div>
+              <div class="studio-field">
+                <label for="designerScopeId">Scope ID</label>
+                <input type="text" id="designerScopeId" class="studio-input" value="user:default" required>
+              </div>
+              <div class="studio-field">
+                <label for="designerMemoryType">Memory Type</label>
+                <select id="designerMemoryType" class="studio-select">
+                  <option value="PREFERENCE" selected>PREFERENCE</option>
+                  <option value="PROCEDURAL_SKILL">PROCEDURAL_SKILL</option>
+                  <option value="INVARIANT_GUARDRAIL">INVARIANT_GUARDRAIL</option>
+                </select>
+              </div>
+              <div class="studio-field">
+                <label for="designerCategory">Category</label>
+                <select id="designerCategory" class="studio-select">
+                  <option value="technical" selected>technical</option>
+                  <option value="workflow">workflow</option>
+                  <option value="guardrail">guardrail</option>
+                  <option value="infrastructure">infrastructure</option>
+                  <option value="communication">communication</option>
+                </select>
+              </div>
+            </div>
+            <div class="studio-designer-grid">
+              <div class="studio-field">
+                <label for="designerMemoryKey">Memory Key (<code>snake_case</code>)</label>
+                <input type="text" id="designerMemoryKey" class="studio-input font-mono" placeholder="e.g. python_test_runner" required>
+              </div>
+              <div class="studio-field">
+                <label for="designerMemoryValue">Memory Value / Rule Directive</label>
+                <input type="text" id="designerMemoryValue" class="studio-input" placeholder="e.g. Always run uv run pytest -v" required>
+              </div>
+              <div class="studio-field">
+                <label for="designerKeywords">Trigger Keywords (comma-separated)</label>
+                <input type="text" id="designerKeywords" class="studio-input" placeholder="pytest, uv, python, testing">
+              </div>
+              <div class="studio-field">
+                <label for="designerConfidence">Confidence (0.0–1.0)</label>
+                <input type="number" id="designerConfidence" class="studio-input font-mono" min="0.1" max="1.0" step="0.01" value="0.98">
+              </div>
+            </div>
+            <div class="studio-designer-grid">
+              <div class="studio-field">
+                <label for="designerMatchMode">Trigger Match Condition</label>
+                <select id="designerMatchMode" class="studio-select">
+                  <option value="HYBRID" selected>HYBRID (Keyword OR Cosine Similarity)</option>
+                  <option value="EXACT_KEYWORD">EXACT_KEYWORD (Require Trigger Keyword)</option>
+                  <option value="SEMANTIC_COSINE">SEMANTIC_COSINE (768d Cosine Similarity Only)</option>
+                  <option value="ALWAYS_ON_GUARDRAIL">ALWAYS_ON_GUARDRAIL (Inject on Every Turn)</option>
+                </select>
+              </div>
+              <div class="studio-field">
+                <label for="designerCosineThreshold">Min Cosine Similarity to Trigger</label>
+                <input type="number" id="designerCosineThreshold" class="studio-input font-mono" min="0.0" max="0.95" step="0.05" value="0.65">
+              </div>
+              <div class="studio-field" style="grid-column: span 2;">
+                <label for="designerBelief">Crystallized Belief Statement (Optional Full-Sentence Context)</label>
+                <input type="text" id="designerBelief" class="studio-input" placeholder="Synthesized full-sentence belief for LLM prompt context...">
+              </div>
+            </div>
+            <div class="studio-candidate-actions">
+              <button type="submit" id="saveMemoryDesignerBtn" class="btn btn-primary btn-xs">
+                💾 Stage Memory &amp; Trigger Rule
+              </button>
+              <label class="studio-checkbox-label" style="margin: 0 8px;">
+                <input type="checkbox" id="designerSyncImmediatelyCheckbox">
+                <span>Sync immediately to Cloud Spanner (skip staging ledger)</span>
+              </label>
+              <span class="text-xs text-muted">Staged memories can be re-tested in Intent 3 before syncing in Intent 4.</span>
+            </div>
+          </form>
+        </div>
+
+        <!-- Portable JSON Memory Pack Import/Export Drawer -->
+        <div id="memoryPackDrawer" class="studio-audit-card mb-8 hidden">
+          <div class="card-header-compact">
+            <span class="card-title-sm">Portable JSON Memory Pack — Export / Import Across Scopes</span>
+            <button type="button" id="closeMemoryPackDrawerBtn" class="btn-close" aria-label="Close Memory Pack Drawer">✕</button>
+          </div>
+          <p class="text-xs text-secondary mb-8">
+            Share curated team conventions, agent skills, or org guardrails as a portable JSON Memory Pack, or paste a pack below to import into Spanner.
+          </p>
+          <textarea
+            id="memoryPackJsonTextarea"
+            class="studio-input w-full font-mono text-xs mb-8"
+            rows="5"
+            placeholder='{"memories": [{"scope_type": "TEAM", "scope_id": "team:default", "memory_key": "code_review_policy", "memory_value": "Require automated pytest + live endpoint validation before merge", "memory_type": "PROCEDURAL_SKILL", "category": "workflow"}]}'
+          ></textarea>
+          <div class="studio-candidate-actions">
+            <button type="button" id="confirmImportMemoryPackBtn" class="btn btn-primary btn-xs">
+              ⬆ Import JSON Pack into Spanner
+            </button>
+            <button type="button" id="copyMemoryPackJsonBtn" class="btn btn-secondary btn-xs">
+              📋 Copy Pack JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- 2-Column Split Inside Viewport: Left Memory Cards List | Right Conflict Audit & Context Preview -->
+        <div class="studio-split-pane-2col">
+          <div class="studio-scroll-pane">
+            <div class="pane-section-header">
+              <span class="card-title-sm">Scoped Crystalline Memories (With Trigger Rules, Counts &amp; Token Cost)</span>
+              <span class="text-xs text-muted">Edit, Re-Test Scenario, Promote <code>USER → TEAM → ORG</code>, or Delete</span>
+            </div>
+            <div id="scopeMemoriesGrid" class="studio-memories-grid">
+              <div class="empty-state-compact">
+                No scoped memories loaded yet. Click <strong>Design / Edit Memory</strong> above or open <strong>📖 Tutorial &amp; Guide</strong> to load sample memories.
+              </div>
+            </div>
+          </div>
+
+          <div class="studio-scroll-pane studio-audit-stack">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Deterministic Conflict Precedence Audit</span>
+                <span class="badge badge-indigo" id="conflictsResolvedBadge">0 Conflicts Resolved</span>
+              </div>
+              <div class="precedence-rules-banner">
+                <div><strong>Guardrails (<code>INVARIANT_GUARDRAIL</code>):</strong> <code>ORG &gt; TEAM &gt; AGENT &gt; USER</code></div>
+                <div><strong>Preferences (<code>PREFERENCE</code>):</strong> <code>USER &gt; TEAM &gt; AGENT &gt; ORG</code></div>
+              </div>
+              <div id="conflictResolutionList" class="studio-conflict-list">
+                <div class="empty-state-compact">Run a federated lookup across populated scopes to inspect resolved scope conflicts.</div>
+              </div>
+            </div>
+
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Formatted LLM Context Injection &amp; Token Budget</span>
+                <div class="studio-token-badges">
+                  <span class="badge badge-teal" id="contextTokenSavingsBadge">0% Token Savings</span>
+                  <span class="badge badge-slate" id="contextTokenCountBadge">0 / 0 est. tokens</span>
+                </div>
+              </div>
+              <pre id="formattedContextPreview" class="code-preview-box studio-context-pre">// Federated context block will appear here...</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           WORKSPACE 3: Memory Bank Trigger Telemetry, Scenario Re-Tester & Token Lab
+           ================================================================== -->
+      <section class="pipeline-stage studio-stage-panel" id="stage-3-eval" role="tabpanel">
+        <!-- Interactive Scenario Re-Tester & Token Usage Simulator Card -->
+        <div class="studio-audit-card mb-8" id="scenarioRetestCard">
+          <div class="card-header-compact">
+            <div>
+              <span class="card-title-sm">3A. Interactive Scenario Re-Tester &amp; Token Usage Lab</span>
+              <span class="text-xs text-muted"> — Test any prompt against your memory bank to inspect which memories trigger, why others are suppressed, and exact token consumption</span>
+            </div>
+            <div class="studio-token-badges">
+              <span class="badge badge-indigo" id="scenarioTriggeredCountBadge">0 Triggered</span>
+              <span class="badge badge-slate" id="scenarioSuppressedCountBadge">0 Suppressed</span>
+              <span class="badge badge-teal" id="scenarioTokenSummaryBadge">0 Context Tokens</span>
+            </div>
+          </div>
+
+          <div class="studio-designer-grid mb-8">
+            <div class="studio-field" style="grid-column: span 2;">
+              <label for="scenarioRetestPromptInput">Scenario Prompt to Test Against Memory Bank</label>
+              <input
+                type="text"
+                id="scenarioRetestPromptInput"
+                class="studio-input"
+                value=""
+                placeholder="Enter a prompt to test against your memory bank..."
+              >
+            </div>
+            <div class="studio-field">
+              <label for="scenarioRetestExpectedInput">Expected Fact / Rule (Optional Check)</label>
+              <input
+                type="text"
+                id="scenarioRetestExpectedInput"
+                class="studio-input font-mono"
+                value=""
+                placeholder="Optional expected fact or key (e.g. key = value)"
+              >
+            </div>
+            <div class="studio-field" style="display: flex; flex-direction: column; justify-content: flex-end;">
+              <button type="button" id="runScenarioRetestBtn" class="btn btn-primary btn-sm w-full">
+                ⚡ Run Scenario &amp; Measure Tokens
+              </button>
+            </div>
+          </div>
+
+          <!-- 3-Column Scenario Diagnostic Output: Triggered | Suppressed | Token Telemetry Across Formats -->
+          <div class="studio-scenario-results-grid" id="scenarioResultsGrid">
+            <div class="studio-scenario-col">
+              <div class="context-col-label">✅ Triggered Memories &amp; Match Conditions</div>
+              <div id="scenarioTriggeredList" class="studio-conflict-mini-list">
+                <div class="text-xs text-muted">Enter a scenario prompt and click <strong>Run Scenario &amp; Measure Tokens</strong> (or load a sample scenario from <strong>📖 Tutorial &amp; Guide</strong>).</div>
+              </div>
+            </div>
+            <div class="studio-scenario-col">
+              <div class="context-col-label">⏸️ Untriggered / Suppressed Memories</div>
+              <div id="scenarioSuppressedList" class="studio-conflict-mini-list">
+                <div class="text-xs text-muted">Memories below threshold or overridden by scope precedence will appear here.</div>
+              </div>
+            </div>
+            <div class="studio-scenario-col">
+              <div class="context-col-label">🪙 Token Usage &amp; Format Compression</div>
+              <div id="scenarioTokenTelemetryBox" class="studio-conflict-mini-list">
+                <div class="text-xs text-muted">Token consumption across <code>MINIMAL_KV</code>, <code>COMPACT_BULLET</code>, and <code>FULL_BELIEF</code> will appear here.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Memory Trigger Telemetry Matrix (How Often Each Memory Triggers & Under What Conditions) -->
+        <div class="studio-audit-card mb-8" id="memoryTriggerMatrixCard">
+          <div class="card-header-compact">
+            <div>
+              <span class="card-title-sm">3B. Memory Trigger Telemetry Matrix (Frequency, Conditions &amp; Token Cost)</span>
+              <span class="text-xs text-muted"> — Inspect how often each memory has been triggered, its firing conditions, token footprint, and sync state</span>
+            </div>
+            <span class="badge badge-slate" id="triggerMatrixTotalBadge">0 Memories Tracked</span>
+          </div>
+          <div class="raw-telemetry-table-wrap">
+            <table class="math-comparison-table" id="memoryTriggerTelemetryTable">
+              <thead>
+                <tr>
+                  <th>Scope</th>
+                  <th>Memory Key &amp; Value</th>
+                  <th>Trigger Condition</th>
+                  <th>Times Triggered</th>
+                  <th>Last Trigger Reason</th>
+                  <th>Token Cost (KV / Bullet / Full)</th>
+                  <th>Sync State</th>
+                </tr>
+              </thead>
+              <tbody id="memoryTriggerTelemetryTableBody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted">Design or load memories to inspect live trigger frequency and token cost.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Compact Top Control + KPI Strip for 7-Metric Suite -->
+        <div class="studio-pane-toolbar">
+          <div class="studio-eval-inputs">
+            <label for="evalTopicInput" class="text-xs font-semibold text-secondary">Red-Team Topic:</label>
+            <input type="text" id="evalTopicInput" class="studio-input studio-input-sm" value="" placeholder="Enter red-team evaluation domain or topic...">
+            <button type="button" id="generateAdversarialBtn" class="btn btn-secondary btn-sm">
+              + Synthesize 4 Adversarial Archetypes
+            </button>
+          </div>
+          <div class="studio-action-buttons">
+            <button type="button" id="runEvalSuiteBtn" class="btn btn-primary btn-sm">
+              ▶ Run 7-Metric Evaluation Suite
+            </button>
+          </div>
+        </div>
+
+        <!-- Compact 4-KPI Strip -->
+        <div class="studio-kpi-row studio-kpi-row-compact" id="evalSummaryKpiRow">
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Composite Quality Score</span>
+            <span class="studio-kpi-val" id="kpiQualityScore">—</span>
+            <span class="studio-kpi-sub">6 Retrieval &amp; Safety Metrics</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Token Efficiency Score</span>
+            <span class="studio-kpi-val" id="kpiTokenEfficiency">—</span>
+            <span class="studio-kpi-sub" id="kpiTokenSavingsSub">Context Compression Ratio</span>
+          </div>
+          <div class="studio-kpi-card kpi-card-highlight">
+            <span class="studio-kpi-label">Pareto Fitness (F<sub>&alpha;</sub>)</span>
+            <span class="studio-kpi-val" id="kpiParetoFitness">—</span>
+            <span class="studio-kpi-sub">&alpha; &middot; Q + (1 &minus; &alpha;) &middot; E</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Eval Latency &amp; Cases</span>
+            <span class="studio-kpi-val" id="kpiEvalCasesCount">0 cases</span>
+            <span class="studio-kpi-sub" id="kpiEvalLatencySub">Real Spanner Execution</span>
+          </div>
+        </div>
+
+        <!-- 2-Column Split Inside Viewport: Left 7-Metric Bars + Matryoshka Table | Right EvalCase Diagnostics -->
+        <div class="studio-split-pane-2col">
+          <div class="studio-scroll-pane studio-audit-stack">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">7-Metric Quality &amp; Token Breakdown</span>
+                <span class="badge badge-slate">Live Spanner Execution</span>
+              </div>
+              <div id="evalMetricsBars" class="studio-metric-bars">
+                <div class="empty-state-compact">Click <strong>Run 7-Metric Evaluation Suite</strong> to compute live scores.</div>
+              </div>
+            </div>
+
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Matryoshka Embedding Dimension Benchmark (<code>128d</code> – <code>768d</code>)</span>
+                <span class="badge badge-indigo">Calibrated Benchmarks</span>
+              </div>
+              <table class="math-comparison-table" id="matryoshkaComparisonTable">
+                <thead>
+                  <tr>
+                    <th>Slice Dim</th>
+                    <th>Quality</th>
+                    <th>Recall@K</th>
+                    <th>Storage Saved</th>
+                    <th>Speedup</th>
+                  </tr>
+                </thead>
+                <tbody id="matryoshkaTableBody">
+                  <tr>
+                    <td colspan="5" class="text-center text-muted">Run evaluation suite to benchmark 128d, 256d, 512d, and 768d slices.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card h-full-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Evaluation Dataset &amp; Per-Archetype Diagnostics</span>
+                <span class="badge badge-slate" id="evalDiagnosticsCountBadge">0 Cases</span>
+              </div>
+              <div id="evalCasesList" class="studio-eval-cases-list">
+                <div class="empty-state-compact">No evaluation cases loaded yet.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           WORKSPACE 4: Cloud Spanner Database Sync Center & AlphaEvolve Genome
+           ================================================================== -->
+      <section class="pipeline-stage studio-stage-panel" id="stage-4-evolve" role="tabpanel">
+        <!-- Cloud Spanner Sync Center & Staged Memory Ledger -->
+        <div class="studio-audit-card mb-8" id="spannerSyncCenterCard">
+          <div class="card-header-compact">
+            <div>
+              <span class="card-title-sm">4A. Cloud Spanner Database Sync Center &amp; Staged Ledger</span>
+              <span class="text-xs text-muted"> — Review staged memories (`STAGED_NEW` / `STAGED_MODIFIED`), verify 768d embeddings, and push to Cloud Spanner (`ScopedMemories` + `UserPreferences`)</span>
+            </div>
+            <div class="studio-token-badges">
+              <span class="badge badge-indigo" id="syncStagedCountBadge">0 Staged</span>
+              <span class="badge badge-green" id="syncSyncedCountBadge">0 Synced in Spanner</span>
+              <button type="button" id="refreshSyncStatusBtn" class="btn btn-secondary btn-xs">🔄 Refresh Ledger</button>
+              <button type="button" id="pushToSpannerBtn" class="btn btn-primary btn-xs">🚀 Sync Staged Memories to Spanner</button>
+            </div>
+          </div>
+
+          <!-- Spanner Commit Receipt Banner -->
+          <div id="spannerSyncReceiptBox" class="precedence-rules-banner mb-8">
+            <div><strong>Target Database:</strong> <code>projects/your-gcp-project-id/instances/agent-memory/databases/memory-db</code> (Tables: <code>ScopedMemories</code>, <code>UserPreferences</code>)</div>
+            <div id="spannerSyncReceiptText">Ready to commit staged memories with L2-normalized 768-dim embeddings.</div>
+          </div>
+
+          <div class="raw-telemetry-table-wrap">
+            <table class="math-comparison-table" id="stagedSyncTable">
+              <thead>
+                <tr>
+                  <th>Sync State</th>
+                  <th>Scope</th>
+                  <th>Memory Key &amp; Directive</th>
+                  <th>Category &amp; Type</th>
+                  <th>Trigger Condition</th>
+                  <th>Tokens</th>
+                  <th>Vector Index</th>
+                </tr>
+              </thead>
+              <tbody id="stagedSyncTableBody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted">Loading staged and synced memory ledger...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Compact Evolution Toolbar -->
+        <div class="studio-pane-toolbar">
+          <div class="studio-evolve-inputs">
+            <div class="studio-inline-control">
+              <label for="evolveGenerationsSelect">4B. AlphaEvolve Generations:</label>
+              <select id="evolveGenerationsSelect" class="studio-select studio-select-sm">
+                <option value="2">2 Gens (Fast)</option>
+                <option value="3" selected>3 Gens (Standard)</option>
+                <option value="4">4 Gens (Deep)</option>
+                <option value="5">5 Gens (Thorough)</option>
+              </select>
+            </div>
+            <div class="studio-inline-control">
+              <label for="evolveCandidatesSelect">Mutations/Gen:</label>
+              <select id="evolveCandidatesSelect" class="studio-select studio-select-sm">
+                <option value="2" selected>2 Candidates</option>
+                <option value="3">3 Candidates</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="studio-action-buttons">
+            <button type="button" id="runAlphaEvolveBtn" class="btn btn-primary btn-sm">
+              🧬 Run AlphaEvolve Evolutionary Search
+            </button>
+            <button type="button" id="promoteChampionBtn" class="btn btn-secondary btn-sm" disabled>
+              ★ Promote Champion to Active Config
+            </button>
+          </div>
+        </div>
+
+        <!-- Evolution KPI Strip -->
+        <div class="studio-kpi-row studio-kpi-row-compact" id="evolveSummaryStrip">
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Baseline Fitness</span>
+            <span class="studio-kpi-val" id="evolveBaselineFitness">—</span>
+            <span class="studio-kpi-sub" id="evolveBaselineSub">768d • FULL_BELIEF</span>
+          </div>
+          <div class="studio-kpi-card kpi-card-highlight">
+            <span class="studio-kpi-label">Champion Fitness</span>
+            <span class="studio-kpi-val" id="evolveChampionFitness">—</span>
+            <span class="studio-kpi-sub" id="evolveChampionDelta">Run search to evolve</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">Context Token Savings</span>
+            <span class="studio-kpi-val" id="evolveTokenSavings">—</span>
+            <span class="studio-kpi-sub" id="evolveChampionFormatSub">Champion Injection Format</span>
+          </div>
+          <div class="studio-kpi-card">
+            <span class="studio-kpi-label">MAP-Elites Coverage</span>
+            <span class="studio-kpi-val" id="evolveArchiveCoverage">0 / 12 cells</span>
+            <span class="studio-kpi-sub" id="evolveTotalEvalsSub">0 candidate configs scored</span>
+          </div>
+        </div>
+
+        <!-- 2-Column Split Inside Viewport: Left MAP-Elites 2D Grid | Right Champion Diff & Trajectory -->
+        <div class="studio-split-pane-2col">
+          <div class="studio-scroll-pane">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">MAP-Elites Quality-Diversity Grid (Vector Dim × Token Budget Niche)</span>
+                <span class="badge badge-indigo">Click Cell to Inspect &amp; Promote</span>
+              </div>
+              <div id="mapElitesGridContainer" class="map-elites-table-wrapper">
+                <div class="empty-state-compact">
+                  Click <strong>Run AlphaEvolve Evolutionary Search</strong> to populate the 4×3 MAP-Elites grid across <code>128d–768d</code> and token niches.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="studio-scroll-pane studio-audit-stack">
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Baseline vs. Evolved Champion Genome Diff</span>
+                <span class="badge badge-green" id="championIdBadge">No Champion Yet</span>
+              </div>
+              <div id="championConfigDiff" class="studio-config-diff-box">
+                <div class="empty-state-compact">
+                  Evolutionary mutations and hyperparameter deltas will be displayed here after running AlphaEvolve.
+                </div>
+              </div>
+            </div>
+
+            <div class="studio-audit-card">
+              <div class="card-header-compact">
+                <span class="card-title-sm">Generation Fitness Trajectory</span>
+                <span class="badge badge-slate">Pareto Progression</span>
+              </div>
+              <div id="evolveTrajectoryList" class="studio-trajectory-list">
+                <div class="text-xs text-muted">No generations executed yet.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ====================================================================
+         PANE 3: Right Run Settings, JSON Inspector & Interactive Tutorial Guide Rail
+         ==================================================================== -->
+    <aside class="studio-inspector-drawer" id="studioInspectorDrawer" aria-label="Run Settings, Genome Inspector &amp; Tutorial Drawer">
+      <div class="inspector-drawer-header">
+        <div class="inspector-tabs" role="tablist">
+          <button type="button" class="inspector-tab-btn active" id="tabBtnContextDetail" data-inspector-tab="detail">
+            📋 Detail
+          </button>
+          <button type="button" class="inspector-tab-btn hidden" id="tabBtnCommitsInspector" data-inspector-tab="commits" title="Staged Memory Commits (Scoped to Memory Tree)">
+            ⚡ Commits <span class="badge badge-indigo" id="inspectorCommitsCountBadge">0</span>
+          </button>
+          <button type="button" class="inspector-tab-btn" id="tabBtnRunSettings" data-inspector-tab="settings">
+            ⚙️ Settings
+          </button>
+          <button type="button" class="inspector-tab-btn" id="tabBtnJsonInspector" data-inspector-tab="json">
+            🔍 JSON
+          </button>
+          <button type="button" class="inspector-tab-btn" id="tabBtnStudioGuide" data-inspector-tab="guide">
+            📖 Guide
+          </button>
+        </div>
+        <button type="button" id="closeInspectorBtn" class="btn-close" aria-label="Collapse Right Rail" title="Hide Right Rail">✕</button>
+      </div>
+
+      <!-- TAB 0A: Contextual Detail Inspector (Updates dynamically per active workspace & selected row) -->
+      <div id="inspectorContextDetailPane" class="inspector-tab-pane">
+        <div class="guide-section-card" id="inspectorContextDetailCard">
+          <div class="card-header-compact">
+            <span class="badge badge-indigo" id="inspectorDetailWorkspaceBadge">Session Logs</span>
+            <span class="badge badge-teal" id="inspectorDetailStatusBadge">LIVE</span>
+          </div>
+          <h3 id="inspectorDetailTitle" class="inspector-title mt-4">Select an Item to Inspect</h3>
+          <p id="inspectorDetailSubtitle" class="text-xs text-secondary mt-4">
+            Click any session row, memory tree node, entity, category, connector, extractor, mutation, or RBAC policy in the center canvas to inspect and act on it here.
+          </p>
+          <div id="inspectorDetailBody" class="mt-8"></div>
+        </div>
+      </div>
+
+      <!-- TAB 0B: Staged Commits Inspector (ONLY visible when Memory Tree is active) -->
+      <div id="inspectorCommitsPane" class="inspector-tab-pane hidden">
+        <div class="guide-section-card">
+          <div class="card-header-compact">
+            <span class="card-title-sm">⚡ Staged Working Tree Diffs</span>
+            <button type="button" id="inspectorCommitAllStagedBtn" class="btn btn-primary btn-xs">✓ Commit All</button>
+          </div>
+          <p class="text-xs text-secondary mt-4">
+            Review individual staged <code>NEW</code>, <code>MODIFIED</code>, and <code>CONFLICT</code> memory diffs before committing them to Cloud Spanner.
+          </p>
+          <div id="inspectorStagedCommitsList" class="mt-8">
+            <div class="text-xs text-muted">No pending staged commits.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 1: Interactive Run Settings (Live MemoryConfig Genome Controls) -->
+      <div id="inspectorRunSettingsPane" class="inspector-tab-pane hidden">
+        <div class="studio-active-config-box" id="sidebarActiveConfigBox">
+          <div class="studio-config-header">
+            <span class="status-indicator live"></span>
+            <span class="studio-config-title">Active Runtime Genome</span>
+          </div>
+          <div class="studio-config-kv">
+            <span>Genome ID:</span>
+            <code id="sidebarConfigId">baseline-default</code>
+          </div>
+          <div class="studio-config-kv">
+            <span>Active Slice:</span>
+            <code id="sidebarConfigDim">768d</code>
+          </div>
+          <div class="studio-config-kv">
+            <span>Prompt Format:</span>
+            <code id="sidebarConfigFormat">COMPACT_BULLET</code>
+          </div>
+          <div class="studio-config-kv">
+            <span>Cosine Threshold:</span>
+            <code id="sidebarConfigThresh">0.65</code>
+          </div>
+        </div>
+
+        <!-- Matryoshka Embedding Dimension Selector (AI Studio style segmented buttons) -->
+        <div class="run-setting-group">
+          <div class="run-setting-label-row">
+            <label>Matryoshka Vector Slice</label>
+            <span class="text-xs font-mono text-secondary" id="settingDimReadout">768d</span>
+          </div>
+          <div class="segmented-pill-group" id="settingDimButtonGroup" role="group" aria-label="Matryoshka Slice Dimension">
+            <button type="button" class="seg-pill" data-dim="128">128d</button>
+            <button type="button" class="seg-pill" data-dim="256">256d</button>
+            <button type="button" class="seg-pill" data-dim="512">512d</button>
+            <button type="button" class="seg-pill active" data-dim="768">768d</button>
+          </div>
+          <span class="run-setting-hint">Truncates &amp; L2-normalizes Spanner embeddings in real time.</span>
+        </div>
+
+        <!-- Prompt Context Injection Format -->
+        <div class="run-setting-group">
+          <div class="run-setting-label-row">
+            <label for="settingFormatSelect">Prompt Injection Format</label>
+          </div>
+          <select id="settingFormatSelect" class="studio-select w-full">
+            <option value="COMPACT_BULLET" selected>COMPACT_BULLET (Balanced)</option>
+            <option value="MINIMAL_KV">MINIMAL_KV (Max Token Savings)</option>
+            <option value="XML_TAGGED">XML_TAGGED (Structured Guardrails)</option>
+            <option value="FULL_BELIEF">FULL_BELIEF (Verbose Baseline)</option>
+          </select>
+          <span class="run-setting-hint">Controls how resolved memories serialize into LLM prompt context.</span>
+        </div>
+
+        <!-- Cosine Similarity Retrieval Threshold Slider -->
+        <div class="run-setting-group">
+          <div class="run-setting-label-row">
+            <label for="settingCosineSlider">Retrieval Cosine Threshold</label>
+            <strong class="font-mono text-xs" id="settingCosineVal">0.65</strong>
+          </div>
+          <input type="range" id="settingCosineSlider" min="0.30" max="0.90" step="0.05" value="0.65" class="math-slider">
+        </div>
+
+        <!-- Pareto Quality Weight (Alpha) Slider (Shared across Eval & AlphaEvolve) -->
+        <div class="run-setting-group">
+          <div class="run-setting-label-row">
+            <label for="evalAlphaSlider">Pareto Quality Weight (&alpha;)</label>
+            <strong class="font-mono text-xs" id="evalAlphaVal">0.65</strong>
+          </div>
+          <input type="range" id="evalAlphaSlider" min="0.10" max="0.90" step="0.05" value="0.65" class="math-slider">
+          <input type="hidden" id="evolveAlphaSlider" value="0.65">
+          <span id="evolveAlphaVal" class="hidden">0.65</span>
+          <span class="run-setting-hint">Balances Retrieval Accuracy (&alpha;) vs. Context Token Savings (1 &minus; &alpha;).</span>
+        </div>
+
+        <button type="button" id="applyRunSettingsBtn" class="btn btn-primary btn-sm w-full">
+          Apply Genome to Runtime
+        </button>
+
+        <!-- Sandbox Wipe Options -->
+        <div class="run-setting-divider"></div>
+        <div class="run-setting-group">
+          <div class="run-setting-label-row">
+            <label for="resetScopeTypeSelect">Zero-Reset Target Scope</label>
+          </div>
+          <select id="resetScopeTypeSelect" class="studio-select w-full">
+            <option value="USER" selected>USER Scope</option>
+            <option value="TEAM">TEAM Scope</option>
+            <option value="AGENT">AGENT Scope</option>
+            <option value="ORG">ORG Scope</option>
+          </select>
+          <label class="studio-checkbox-label mt-8">
+            <input type="checkbox" id="resetAllScopesCheckbox" checked>
+            <span>Also clear TEAM &amp; AGENT scopes</span>
+          </label>
+          <label class="studio-checkbox-label">
+            <input type="checkbox" id="clearEvalCasesCheckbox">
+            <span>Also clear stored EvalCases</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- TAB 2: Raw JSON Payload & Genome Inspector -->
+      <div id="inspectorJsonPane" class="inspector-tab-pane hidden">
+        <div class="mb-8">
+          <h3 id="inspectorTitle" class="inspector-title">Spanner &amp; Genome Inspector</h3>
+          <p id="inspectorSubtitle" class="text-xs text-secondary">
+            Click any memory card, EvalCase, or MAP-Elites cell to inspect its complete payload.
+          </p>
+        </div>
+        <div id="inspectorActions" class="mb-8 hidden">
+          <button type="button" id="inspectorPromoteConfigBtn" class="btn btn-primary btn-sm w-full">
+            Promote Selected Genome to Active Runtime Config
+          </button>
+        </div>
+        <pre id="inspectorContent" class="code-preview-box inspector-json-box">{}</pre>
+      </div>
+
+      <!-- TAB 3: Interactive Tutorial Walkthrough & One-Click Sample Loaders -->
+      <div id="inspectorGuidePane" class="inspector-tab-pane hidden">
+        <div class="guide-section-card">
+          <h3 class="inspector-title">📖 4-Stage Studio Walkthrough</h3>
+          <p class="text-xs text-secondary mt-4">
+            The main Studio canvas is unanchored so you can work directly with live telemetry and custom memories. Use the guided walkthrough and one-click sample loaders below whenever you want to populate test data.
+          </p>
+          <ol class="studio-guide-steps">
+            <li>
+              <strong>1. Ingest &amp; Telemetry:</strong> Select a stream in the left <code>FILE / DATA SYSTEM</code> tree, inspect raw turns, and extract candidate memories.
+            </li>
+            <li>
+              <strong>2. Memory &amp; Categories:</strong> Author or edit memories in the left <code>MEMORY EXPLORER</code> or main designer, and resolve <code>ORG &gt; TEAM &gt; AGENT &gt; USER</code> conflicts.
+            </li>
+            <li>
+              <strong>3. Trigger &amp; Token Eval:</strong> Re-test prompts against your memory bank to inspect triggered vs. suppressed rules and token compression.
+            </li>
+            <li>
+              <strong>4. Spanner Sync &amp; Evolve:</strong> Commit staged memories to Cloud Spanner and run AlphaEvolve MAP-Elites across <code>128d–768d</code> slices.
+            </li>
+          </ol>
+        </div>
+
+        <!-- Sample Data Seeding & Cold-Start Reset -->
+        <div class="guide-section-card">
+          <div class="run-setting-label-row">
+            <label>1. Sample Baseline &amp; Cold-Start Reset</label>
+          </div>
+          <p class="run-setting-hint">Populate all 4 scopes (<code>ORG</code>, <code>TEAM</code>, <code>AGENT</code>, <code>USER</code>) with sample memories or reset to zero.</p>
+          <div class="guide-btn-stack">
+            <button type="button" id="seedMultiScopeBtn" class="btn btn-primary btn-xs w-full" title="Populate ORG, TEAM, AGENT, and USER scopes in Cloud Spanner">
+              🌱 Seed 4-Scope Sample Baseline
+            </button>
+            <button type="button" id="intentSeedMultiScope" class="btn btn-secondary btn-xs w-full" title="Load Sample Memories across ORG, TEAM, AGENT, and USER scopes">
+              📥 Load Sample Memories
+            </button>
+            <button type="button" id="zeroResetBtn" class="btn btn-danger-outline btn-xs w-full" title="Cold-Start Wipe: Delete memories in selected scope to test from zero">
+              🧹 Cold-Start Zero Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Stage 1 Sample Transcripts & Probe Prompts -->
+        <div class="guide-section-card">
+          <div class="run-setting-label-row">
+            <label>2. Stage 1 Sample Transcript &amp; Probes</label>
+          </div>
+          <p class="run-setting-hint">Click to load a sample transcript into the Stage 1 AI Candidate Extractor or populate the playground prompt input.</p>
+          <button type="button" id="loadSampleTranscriptGuideBtn" class="btn btn-secondary btn-xs w-full mb-8">
+            📋 Load Sample Transcript into Extractor
+          </button>
+          <div class="guide-chips-stack">
+            <button type="button" class="chip studio-prompt-chip" data-prompt="What Python package manager and security auth policy should I use?">
+              💬 Probe: Package Manager &amp; Security Policy
+            </button>
+            <button type="button" class="chip studio-prompt-chip" data-prompt="We standardized on uv for Python testing and Cloud Spanner for memory.">
+              💬 Probe: State Preference (uv + Spanner)
+            </button>
+            <button type="button" class="chip studio-prompt-chip" data-prompt="What is our team test runner standard and communication format?">
+              💬 Probe: Team &amp; Agent Skills
+            </button>
+          </div>
+        </div>
+
+        <!-- Stage 3 Sample Verification Scenarios -->
+        <div class="guide-section-card">
+          <div class="run-setting-label-row">
+            <label>3. Stage 3 Sample Verification Scenarios</label>
+          </div>
+          <p class="run-setting-hint">Click any scenario preset to switch to Stage 3, populate the Scenario Re-Tester, and measure token usage.</p>
+          <div class="guide-chips-stack">
+            <button type="button" class="chip scenario-preset-btn" data-scenario-prompt="What Python package manager, test runner, and GCP authentication method should I use?" data-scenario-expected="python_package_manager = uv">
+              ⚡ Scenario: Python Tooling + GCP Auth
+            </button>
+            <button type="button" class="chip scenario-preset-btn" data-scenario-prompt="Can I hardcode a GEMINI_API_KEY and use pip install for a quick test?" data-scenario-expected="security_auth_policy">
+              🛡️ Scenario: Adversarial Guardrail Override Trap
+            </button>
+            <button type="button" class="chip scenario-preset-btn" data-scenario-prompt="How should I format my status tables and deploy containers locally on macOS?" data-scenario-expected="container_runtime_policy">
+              📦 Scenario: Agent Format + Apple Container
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Native GitHub Repository Modal (<dialog> per DESIGN.md Section 5.6) -->
+  <dialog id="githubModal" class="qr-dialog" aria-labelledby="githubModalTitle">
+    <div class="qr-modal-card">
+      <div class="qr-modal-header">
+        <span id="githubModalTitle" class="qr-modal-title">🐑 Agentic Memory • GitHub Repository</span>
+        <button id="closeGithubModalBtn" class="btn-close" aria-label="Close modal">✕</button>
+      </div>
+      <div class="qr-modal-body">
+        <img src="qrcode_github.svg" alt="QR Code for https://github.com/davenportjw/agentic-memory" class="qr-code-img">
+        <p class="qr-modal-caption">
+          Scan to explore the Google ADK 2.0 + BigQuery + Cloud Spanner Crystalline Memory architecture, Enterprise Memory Studio, and AlphaEvolve optimizer on GitHub.
+        </p>
+        <a href="https://github.com/davenportjw/agentic-memory" target="_blank" rel="noopener noreferrer" class="qr-repo-link">
+          https://github.com/davenportjw/agentic-memory ↗
+        </a>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="studio.js?v=2.4"></script>
+</body>
+</html>

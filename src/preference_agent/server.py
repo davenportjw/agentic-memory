@@ -4,7 +4,7 @@ import os
 import time
 import logging
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import uvicorn
 

@@ -15,7 +15,7 @@ description: >-
 
 > [!NOTE]
 > This skill integrates Google Antigravity with the **Electric Sheep v2** Cloud Spanner Crystalline Memory matrix.
-> Memory is served via the `electric-sheep-memory` Model Context Protocol (MCP) server running against Spanner instance `adk-spanner-instance:agent_memory_db` in project `davenport-boutique`.
+> Memory is served via the `electric-sheep-memory` Model Context Protocol (MCP) server running against Spanner instance `adk-spanner-instance:agent_memory_db` in your configured `GOOGLE_CLOUD_PROJECT`.
 
 ---
 

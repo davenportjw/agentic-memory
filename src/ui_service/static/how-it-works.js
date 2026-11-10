@@ -24,7 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
 const FLOW_STAGE_DATA = {
   1: {
     title: "1. Live Dialogue: InterviewAgent (Google ADK 2.0)",
-    desc: "<strong>Live Dialogue:</strong> The <code>InterviewAgent</code> engages in conversational turns using Google ADK 2.0 and Gemini 3.8 Flash on Vertex AI. Facts are captured via tool execution (<code>record_user_answer</code>) without blocking on persistent database writes.",
+    desc: "<strong>Live Dialogue:</strong> The <code>InterviewAgent</code> engages in conversational turns using Google ADK 2.0 and Gemini 3.8 Flash on Gemini platform. Facts are captured via tool execution (<code>record_user_answer</code>) without blocking on persistent database writes.",
     codeTab: "1"
   },
   2: {
@@ -601,9 +601,9 @@ const ARCH_DIAGRAM_DATA = {
   "2": {
     badgeNum: "2",
     title: "Step 2: Memory Synthesis (Gemini 3.8 Flash)",
-    techBadge: "Vertex AI • gemini-3.8-flash",
+    techBadge: "Gemini platform • gemini-3.8-flash",
     desc: "During offline memory consolidation, the engine reads session logs from BigQuery and invokes Gemini 3.8 Flash with a typed JSON schema to distill structured semantic beliefs and confidence scores.",
-    langTag: "Python / Vertex AI Gemini 3.8 Flash",
+    langTag: "Python / Gemini platform Gemini 3.8 Flash",
     code: `# Distill structured preferences via Gemini 3.8 Flash\nresponse = genai_client.models.generate_content(\n  model="gemini-3.8-flash",\n  contents=f"Extract structured beliefs from session logs:\\n{logs}",\n  config=types.GenerateContentConfig(\n    response_mime_type="application/json",\n    temperature=0.2,\n  ),\n)`
   },
   "3": {

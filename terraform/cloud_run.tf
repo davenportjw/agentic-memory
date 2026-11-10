@@ -95,6 +95,19 @@ resource "google_cloud_run_v2_service" "interview_agent" {
     }
   }
 
+  # Rollouts (image, env, source build) are owned by scripts/deploy_cloud_run_source.sh via
+  # `gcloud run deploy`; Terraform owns the service shell, scaling, IAM and identity.
+  lifecycle {
+    ignore_changes = [
+      client,
+      client_version,
+      build_config,
+      template[0].containers[0].image,
+      template[0].containers[0].env,
+      template[0].containers[0].name,
+    ]
+  }
+
   depends_on = [
     google_project_service.required_apis,
     google_bigquery_table.agent_logs,
@@ -197,6 +210,19 @@ resource "google_cloud_run_v2_service" "preference_agent" {
         value = var.iap_proxy_url
       }
     }
+  }
+
+  # Rollouts (image, env, source build) are owned by scripts/deploy_cloud_run_source.sh via
+  # `gcloud run deploy`; Terraform owns the service shell, scaling, IAM and identity.
+  lifecycle {
+    ignore_changes = [
+      client,
+      client_version,
+      build_config,
+      template[0].containers[0].image,
+      template[0].containers[0].env,
+      template[0].containers[0].name,
+    ]
   }
 
   depends_on = [
@@ -319,6 +345,19 @@ resource "google_cloud_run_v2_service" "ui_service" {
     }
   }
 
+  # Rollouts (image, env, source build) are owned by scripts/deploy_cloud_run_source.sh via
+  # `gcloud run deploy`; Terraform owns the service shell, scaling, IAM and identity.
+  lifecycle {
+    ignore_changes = [
+      client,
+      client_version,
+      build_config,
+      template[0].containers[0].image,
+      template[0].containers[0].env,
+      template[0].containers[0].name,
+    ]
+  }
+
   depends_on = [
     google_cloud_run_v2_service.interview_agent,
     google_cloud_run_v2_service.preference_agent
@@ -357,42 +396,36 @@ resource "google_cloud_run_service_iam_binding" "ui_service_public" {
   members  = ["allUsers"]
 }
 
-# Manage Authorized Domains for Google Identity Platform / Firebase Auth
-resource "google_identity_platform_config" "auth_config" {
-  project = var.project_id
+# Sign-in redirect hosts for Google Identity Platform / Firebase Auth.
+# The project's authorized-domains list is shared by every app in the project, so this repo no
+# longer manages the whole list (google_identity_platform_config is owned by keynote/infra/step0).
+# It adds only its own Cloud Run hosts on create and removes only those on destroy, one resource per
+# service (scripts/authorized-domains.sh).
+locals {
+  sign_in_hosts = {
+    ui_service       = [for u in google_cloud_run_v2_service.ui_service.urls : trimsuffix(trimprefix(u, "https://"), "/")]
+    interview_agent  = [for u in google_cloud_run_v2_service.interview_agent.urls : trimsuffix(trimprefix(u, "https://"), "/")]
+    preference_agent = [for u in google_cloud_run_v2_service.preference_agent.urls : trimsuffix(trimprefix(u, "https://"), "/")]
+  }
+}
 
-  authorized_domains = [
-    "localhost",
-    "google.com",
-    "cloudadvocacyorg.joonix.net",
-    "ui-service-txgsracloq-uc.a.run.app",
-    "ui-service-834476222725.us-central1.run.app",
-    "interview-agent-txgsracloq-uc.a.run.app",
-    "interview-agent-834476222725.us-central1.run.app",
-    "preference-agent-txgsracloq-uc.a.run.app",
-    "preference-agent-834476222725.us-central1.run.app",
-    "${var.project_id}.firebaseapp.com",
-    "${var.project_id}.web.app",
-    replace(replace(google_cloud_run_v2_service.ui_service.uri, "https://", ""), "/", ""),
-    replace(replace(google_cloud_run_v2_service.interview_agent.uri, "https://", ""), "/", ""),
-    replace(replace(google_cloud_run_v2_service.preference_agent.uri, "https://", ""), "/", "")
-  ]
+resource "terraform_data" "authorized_domains" {
+  for_each = local.sign_in_hosts
 
-  lifecycle {
-    ignore_changes = [
-      autodelete_anonymous_users,
-      blocking_functions,
-      client,
-      mfa,
-      monitoring,
-      multi_tenant,
-      quota,
-      sign_in,
-      sms_region_config
-    ]
+  triggers_replace = {
+    project = var.project_id
+    hosts   = join(" ", sort(each.value))
   }
 
-  depends_on = [
-    google_project_service.required_apis
-  ]
+  provisioner "local-exec" {
+    command = "${path.module}/scripts/authorized-domains.sh add ${self.triggers_replace.project} ${self.triggers_replace.hosts}"
+  }
+
+  provisioner "local-exec" {
+    when       = destroy
+    on_failure = continue
+    command    = "[ -x ${path.module}/scripts/authorized-domains.sh ] && ${path.module}/scripts/authorized-domains.sh remove ${self.triggers_replace.project} ${self.triggers_replace.hosts}"
+  }
+
+  depends_on = [google_project_service.required_apis]
 }

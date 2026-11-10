@@ -20,9 +20,29 @@ CREATE TABLE UserSessionSummaries (
     CreatedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true)
 ) PRIMARY KEY (UserId, SessionId);
 
+CREATE TABLE ScopedMemories (
+    ScopeType STRING(32) NOT NULL,
+    ScopeId STRING(128) NOT NULL,
+    MemoryKey STRING(128) NOT NULL,
+    MemoryValue STRING(MAX) NOT NULL,
+    MemoryType STRING(32),
+    Category STRING(64),
+    Confidence FLOAT64,
+    CrystallizedBelief STRING(MAX),
+    Keywords STRING(MAX),
+    SourceSessionId STRING(MAX),
+    PromotedFromScope STRING(128),
+    SupportCount INT64,
+    Embedding ARRAY<FLOAT64>,
+    LastUpdated TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+) PRIMARY KEY (ScopeType, ScopeId, MemoryKey);
+
 -- Secondary index for fast category search
 CREATE INDEX UserPreferencesByCategory
 ON UserPreferences(UserId, Category);
+
+CREATE INDEX ScopedMemoriesByTypeAndCategory
+ON ScopedMemories(ScopeType, ScopeId, MemoryType, Category);
 
 -- Note: In Spanner ENTERPRISE Edition, you can specify ARRAY<FLOAT64>(VECTOR_LENGTH=>768)
 -- and create a VECTOR INDEX for approximate nearest neighbor (ANN) similarity search:

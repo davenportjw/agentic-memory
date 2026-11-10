@@ -50,7 +50,7 @@ def test_interview_agent_api_endpoint():
     payload = {
         "user_id": "test-user-api-01",
         "session_id": "session-api-001",
-        "prompt": "Hi, my name is Jason and my favorite programming language is Python",
+        "prompt": "Hi, my name is Alex and my favorite programming language is Python",
     }
 
     response = client.post("/query", json=payload)
@@ -58,7 +58,7 @@ def test_interview_agent_api_endpoint():
     data = response.json()
     assert data["user_id"] == "test-user-api-01"
     assert data["session_id"] == "session-api-001"
-    assert "Python" in data["response"] or "Jason" in data["response"]
+    assert "Python" in data["response"] or "Alex" in data["response"]
     assert len(data["recorded_answers"]) >= 1
 
     # Verify telemetry logs were captured
