@@ -8,8 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/davenportjw/electric-sheep/pkg/sheep"
-	"github.com/davenportjw/electric-sheep/pkg/sheep/loops"
+	"github.com/davenportjw/sheep/pkg/sheep"
+	"github.com/davenportjw/sheep/pkg/sheep/loops"
 	"github.com/davenportjw/toolroll/utp"
 )
 

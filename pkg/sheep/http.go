@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/davenportjw/electric-sheep/pkg/sheep/loops"
+	"github.com/davenportjw/sheep/pkg/sheep/loops"
 	"github.com/davenportjw/toolroll/utp"
 )
 

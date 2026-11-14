@@ -1,4 +1,4 @@
-module github.com/davenportjw/electric-sheep
+module github.com/davenportjw/sheep
 
 go 1.25.0
 

@@ -18,7 +18,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/davenportjw/electric-sheep/pkg/sheep/loops"
+	"github.com/davenportjw/sheep/pkg/sheep/loops"
 	"github.com/davenportjw/toolroll/utp"
 	_ "modernc.org/sqlite"
 )

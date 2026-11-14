@@ -1,6 +1,6 @@
 # `sheep` CLI & Go Memory Store Reference
 
-`sheep` (`github.com/davenportjw/electric-sheep/pkg/sheep`, `pkg/sheep/loops`, and `cmd/sheep`) is the standalone demand-driven agent memory CLI, HTTP daemon, demand-loop engine, and embeddable Go `MemoryStore` implementation for the `toolroll` Agent OS.
+`sheep` (`github.com/davenportjw/sheep/pkg/sheep`, `pkg/sheep/loops`, and `cmd/sheep`) is the standalone demand-driven agent memory CLI, HTTP daemon, demand-loop engine, and embeddable Go `MemoryStore` implementation for the `toolroll` Agent OS.
 
 - **Runtime**: Pure Go (`go 1.25.0`, `CGO_ENABLED=0`), backed by `modernc.org/sqlite` in Write-Ahead Log (`WAL`) mode (`~/.toolroll/memory.db` by default, or `SHEEP_DB_PATH` / `--db`).
 - **Cycle-Free Dependency Graph**: `pkg/sheep/loops` imports only `github.com/davenportjw/toolroll/utp` (`stdlib`-only), and `pkg/sheep.Store` satisfies both `toolroll/pkg/kernel.MemoryStore` and `pkg/sheep/loops.Store` structurally.
