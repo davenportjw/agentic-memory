@@ -99,6 +99,62 @@ func TestCLISubcommandsEndToEnd(t *testing.T) {
 	if newNote == "" || len(newNote) > 200 {
 		t.Fatalf("expected migrated note for RenamedSymA, got %q", newNote)
 	}
+
+	// 7. sheep fault -> immediate Turn-0 scoped recall on next session
+	execSheep(t, "fault",
+		"--db", dbPath,
+		"--repo", repo,
+		"--session", "pf-cli-01",
+		"--prompt", "resolve quorum lease fencing timeout",
+		"--queries", "pkg/lease,quorum",
+		"--symbols", "QuorumLeaseManager,FencingValidator",
+		"--steps", "4",
+		"--json",
+	)
+	pfRecall := execSheep(t, "recall", "--db", dbPath, "--repo", repo, "--intent", "quorum lease fencing timeout", "--mount", "scoped")
+	if !strings.Contains(pfRecall, "QuorumLeaseManager") || !strings.Contains(pfRecall, "FencingValidator") {
+		t.Fatalf("expected Turn-0 recall to surface fault-bound symbols, got:\n%s", pfRecall)
+	}
+
+	// 8. sheep inject (PostToolUse <=200B note + cross-invocation session deduplication)
+	injFirst := strings.TrimSpace(execSheep(t, "inject", "--db", dbPath, "--repo", repo, "--session", "inj-cli-01", "RenamedSymA"))
+	if injFirst == "" || len(injFirst) > 200 {
+		t.Fatalf("expected <=200B injected note on first touch, got len=%d %q", len(injFirst), injFirst)
+	}
+	injSecond := strings.TrimSpace(execSheep(t, "inject", "--db", dbPath, "--repo", repo, "--session", "inj-cli-01", "RenamedSymA"))
+	if injSecond != "" {
+		t.Fatalf("expected empty deduplicated output on repeat inject in same session, got %q", injSecond)
+	}
+
+	// 9. sheep reconcile-diff (AST rename + deletion from unified git diff file)
+	patchPath := filepath.Join(dir, "rename.diff")
+	patchBody := `diff --git a/pkg/lock/sym.go b/pkg/lock/sym.go
+--- a/pkg/lock/sym.go
++++ b/pkg/lock/sym.go
+@@ -1,5 +1,5 @@
+-func RenamedSymA(ctx context.Context) error {
++func FinalSymA(ctx context.Context) error {
+ 	return nil
+ }
+`
+	if err := os.WriteFile(patchPath, []byte(patchBody), 0o644); err != nil {
+		t.Fatalf("write patch file: %v", err)
+	}
+	recOut := execSheep(t, "reconcile-diff", "--db", dbPath, "--repo", repo, "--diff", patchPath, "--json")
+	var recPayload struct {
+		OK       bool              `json:"ok"`
+		OldToNew map[string]string `json:"old_to_new"`
+	}
+	if err := json.Unmarshal([]byte(recOut), &recPayload); err != nil {
+		t.Fatalf("decode reconcile-diff json: %v (%s)", err, recOut)
+	}
+	if !recPayload.OK || recPayload.OldToNew["RenamedSymA"] != "FinalSymA" {
+		t.Fatalf("unexpected reconcile-diff payload: %+v", recPayload)
+	}
+	finalNote := strings.TrimSpace(execSheep(t, "note", "--db", dbPath, "--repo", repo, "FinalSymA"))
+	if !strings.Contains(finalNote, "FinalSymA") {
+		t.Fatalf("expected migrated note on FinalSymA, got %q", finalNote)
+	}
 }
 
 func TestCLIServeHTTPEndpoints(t *testing.T) {
@@ -199,6 +255,78 @@ func TestCLIServeHTTPEndpoints(t *testing.T) {
 		t.Fatalf("unexpected HTTP recall: %+v", recallJSON)
 	}
 
+	// POST /api/v1/memory/fault -> Turn-0 recall immediately returns fault-bound symbol
+	faultBody := fmt.Sprintf(`{"repo_root":%q,"prompt_summary":"calibrate circuit breaker trip threshold","searched_queries":["pkg/proxy","breaker"],"resolved_symbols":["CircuitBreakerPolicy"],"extra_read_steps":3}`, repo)
+	faultReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/memory/fault", strings.NewReader(faultBody))
+	faultReq.Header.Set("Content-Type", "application/json")
+	faultReq.Header.Set("X-Toolroll-Session-Id", "http-fault-s1")
+	faultResp, err := client.Do(faultReq)
+	if err != nil {
+		t.Fatalf("POST fault: %v", err)
+	}
+	_ = faultResp.Body.Close()
+	if faultResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST fault status=%d", faultResp.StatusCode)
+	}
+
+	pfRecallBody := fmt.Sprintf(`{"repo_root":%q,"intent":"circuit breaker trip threshold","mount":"scoped"}`, repo)
+	pfRecallResp, err := client.Post(baseURL+"/api/v1/memory/recall", "application/json", strings.NewReader(pfRecallBody))
+	if err != nil {
+		t.Fatalf("POST recall after fault: %v", err)
+	}
+	var pfRecallJSON struct {
+		Frame string `json:"frame"`
+	}
+	_ = json.NewDecoder(pfRecallResp.Body).Decode(&pfRecallJSON)
+	_ = pfRecallResp.Body.Close()
+	if !strings.Contains(pfRecallJSON.Frame, "CircuitBreakerPolicy") {
+		t.Fatalf("expected HTTP Turn-0 recall to include CircuitBreakerPolicy, got:\n%s", pfRecallJSON.Frame)
+	}
+
+	// POST /api/v1/memory/inject (delivers once per session, deduplicates repeat)
+	injBody := fmt.Sprintf(`{"repo_root":%q,"symbols":["RouterProxy"]}`, repo)
+	for callIdx := 1; callIdx <= 2; callIdx++ {
+		injReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/memory/inject", strings.NewReader(injBody))
+		injReq.Header.Set("Content-Type", "application/json")
+		injReq.Header.Set("X-Toolroll-Session-Id", "http-inj-sess")
+		injResp, err := client.Do(injReq)
+		if err != nil {
+			t.Fatalf("POST inject %d: %v", callIdx, err)
+		}
+		var injJSON struct {
+			Note  string `json:"note"`
+			Bytes int    `json:"bytes"`
+		}
+		_ = json.NewDecoder(injResp.Body).Decode(&injJSON)
+		_ = injResp.Body.Close()
+		if callIdx == 1 && (injJSON.Note == "" || injJSON.Bytes > 200) {
+			t.Fatalf("expected <=200B note on HTTP inject #1, got %+v", injJSON)
+		}
+		if callIdx == 2 && injJSON.Note != "" {
+			t.Fatalf("expected deduplicated empty note on HTTP inject #2, got %+v", injJSON)
+		}
+	}
+
+	// POST /api/v1/memory/reconcile-diff
+	diffPayload := map[string]string{
+		"repo_root": repo,
+		"diff": "diff --git a/proxy.go b/proxy.go\n--- a/proxy.go\n+++ b/proxy.go\n@@ -1,3 +1,3 @@\n-type RouterProxy struct{}\n+type SemanticRouterProxy struct{}\n",
+	}
+	diffBytes, _ := json.Marshal(diffPayload)
+	recResp, err := client.Post(baseURL+"/api/v1/memory/reconcile-diff", "application/json", bytes.NewReader(diffBytes))
+	if err != nil {
+		t.Fatalf("POST reconcile-diff: %v", err)
+	}
+	var recJSON struct {
+		OK       bool              `json:"ok"`
+		OldToNew map[string]string `json:"old_to_new"`
+	}
+	_ = json.NewDecoder(recResp.Body).Decode(&recJSON)
+	_ = recResp.Body.Close()
+	if !recJSON.OK || recJSON.OldToNew["RouterProxy"] != "SemanticRouterProxy" {
+		t.Fatalf("unexpected HTTP reconcile-diff response: %+v", recJSON)
+	}
+
 	cancel()
 	select {
 	case srvErr := <-errCh:
@@ -217,7 +345,11 @@ func TestDocExamplesParity(t *testing.T) {
 	}
 	doc := string(docBytes)
 
-	for _, sub := range []string{"sheep recall", "sheep observe", "sheep note", "sheep dream", "sheep evict", "sheep mounts", "sheep serve"} {
+	for _, sub := range []string{
+		"sheep recall", "sheep observe", "sheep note", "sheep inject",
+		"sheep fault", "sheep reconcile-diff", "sheep dream", "sheep evict",
+		"sheep mounts", "sheep serve",
+	} {
 		if !strings.Contains(doc, sub) {
 			t.Fatalf("docs/sheep-cli.md missing documented subcommand %q", sub)
 		}
@@ -228,6 +360,9 @@ func TestDocExamplesParity(t *testing.T) {
 		"/api/v1/memory/observe",
 		"/api/v1/memory/dream",
 		"/api/v1/memory/note",
+		"/api/v1/memory/inject",
+		"/api/v1/memory/fault",
+		"/api/v1/memory/reconcile-diff",
 		"/api/v1/memory/evict",
 	} {
 		if !strings.Contains(doc, route) {
@@ -235,9 +370,9 @@ func TestDocExamplesParity(t *testing.T) {
 		}
 	}
 
-	// Verify sheep --help documents all 7 subcommands.
+	// Verify sheep --help documents all subcommands.
 	helpOut := execSheep(t, "--help")
-	for _, kw := range []string{"recall", "observe", "note", "dream", "evict", "mounts", "serve"} {
+	for _, kw := range []string{"recall", "observe", "note", "inject", "fault", "reconcile-diff", "dream", "evict", "mounts", "serve"} {
 		if !strings.Contains(helpOut, kw) {
 			t.Fatalf("sheep --help missing %q:\n%s", kw, helpOut)
 		}

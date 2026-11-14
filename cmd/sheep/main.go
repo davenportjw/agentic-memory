@@ -10,12 +10,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/davenportjw/electric-sheep/pkg/sheep"
+	"github.com/davenportjw/electric-sheep/pkg/sheep/loops"
 	"github.com/davenportjw/toolroll/utp"
 )
 
@@ -45,6 +47,12 @@ func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		return runObserve(ctx, args[1:], stdout, stderr)
 	case "note":
 		return runNote(ctx, args[1:], stdout, stderr)
+	case "inject":
+		return runInject(ctx, args[1:], stdout, stderr)
+	case "fault":
+		return runFault(ctx, args[1:], stdout, stderr)
+	case "reconcile-diff":
+		return runReconcileDiff(ctx, args[1:], stdout, stderr)
 	case "dream":
 		return runDream(ctx, args[1:], stdout, stderr)
 	case "evict":
@@ -63,13 +71,16 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `sheep — Demand-Driven Agent Memory CLI (Toolroll / Electric Sheep)
 
 Usage:
-  sheep recall  --repo <dir> --intent "..." [--mount scoped|full|clean] [--db <path>] [--json]
-  sheep observe --repo <dir> --session <id> --scope /mem/project [--symbols SymA,SymB] [--db <path>] "..."
-  sheep note    --repo <dir> [--db <path>] <Symbol>
-  sheep dream   --repo <dir> [--db <path>] [--json]
-  sheep evict   --repo <dir> [--db <path>] OldSym=NewSym [DeletedSym= ...]
-  sheep mounts  [--db <path>] [--json]
-  sheep serve   [--addr 127.0.0.1:7410] [--db <path>]
+  sheep recall         --repo <dir> --intent "..." [--mount scoped|full|clean] [--db <path>] [--json]
+  sheep observe        --repo <dir> --session <id> --scope /mem/project [--symbols SymA,SymB] [--db <path>] "..."
+  sheep note           --repo <dir> [--db <path>] <Symbol>
+  sheep inject         --repo <dir> --session <id> [--db <path>] [--json] <SymA> [SymB...]
+  sheep fault          --repo <dir> --session <id> --prompt "..." [--queries q1,q2] --symbols SymA,SymB [--steps 1] [--db <path>] [--json]
+  sheep reconcile-diff --repo <dir> [--diff <patch-or-stdin>] [--db <path>] [--json]
+  sheep dream          --repo <dir> [--db <path>] [--json]
+  sheep evict          --repo <dir> [--db <path>] OldSym=NewSym [DeletedSym= ...]
+  sheep mounts         [--db <path>] [--json]
+  sheep serve          [--addr 127.0.0.1:7410] [--db <path>]
 `)
 }
 
@@ -363,4 +374,163 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	case serveErr := <-errCh:
 		return serveErr
 	}
+}
+
+func runInject(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("inject", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	repo := fs.String("repo", ".", "Repository root directory")
+	session := fs.String("session", os.Getenv("TOOLROLL_SESSION_ID"), "Session ID for deduplicating delivered symbol notes")
+	symbolsRaw := fs.String("symbols", "", "Optional comma-separated symbol list")
+	dbPath := fs.String("db", "", "Path to SQLite WAL memory.db")
+	asJSON := fs.Bool("json", false, "Emit JSON output")
+
+	if err := fs.Parse(hoistFlags(args, map[string]bool{"json": true})); err != nil {
+		return err
+	}
+
+	var symbols []string
+	if strings.TrimSpace(*symbolsRaw) != "" {
+		symbols = append(symbols, strings.Split(*symbolsRaw, ",")...)
+	}
+	symbols = append(symbols, fs.Args()...)
+	if len(symbols) == 0 {
+		return errors.New("at least one symbol required: sheep inject --repo <dir> --session <id> <SymA> [SymB...]")
+	}
+
+	st, err := openStoreFromFlags(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	note, err := st.RecallInjector().Inject(ctx, *repo, *session, symbols)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return json.NewEncoder(stdout).Encode(map[string]any{
+			"session_id": *session,
+			"note":       note,
+			"bytes":      len(note),
+		})
+	}
+	if note != "" {
+		fmt.Fprintln(stdout, note)
+	}
+	return nil
+}
+
+func runFault(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("fault", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	repo := fs.String("repo", ".", "Repository root directory")
+	session := fs.String("session", os.Getenv("TOOLROLL_SESSION_ID"), "Session ID")
+	prompt := fs.String("prompt", "", "User prompt summary that triggered pre-edit page fault")
+	queriesRaw := fs.String("queries", "", "Comma-separated searched queries or file paths")
+	symbolsRaw := fs.String("symbols", "", "Comma-separated resolved target symbols")
+	steps := fs.Int("steps", 1, "Extra pre-edit read/grep steps")
+	dbPath := fs.String("db", "", "Path to SQLite WAL memory.db")
+	asJSON := fs.Bool("json", false, "Emit JSON output")
+
+	if err := fs.Parse(hoistFlags(args, map[string]bool{"json": true})); err != nil {
+		return err
+	}
+
+	var queries, symbols []string
+	if strings.TrimSpace(*queriesRaw) != "" {
+		queries = strings.Split(*queriesRaw, ",")
+	}
+	if strings.TrimSpace(*symbolsRaw) != "" {
+		symbols = strings.Split(*symbolsRaw, ",")
+	}
+	symbols = append(symbols, fs.Args()...)
+
+	st, err := openStoreFromFlags(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	pf := utp.PageFault{
+		SessionID:       *session,
+		PromptSummary:   *prompt,
+		SearchedQueries: queries,
+		ResolvedSymbols: symbols,
+		ExtraReadSteps:  *steps,
+		CreatedAt:       time.Now().UTC(),
+	}
+	if err := loops.ProcessPageFault(ctx, st, *repo, pf); err != nil {
+		return err
+	}
+	if *asJSON {
+		return json.NewEncoder(stdout).Encode(map[string]any{
+			"ok":               true,
+			"bound":            pf.ExtraReadSteps > 0,
+			"extra_read_steps": pf.ExtraReadSteps,
+			"resolved_symbols": pf.ResolvedSymbols,
+		})
+	}
+	fmt.Fprintf(stdout, "bound page fault (steps=%d, symbols=%d)\n", pf.ExtraReadSteps, len(pf.ResolvedSymbols))
+	return nil
+}
+
+func runReconcileDiff(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("reconcile-diff", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	repo := fs.String("repo", ".", "Repository root directory")
+	diffPath := fs.String("diff", "", "Path to unified git diff file ('-' for stdin; defaults to git diff HEAD~1..HEAD in --repo)")
+	dbPath := fs.String("db", "", "Path to SQLite WAL memory.db")
+	asJSON := fs.Bool("json", false, "Emit JSON output")
+
+	if err := fs.Parse(hoistFlags(args, map[string]bool{"json": true})); err != nil {
+		return err
+	}
+
+	var diffBytes []byte
+	var err error
+	dp := strings.TrimSpace(*diffPath)
+	switch dp {
+	case "-":
+		diffBytes, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("read diff from stdin: %w", err)
+		}
+	case "":
+		cmd := exec.CommandContext(ctx, "git", "-C", *repo, "diff", "HEAD~1..HEAD")
+		diffBytes, err = cmd.Output()
+		if err != nil {
+			// Fallback to working-tree diff when repo has <=1 commit.
+			cmdWT := exec.CommandContext(ctx, "git", "-C", *repo, "diff", "HEAD")
+			diffBytes, err = cmdWT.Output()
+			if err != nil {
+				return fmt.Errorf("read git diff in %q (or pass --diff <file>): %w", *repo, err)
+			}
+		}
+	default:
+		diffBytes, err = os.ReadFile(dp)
+		if err != nil {
+			return fmt.Errorf("read diff file %q: %w", dp, err)
+		}
+	}
+
+	st, err := openStoreFromFlags(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	changes, err := loops.ReconcileASTRenames(ctx, st, *repo, string(diffBytes))
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return json.NewEncoder(stdout).Encode(map[string]any{
+			"ok":         true,
+			"old_to_new": changes,
+			"updated":    len(changes),
+		})
+	}
+	fmt.Fprintf(stdout, "reconciled diff symbols: %d\n", len(changes))
+	return nil
 }

@@ -18,6 +18,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/davenportjw/electric-sheep/pkg/sheep/loops"
 	"github.com/davenportjw/toolroll/utp"
 	_ "modernc.org/sqlite"
 )
@@ -53,6 +54,8 @@ type Store struct {
 	spanner          *SpannerConfig
 	darkMounts       []DarkDataMountConfig
 	ftsEnabled       bool
+	faultTracker     *loops.PageFaultTracker
+	recallInjector   *loops.SymbolRecallInjector
 }
 
 // DefaultDBPath returns SHEEP_DB_PATH when set or ~/.toolroll/memory.db.
@@ -192,6 +195,13 @@ CREATE TABLE IF NOT EXISTS lexical_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS idx_lex_token_repo ON lexical_tokens(token, repo_root);
+
+CREATE TABLE IF NOT EXISTS session_delivered_notes (
+	session_id      TEXT NOT NULL,
+	note_key        TEXT NOT NULL,
+	delivered_at_ns INTEGER NOT NULL,
+	PRIMARY KEY (session_id, note_key)
+);
 `
 	if _, err := s.db.ExecContext(ctx, ddl); err != nil {
 		return fmt.Errorf("sheep: migrate schema: %w", err)
@@ -491,13 +501,13 @@ func (s *Store) SymbolNote(ctx context.Context, repoRoot, symbol string) (string
 		return "", fmt.Errorf("sheep: query symbol belief: %w", err)
 	}
 
-	// 2. Check raw symbol-pinned session observations.
+	// 2. Check raw symbol-pinned session observations (excluding Turn-0 [nav] breadcrumbs).
 	var rawContent string
 	err = s.db.QueryRowContext(ctx, `
 		SELECT o.content
 		FROM observations o
 		JOIN observation_symbols os ON o.observation_id = os.observation_id
-		WHERE os.repo_root = ? AND os.symbol = ?
+		WHERE os.repo_root = ? AND os.symbol = ? AND o.content NOT LIKE '[nav] %'
 		ORDER BY o.created_at_ns DESC
 		LIMIT 1`,
 		normRepo, sym,
@@ -1073,6 +1083,48 @@ func (s *Store) RecallTurnZero(ctx context.Context, repoRoot, intent string, mou
 			})
 		}
 		_ = obsRows.Close()
+	} else if mount == utp.ContextScoped && len(intentSet) > 0 {
+		// Also surface matching pre-edit page-fault navigation bindings ([nav] ...)
+		// on Turn-0 scoped recall so the very next session resolves missed symbols with zero cold grep.
+		navRows, err := s.db.QueryContext(ctx, `
+			SELECT scope, normalized_key, content, keywords, COUNT(DISTINCT session_id) AS support, MAX(created_at_ns) AS latest_ns
+			FROM observations
+			WHERE repo_root = ? AND content LIKE '[nav] %'
+			GROUP BY scope, normalized_key
+			ORDER BY latest_ns DESC
+			LIMIT 32`,
+			normRepo,
+		)
+		if err != nil {
+			return "", fmt.Errorf("sheep: recall nav observations: %w", err)
+		}
+		for navRows.Next() {
+			var scope, normKey, content, keywords string
+			var support int
+			var latestNs int64
+			if err := navRows.Scan(&scope, &normKey, &content, &keywords, &support, &latestNs); err != nil {
+				_ = navRows.Close()
+				return "", err
+			}
+			sType := scopeToType(scope)
+			if _, alreadyPromoted := promotedKeys[sType+"|"+normKey]; alreadyPromoted {
+				continue
+			}
+			toks := strings.Fields(keywords)
+			if computeLexicalOverlap(intentSet, toks) <= 0 {
+				continue
+			}
+			candidates = append(candidates, recallCandidate{
+				prefix:       scope,
+				body:         content,
+				tokens:       toks,
+				confidence:   0.50,
+				supportCount: support,
+				crystallized: false,
+				createdAtNs:  latestNs,
+			})
+		}
+		_ = navRows.Close()
 	}
 
 	if len(candidates) == 0 {
@@ -1094,6 +1146,8 @@ func (s *Store) RecallTurnZero(ctx context.Context, repoRoot, intent string, mou
 		crystBoost := 0.0
 		if c.crystallized {
 			crystBoost = 1.25
+		} else if strings.HasPrefix(c.body, loops.NavObservationPrefix) && overlap > 0 {
+			crystBoost = 1.15
 		}
 		supportBoost := 0.08 * math.Min(float64(c.supportCount), 10)
 		c.score = 4.0*overlap + crystBoost + scopeBoost + c.confidence + supportBoost
@@ -1136,4 +1190,79 @@ func (s *Store) RecallTurnZero(ctx context.Context, repoRoot, intent string, mou
 		return "", nil
 	}
 	return truncateUTF8Bytes(b.String(), maxBytes), nil
+}
+
+// HasDeliveredNote reports whether noteKey was already injected for sessionID.
+func (s *Store) HasDeliveredNote(ctx context.Context, sessionID, noteKey string) (bool, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	noteKey = strings.TrimSpace(noteKey)
+	if sessionID == "" || noteKey == "" {
+		return false, nil
+	}
+	var exists int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT 1 FROM session_delivered_notes
+		WHERE session_id = ? AND note_key = ?
+		LIMIT 1`,
+		sessionID, noteKey,
+	).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("sheep: check delivered note: %w", err)
+	}
+	return true, nil
+}
+
+// MarkDeliveredNote records that noteKey was delivered to sessionID so subsequent
+// PostToolUse calls in the same session do not repeat the same note.
+func (s *Store) MarkDeliveredNote(ctx context.Context, sessionID, noteKey string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	noteKey = strings.TrimSpace(noteKey)
+	if sessionID == "" || noteKey == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO session_delivered_notes (session_id, note_key, delivered_at_ns)
+		VALUES (?, ?, ?)`,
+		sessionID, noteKey, time.Now().UTC().UnixNano(),
+	)
+	if err != nil {
+		return fmt.Errorf("sheep: mark delivered note: %w", err)
+	}
+	return nil
+}
+
+// ResetDeliveredNotes clears delivered PostToolUse note state for sessionID.
+func (s *Store) ResetDeliveredNotes(ctx context.Context, sessionID string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM session_delivered_notes WHERE session_id = ?`, sessionID)
+	if err != nil {
+		return fmt.Errorf("sheep: reset delivered notes: %w", err)
+	}
+	return nil
+}
+
+// FaultTracker returns the Store's shared pre-edit PageFaultTracker instance.
+func (s *Store) FaultTracker() *loops.PageFaultTracker {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.faultTracker == nil {
+		s.faultTracker = loops.NewPageFaultTracker(s)
+	}
+	return s.faultTracker
+}
+
+// RecallInjector returns the Store's shared PostToolUse SymbolRecallInjector instance.
+func (s *Store) RecallInjector() *loops.SymbolRecallInjector {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.recallInjector == nil {
+		s.recallInjector = loops.NewSymbolRecallInjector(s)
+	}
+	return s.recallInjector
 }
