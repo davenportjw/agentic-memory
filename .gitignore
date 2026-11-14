@@ -36,3 +36,8 @@ build/
 *.egg-info/
 *.egg
 .hatch/
+
+# Go binaries & test artifacts
+/sheep
+*.test
+*.out
