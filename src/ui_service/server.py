@@ -42,6 +42,20 @@ from src.common.auth import (
     get_service_auth_headers,
     is_email_authorized,
 )
+from src.common.firebase_session import (
+    LOCAL_DEV_LOGIN_TOKEN,
+    SESSION_COOKIE_NAME,
+    SESSION_EXCHANGE_MAX_AUTH_AGE_SECONDS,
+    SESSION_TTL_SECONDS,
+    FirebaseAuthError,
+    create_firebase_session_cookie,
+    create_local_dev_session,
+    is_local_dev_auth_allowed,
+    is_running_on_cloud_run,
+    revoke_local_dev_session,
+    verify_firebase_id_token,
+)
+from starlette.concurrency import run_in_threadpool
 
 api = FastAPI(
     title="Google ADK 2.0 Material Light UI Service",
@@ -51,7 +65,11 @@ api = FastAPI(
 
 
 class SessionAuthRequest(BaseModel):
-    idToken: str = Field(..., description="Firebase ID Token or dev-admin-token")
+    idToken: str = Field(..., description="Firebase ID token from Google sign-in (or the local developer login marker off Cloud Run)")
+
+
+def _is_secure_request(request: Request) -> bool:
+    return is_running_on_cloud_run() or request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
 
 
 @api.get("/api/auth/config")
@@ -64,37 +82,50 @@ def get_auth_config() -> Dict[str, Any]:
         "storageBucket": config.firebase_storage_bucket,
         "messagingSenderId": config.firebase_messaging_sender_id,
         "appId": config.firebase_app_id,
-        "isLocalDev": os.environ.get("DEV_AUTH_BYPASS", "true").lower() == "true",
+        "isLocalDev": is_local_dev_auth_allowed(),
         "allowedEmailDomains": config.allowed_email_domains,
     }
 
 
 @api.post("/api/auth/session")
-def create_auth_session(request: SessionAuthRequest, response: Response) -> Dict[str, Any]:
-    """Verify ID Token and issue an HTTP-only secure session cookie."""
+def create_auth_session(request: SessionAuthRequest, http_request: Request, response: Response) -> Dict[str, Any]:
+    """Exchange a fresh Google-sign-in Firebase ID token for a Firebase session cookie (HttpOnly, 5 days)."""
     token = request.idToken.strip()
-    dev_bypass = os.environ.get("DEV_AUTH_BYPASS", "true").lower() == "true"
-    if dev_bypass and token == "dev-admin-token":
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing idToken.")
+
+    local_dev = token == LOCAL_DEV_LOGIN_TOKEN and is_local_dev_auth_allowed()
+    if local_dev:
         email = get_default_dev_email(config.allowed_email_domains)
     else:
-        from src.common.auth import verify_token_claims
-
-        claims = verify_token_claims(token)
-        if not claims or not claims.get("email"):
-            raise HTTPException(status_code=401, detail="Invalid ID token or missing email claim.")
-        email = claims.get("email")
+        try:
+            verified = verify_firebase_id_token(token, max_auth_age_seconds=SESSION_EXCHANGE_MAX_AUTH_AGE_SECONDS)
+        except FirebaseAuthError as exc:
+            raise HTTPException(status_code=401, detail=f"Unauthorized: {exc}")
+        except Exception as exc:  # noqa: BLE001 - certificate fetch etc.; fail closed
+            logger.error("ID token verification failed: %s", exc)
+            raise HTTPException(status_code=401, detail="Unauthorized: could not verify sign-in.")
+        email = verified.email
 
     if not is_email_authorized(email, config.allowed_email_domains):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Access denied: Email '{email}' is not authorized. Only '{config.allowed_email_domains}' has login access.",
-        )
+        raise HTTPException(status_code=403, detail=f"Access denied: '{email}' is not authorized for this app.")
+
+    if local_dev:
+        cookie_value = create_local_dev_session(email)
+    else:
+        try:
+            cookie_value = create_firebase_session_cookie(token, SESSION_TTL_SECONDS)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("createSessionCookie failed: %s", exc)
+            raise HTTPException(status_code=502, detail="Could not start a session. Please try signing in again.")
 
     response.set_cookie(
-        key="session",
-        value=token if token != "dev-admin-token" else "dev-admin-session-cookie",
-        max_age=86400 * 5,
+        key=SESSION_COOKIE_NAME,
+        value=cookie_value,
+        max_age=SESSION_TTL_SECONDS,
+        path="/",
         httponly=True,
+        secure=_is_secure_request(http_request),
         samesite="lax",
     )
     return {"status": "success", "email": email}
@@ -102,10 +133,11 @@ def create_auth_session(request: SessionAuthRequest, response: Response) -> Dict
 
 @api.get("/logout")
 @api.get("/api/auth/logout")
-def logout_session():
+def logout_session(request: Request):
     """Clear session cookie and redirect to login page."""
+    revoke_local_dev_session(request.cookies.get(SESSION_COOKIE_NAME))
     redirect = RedirectResponse(url="/login.html", status_code=302)
-    redirect.delete_cookie("session")
+    redirect.delete_cookie(SESSION_COOKIE_NAME, path="/", httponly=True, secure=_is_secure_request(request), samesite="lax")
     return redirect
 
 
@@ -113,17 +145,15 @@ def logout_session():
 async def verify_auth_middleware(request: Request, call_next):
     """Protect UI and API endpoints so only authorized accounts can access them."""
     path = request.url.path
+    is_static_asset = not path.startswith("/api/") and path.endswith(
+        (".css", ".js", ".mjs", ".jpg", ".png", ".svg", ".ico", ".wasm", ".otf", ".ttf", ".json")
+    )
     if (
         path == "/health"
         or path == "/login.html"
-        or path.startswith("/api/auth/")
+        or path in ("/api/auth/config", "/api/auth/session", "/api/auth/logout")
         or path == "/logout"
-        or path.endswith(".css")
-        or path.endswith(".js")
-        or path.endswith(".jpg")
-        or path.endswith(".png")
-        or path.endswith(".svg")
-        or path.endswith(".ico")
+        or is_static_asset
     ):
         response = await call_next(request)
         if path.endswith(".html") or path.endswith(".css") or path.endswith(".js"):
@@ -132,10 +162,9 @@ async def verify_auth_middleware(request: Request, call_next):
             response.headers["Expires"] = "0"
         return response
 
-    email = get_authenticated_user_email(request)
+    email = await run_in_threadpool(get_authenticated_user_email, request)
     if not email:
-        dev_bypass = os.environ.get("DEV_AUTH_BYPASS", "true").lower() == "true"
-        if dev_bypass and request.headers.get("X-Test-Enforce-Auth") != "true":
+        if is_local_dev_auth_allowed() and request.headers.get("X-Test-Enforce-Auth") != "true":
             email = get_default_dev_email(config.allowed_email_domains)
         else:
             if path.startswith("/api/"):
@@ -4245,7 +4274,632 @@ def rate_memory_journeys_endpoint() -> Dict[str, Any]:
     return report.to_dict()
 
 
-# Mount static HTML/CSS/JS frontend files
+# ==============================================================================
+# Canonical `/api/v1/memory/*` JSON Adapter (backed by spanner_client & telemetry_sink)
+# ==============================================================================
+import hashlib
+import re as _re
+
+_v1_delivered_session_notes: Dict[str, set] = {}
+_v1_delivered_notes_total: int = 0
+_v1_evicted_renames_total: int = 0
+_v1_scope_epochs: Dict[str, int] = {}
+_v1_seen_event_ids: set = set()
+
+
+def _v1_norm_repo(repo_root: Optional[str] = None, repo: Optional[str] = None, scope_id: Optional[str] = None) -> str:
+    raw = (repo_root or repo or scope_id or "default").strip().strip("/")
+    if not raw or raw == ".":
+        return "project:workspace"
+    return raw
+
+
+def _v1_is_personal(scope_str: Optional[str]) -> bool:
+    s = (scope_str or "").strip().lower()
+    return s in ("personal", "/mem/personal", "user")
+
+
+def _v1_map_scope(scope: Optional[str], repo_id: str) -> tuple[str, str, str]:
+    s = (scope or "/mem/project").strip().lower()
+    if s in ("personal", "/mem/personal"):
+        return ("USER", "user:local", "/mem/personal")
+    if s in ("org", "/mem/org"):
+        return ("ORG", "org:default", "/mem/org")
+    if s in ("project", "/mem/project", ""):
+        return ("TEAM", f"team:{repo_id}", "/mem/project")
+    raise HTTPException(status_code=400, detail=f"Invalid scope '{scope}' (expected /mem/personal, /mem/project, or /mem/org)")
+
+
+def _v1_utf8_clamp(text: str, max_bytes: int) -> str:
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    clipped = encoded[: max(0, max_bytes - 3)].decode("utf-8", errors="ignore").rstrip()
+    return f"{clipped}..." if max_bytes >= 4 else ""
+
+
+def _v1_record_symbols(rec: Dict[str, Any]) -> List[str]:
+    tc = rec.get("trigger_conditions")
+    if isinstance(tc, dict) and isinstance(tc.get("symbols"), list):
+        return [str(x).strip() for x in tc["symbols"] if str(x).strip()]
+    kw = str(rec.get("keywords", ""))
+    return [tok.strip() for tok in kw.split(",") if tok.strip() and tok.strip()[0].isupper()]
+
+
+def _v1_apply_symbol_renames(repo_id: str, old_to_new: Dict[str, str]) -> int:
+    global _v1_evicted_renames_total
+    if not old_to_new:
+        return 0
+    for st, sid in (("TEAM", f"team:{repo_id}"), ("ORG", "org:default"), ("USER", "user:local")):
+        for rec in list(spanner_client.get_scoped_memories(st, sid)):
+            mkey = str(rec.get("memory_key") or rec.get("preference_key") or "")
+            if not mkey:
+                continue
+            syms = _v1_record_symbols(rec)
+            val = str(rec.get("memory_value") or rec.get("preference_value") or "")
+            belief = str(rec.get("crystallized_belief") or val)
+            kw = str(rec.get("keywords") or "")
+            touched = False
+            next_syms: List[str] = []
+            had_symbols = len(syms) > 0
+            for sym in syms:
+                if sym in old_to_new:
+                    touched = True
+                    repl = (old_to_new[sym] or "").strip()
+                    if repl:
+                        next_syms.append(repl)
+                        val = val.replace(sym, repl)
+                        belief = belief.replace(sym, repl)
+                        kw = kw.replace(sym, repl)
+                else:
+                    next_syms.append(sym)
+            for old_sym, new_sym in old_to_new.items():
+                if old_sym and old_sym in belief and not touched:
+                    touched = True
+                    repl = (new_sym or "").strip()
+                    if repl:
+                        val = val.replace(old_sym, repl)
+                        belief = belief.replace(old_sym, repl)
+                        kw = kw.replace(old_sym, repl)
+            if not touched:
+                continue
+            if had_symbols and not next_syms:
+                spanner_client.delete_scoped_memory(st, sid, mkey)
+            else:
+                tc = dict(rec.get("trigger_conditions") or {})
+                tc["symbols"] = next_syms
+                spanner_client.upsert_scoped_memory(
+                    scope_type=st,
+                    scope_id=sid,
+                    memory_key=mkey,
+                    memory_value=val,
+                    memory_type=str(rec.get("memory_type") or "preference"),
+                    category=str(rec.get("category") or "preference"),
+                    confidence=float(rec.get("confidence", 1.0)),
+                    crystallized_belief=belief,
+                    keywords=kw,
+                    source_session_id=str(rec.get("source_session_id") or ""),
+                    support_count=int(rec.get("support_count", 1)),
+                    trigger_conditions=tc,
+                )
+    _v1_evicted_renames_total += len(old_to_new)
+    return len(old_to_new)
+
+
+def _v1_is_observation_record(rec: Dict[str, Any]) -> bool:
+    cat = str(rec.get("category") or "").strip().lower()
+    mkey = str(rec.get("memory_key") or rec.get("preference_key") or "").strip().lower()
+    return cat in ("observation", "navigation") or mkey.startswith(("obs_", "ev_", "nav_"))
+
+
+def _v1_lookup_symbol_note(repo_id: str, symbol: str) -> str:
+    sym = symbol.strip()
+    if not sym:
+        return ""
+    candidates: List[tuple[int, str]] = []
+    for st, sid in (("ORG", "org:default"), ("TEAM", f"team:{repo_id}"), ("USER", "user:local")):
+        for rec in spanner_client.get_scoped_memories(st, sid):
+            syms = _v1_record_symbols(rec)
+            belief = str(rec.get("crystallized_belief") or rec.get("memory_value") or "").strip()
+            if sym in syms or sym.lower() in [s.lower() for s in syms]:
+                is_promoted = 0 if _v1_is_observation_record(rec) else 1
+                formatted = belief if belief.startswith(sym) else f"{sym}: {belief}"
+                candidates.append((is_promoted, formatted))
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return _v1_utf8_clamp(candidates[0][1], 200)
+
+
+@api.get("/api/v1/health")
+def v1_memory_health() -> Dict[str, Any]:
+    return {"status": "ok", "service": "sheep"}
+
+
+@api.get("/api/v1/memory/mounts")
+def v1_memory_mounts() -> Dict[str, Any]:
+    federated = not getattr(spanner_client, "use_mock", False)
+    return {
+        "mounts": [
+            {
+                "prefix": "/mem/personal",
+                "backend": "local_personal",
+                "scope_type": "personal",
+                "read_only": False,
+                "sync_enabled": False,
+                "description": "Local developer preferences and personal beliefs; never synced off-device.",
+            },
+            {
+                "prefix": "/mem/project",
+                "backend": "federated_repo" if federated else "local_repo",
+                "scope_type": "project",
+                "read_only": False,
+                "sync_enabled": federated,
+                "description": "Repository crystallized beliefs, navigation bindings, and symbol hazard notes.",
+            },
+            {
+                "prefix": "/mem/org",
+                "backend": "org_policy",
+                "scope_type": "org",
+                "read_only": True,
+                "sync_enabled": federated,
+                "description": "Read-only organization security and engineering policy guardrails.",
+            },
+        ]
+    }
+
+
+@api.get("/api/v1/memory/metrics")
+def v1_memory_metrics(repo_root: Optional[str] = None, repo: Optional[str] = None) -> Dict[str, Any]:
+    repo_id = _v1_norm_repo(repo_root, repo)
+    obs_total = 0
+    promoted_total = 0
+    for st, sid in (("TEAM", f"team:{repo_id}"), ("ORG", "org:default"), ("USER", "user:local")):
+        for rec in spanner_client.get_scoped_memories(st, sid):
+            if _v1_is_observation_record(rec):
+                obs_total += 1
+            else:
+                promoted_total += 1
+    yield_pct = round(min(100.0, (promoted_total / obs_total) * 100.0), 2) if obs_total > 0 else 0.0
+    return {
+        "observations_total": obs_total,
+        "beliefs_promoted": promoted_total,
+        "promotion_yield_pct": yield_pct,
+        "delivered_notes_count": _v1_delivered_notes_total,
+        "evicted_renames_count": _v1_evicted_renames_total,
+    }
+
+
+@api.api_route("/api/v1/memory/recall", methods=["GET", "POST"])
+async def v1_memory_recall(request: Request) -> Dict[str, Any]:
+    if request.method == "POST":
+        body = await request.json()
+    else:
+        body = dict(request.query_params)
+    mount = str(body.get("mount") or "scoped").strip().lower()
+    if mount not in ("scoped", "full", "clean"):
+        raise HTTPException(status_code=400, detail=f"Invalid context mount '{mount}'")
+    if mount == "clean":
+        return {"frame": "", "mount": "clean", "bytes": 0}
+
+    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"))
+    intent = str(body.get("intent") or "").strip().lower()
+    intent_tokens = [t for t in _re.split(r"[^a-z0-9_]+", intent) if len(t) >= 2]
+
+    scored: List[tuple[int, str]] = []
+    for st, sid, label in (
+        ("ORG", "org:default", "org"),
+        ("TEAM", f"team:{repo_id}", "project"),
+        ("USER", "user:local", "personal"),
+    ):
+        for rec in spanner_client.get_scoped_memories(st, sid):
+            is_obs = _v1_is_observation_record(rec)
+            cat = str(rec.get("category") or "").lower()
+            if mount == "scoped" and is_obs and cat != "navigation":
+                continue
+            belief = str(rec.get("crystallized_belief") or rec.get("memory_value") or "").strip()
+            if not belief:
+                continue
+            haystack = f"{belief} {rec.get('keywords', '')} {' '.join(_v1_record_symbols(rec))}".lower()
+            hits = sum(1 for tok in intent_tokens if tok in haystack) if intent_tokens else 1
+            if intent_tokens and hits == 0 and is_obs:
+                continue
+            score = hits * 10 + (1 if is_obs else 5)
+            scored.append((score, f"[{label}] {belief}"))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    budget = 2048 if mount == "scoped" else 3800
+    lines: List[str] = []
+    used = 0
+    seen_lines: set = set()
+    for _, line in scored:
+        if line in seen_lines:
+            continue
+        seen_lines.add(line)
+        cand = line if not lines else f"\n{line}"
+        cand_bytes = len(cand.encode("utf-8"))
+        if used + cand_bytes > budget:
+            break
+        lines.append(line)
+        used += cand_bytes
+
+    frame = "\n".join(lines)
+    return {"frame": frame, "mount": mount, "bytes": len(frame.encode("utf-8"))}
+
+
+@api.post("/api/v1/memory/observe")
+async def v1_memory_observe(request: Request) -> Dict[str, Any]:
+    body = await request.json()
+    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"))
+    session_id = str(body.get("session_id") or request.headers.get("X-Toolroll-Session-Id") or "").strip()
+    content = str(body.get("content") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing session_id")
+    if not content:
+        raise HTTPException(status_code=400, detail="Missing observation content")
+    symbols = [str(s).strip() for s in (body.get("symbols") or []) if str(s).strip()]
+    st, sid, norm_scope = _v1_map_scope(body.get("scope"), repo_id)
+
+    canon_hash = hashlib.sha256(content.lower().encode("utf-8")).hexdigest()[:12]
+    sess_hash = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:8]
+    mkey = f"obs_{canon_hash}_{sess_hash}"
+
+    await run_in_threadpool(
+        spanner_client.upsert_scoped_memory,
+        scope_type=st,
+        scope_id=sid,
+        memory_key=mkey,
+        memory_value=content,
+        memory_type="EPISODIC_FACT",
+        category="observation",
+        confidence=0.85,
+        crystallized_belief=content,
+        keywords=", ".join(symbols) if symbols else content[:80],
+        source_session_id=session_id,
+        support_count=1,
+        trigger_conditions={
+            "symbols": symbols,
+            "repo_root": repo_id,
+            "session_id": session_id,
+            "canonical_hash": canon_hash,
+        },
+    )
+    await run_in_threadpool(
+        telemetry_sink.log_interaction,
+        user_id=repo_id,
+        session_id=session_id,
+        agent_name="sheep_v1",
+        event_type="OBSERVATION",
+        message=content,
+        payload={"scope": norm_scope, "symbols": symbols},
+    )
+    return {"ok": True, "scope": norm_scope}
+
+
+@api.api_route("/api/v1/memory/note", methods=["GET", "POST"])
+async def v1_memory_note(request: Request) -> Dict[str, Any]:
+    if request.method == "POST":
+        body = await request.json()
+    else:
+        body = dict(request.query_params)
+    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"))
+    symbol = str(body.get("symbol") or "").strip()
+    note = await run_in_threadpool(_v1_lookup_symbol_note, repo_id, symbol)
+    return {"symbol": symbol, "note": note, "bytes": len(note.encode("utf-8"))}
+
+
+@api.post("/api/v1/memory/inject")
+async def v1_memory_inject(request: Request) -> Dict[str, Any]:
+    global _v1_delivered_notes_total
+    body = await request.json()
+    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"))
+    session_id = str(body.get("session_id") or request.headers.get("X-Toolroll-Session-Id") or "default").strip()
+    symbols = [str(s).strip() for s in (body.get("symbols") or []) if str(s).strip()]
+    delivered = _v1_delivered_session_notes.setdefault(session_id, set())
+
+    chosen_note = ""
+    for sym in symbols:
+        dedup_key = f"{repo_id}:{sym}"
+        if dedup_key in delivered:
+            continue
+        cand = await run_in_threadpool(_v1_lookup_symbol_note, repo_id, sym)
+        if cand:
+            delivered.add(dedup_key)
+            _v1_delivered_notes_total += 1
+            chosen_note = cand
+            break
+
+    return {
+        "session_id": session_id,
+        "note": chosen_note,
+        "bytes": len(chosen_note.encode("utf-8")),
+    }
+
+
+@api.post("/api/v1/memory/fault")
+async def v1_memory_fault(request: Request) -> Dict[str, Any]:
+    body = await request.json()
+    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"))
+    session_id = str(body.get("session_id") or request.headers.get("X-Toolroll-Session-Id") or "fault-session").strip()
+    prompt_summary = str(body.get("prompt_summary") or "").strip()
+    queries = [str(q).strip() for q in (body.get("searched_queries") or []) if str(q).strip()]
+    resolved = [str(s).strip() for s in (body.get("resolved_symbols") or []) if str(s).strip()]
+    extra_steps = int(body.get("extra_read_steps") or 0)
+
+    bound = extra_steps > 0 and len(resolved) > 0
+    if bound:
+        nav_statement = f"[nav] {prompt_summary or ', '.join(queries)} -> {', '.join(resolved)}"
+        mkey = f"nav_{hashlib.sha256(nav_statement.lower().encode('utf-8')).hexdigest()[:12]}"
+        await run_in_threadpool(
+            spanner_client.upsert_scoped_memory,
+            scope_type="TEAM",
+            scope_id=f"team:{repo_id}",
+            memory_key=mkey,
+            memory_value=nav_statement,
+            memory_type="observation",
+            category="navigation",
+            confidence=0.92,
+            crystallized_belief=nav_statement,
+            keywords=", ".join(queries + resolved),
+            source_session_id=session_id,
+            support_count=1,
+            trigger_conditions={"symbols": resolved, "queries": queries, "extra_read_steps": extra_steps},
+        )
+    return {
+        "ok": True,
+        "bound": bound,
+        "extra_read_steps": extra_steps,
+        "resolved_symbols": resolved,
+    }
+
+
+@api.post("/api/v1/memory/evict")
+async def v1_memory_evict(request: Request) -> Dict[str, Any]:
+    body = await request.json()
+    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"))
+    raw_map = body.get("old_to_new") or {}
+    old_to_new = {str(k).strip(): str(v).strip() for k, v in raw_map.items() if str(k).strip()}
+    updated = await run_in_threadpool(_v1_apply_symbol_renames, repo_id, old_to_new)
+    return {"ok": True, "updated": updated}
+
+
+@api.post("/api/v1/memory/reconcile-diff")
+async def v1_memory_reconcile_diff(request: Request) -> Dict[str, Any]:
+    ct = (request.headers.get("content-type") or "").lower()
+    if "text/plain" in ct or "text/x-diff" in ct:
+        repo_id = _v1_norm_repo(request.query_params.get("repo_root"), request.query_params.get("repo"))
+        diff_text = (await request.body()).decode("utf-8", errors="replace")
+    else:
+        body = await request.json()
+        repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"))
+        diff_text = str(body.get("diff") or "")
+
+    decl_re = _re.compile(r"^(?:[-+])\s*(?:pub\s+)?(?:async\s+)?(?:func|def|class|interface|type|struct|fn)\s+(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)")
+    removed: List[str] = []
+    added: List[str] = []
+    for line in diff_text.splitlines():
+        if line.startswith("---") or line.startswith("+++"):
+            continue
+        m = decl_re.match(line)
+        if not m:
+            continue
+        if line.startswith("-"):
+            removed.append(m.group(1))
+        elif line.startswith("+"):
+            added.append(m.group(1))
+
+    old_to_new: Dict[str, str] = {}
+    for idx, old_sym in enumerate(removed):
+        new_sym = added[idx] if idx < len(added) else ""
+        if old_sym != new_sym:
+            old_to_new[old_sym] = new_sym
+
+    updated = await run_in_threadpool(_v1_apply_symbol_renames, repo_id, old_to_new)
+    return {"ok": True, "old_to_new": old_to_new, "updated": updated}
+
+
+@api.post("/api/v1/memory/dream")
+async def v1_memory_dream(request: Request) -> Dict[str, Any]:
+    raw_bytes = await request.body()
+    body = json.loads(raw_bytes.decode("utf-8")) if raw_bytes else {}
+    scope_type_in = str(body.get("scope_type") or "project").strip().lower()
+    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"), body.get("scope_id"))
+    mode = str(body.get("mode") or "nrem").strip().lower()
+    min_sessions = max(1, int(body.get("min_sessions") or 2))
+
+    st, sid, _ = _v1_map_scope(scope_type_in, repo_id)
+    records = await run_in_threadpool(spanner_client.get_scoped_memories, st, sid)
+    observations = [r for r in records if _v1_is_observation_record(r)]
+
+    clusters: Dict[str, Dict[str, Any]] = {}
+    for obs in observations:
+        text = str(obs.get("crystallized_belief") or obs.get("memory_value") or "").strip()
+        if not text:
+            continue
+        ckey = hashlib.sha256(text.lower().encode("utf-8")).hexdigest()[:12]
+        entry = clusters.setdefault(ckey, {"text": text, "sessions": set(), "symbols": set()})
+        sess = str(obs.get("source_session_id") or (obs.get("trigger_conditions") or {}).get("session_id") or "sess").strip()
+        entry["sessions"].add(sess)
+        for s in _v1_record_symbols(obs):
+            entry["symbols"].add(s)
+
+    promoted_keys: List[str] = []
+    for ckey, info in clusters.items():
+        if len(info["sessions"]) < min_sessions:
+            continue
+        bkey = f"mem_{ckey}"
+        syms = sorted(info["symbols"])
+        await run_in_threadpool(
+            spanner_client.upsert_scoped_memory,
+            scope_type=st,
+            scope_id=sid,
+            memory_key=bkey,
+            memory_value=info["text"],
+            memory_type="INVARIANT_GUARDRAIL",
+            category="consolidated",
+            confidence=0.95,
+            crystallized_belief=info["text"],
+            keywords=", ".join(syms) if syms else info["text"][:80],
+            source_session_id=sorted(info["sessions"])[0],
+            promoted_from_scope=f"/mem/{scope_type_in.lstrip('/mem/') or 'project'}",
+            support_count=len(info["sessions"]),
+            trigger_conditions={"symbols": syms, "support_session_ids": sorted(info["sessions"])},
+        )
+        promoted_keys.append(bkey)
+
+    epoch_key = f"{st}:{sid}"
+    next_epoch = _v1_scope_epochs.get(epoch_key, 0) + (1 if promoted_keys else 0)
+    if next_epoch == 0:
+        next_epoch = 1
+    _v1_scope_epochs[epoch_key] = next_epoch
+    manifest_blob = json.dumps({"scope": epoch_key, "epoch": next_epoch, "promoted_keys": promoted_keys}, sort_keys=True)
+    blob_hash = hashlib.sha256(manifest_blob.encode("utf-8")).hexdigest()
+
+    return {
+        "scope_type": scope_type_in.replace("/mem/", "") or "project",
+        "scope_id": repo_id,
+        "mode": mode,
+        "belief_epoch": next_epoch,
+        "scanned_events": len(observations),
+        "clusters_formed": len(clusters),
+        "promoted": len(promoted_keys),
+        "superseded": 0,
+        "promoted_keys": promoted_keys,
+        "epoch_blob_hash": blob_hash,
+        "spanner_synced": not getattr(spanner_client, "use_mock", False),
+    }
+
+
+@api.api_route("/api/v1/memory/events", methods=["GET", "POST"])
+async def v1_memory_events(request: Request):
+    if request.method == "GET":
+        scope_type = request.query_params.get("scope_type", "project")
+        if _v1_is_personal(scope_type):
+            return JSONResponse(
+                status_code=403,
+                content={"code": "PERSONAL_SCOPE_FORBIDDEN", "error": "/mem/personal records must never leave the local device"},
+            )
+        repo_id = _v1_norm_repo(
+            request.query_params.get("repo_root"),
+            request.query_params.get("repo"),
+            request.query_params.get("scope_id"),
+        )
+        st, sid, _ = _v1_map_scope(scope_type, repo_id)
+        recs = await run_in_threadpool(spanner_client.get_scoped_memories, st, sid)
+        events = []
+        for r in recs:
+            if not _v1_is_observation_record(r):
+                continue
+            tc = r.get("trigger_conditions") or {}
+            events.append(
+                {
+                    "event_id": str(r.get("memory_key") or ""),
+                    "scope_type": scope_type.replace("/mem/", "") or "project",
+                    "scope_id": repo_id,
+                    "session_id": str(r.get("source_session_id") or tc.get("session_id") or ""),
+                    "event_kind": "observation",
+                    "outcome_status": "ACTIVE",
+                    "content": str(r.get("crystallized_belief") or r.get("memory_value") or ""),
+                    "symbols": _v1_record_symbols(r),
+                    "created_at_ns": int(time.time_ns()),
+                }
+            )
+        return {"events": events, "count": len(events)}
+
+    body = await request.json()
+    raw_events = body.get("events") or []
+    for ev in raw_events:
+        if _v1_is_personal(ev.get("scope_type")):
+            return JSONResponse(
+                status_code=403,
+                content={"code": "PERSONAL_SCOPE_FORBIDDEN", "error": "/mem/personal records must never leave the local device"},
+            )
+    accepted = 0
+    dedup = 0
+    for ev in raw_events:
+        ev_id = str(ev.get("event_id") or "").strip()
+        if ev_id and ev_id in _v1_seen_event_ids:
+            dedup += 1
+            continue
+        if ev_id:
+            _v1_seen_event_ids.add(ev_id)
+        repo_id = _v1_norm_repo(ev.get("repo_root"), None, ev.get("scope_id"))
+        st, sid, _ = _v1_map_scope(ev.get("scope_type") or "project", repo_id)
+        content = str(ev.get("content") or "").strip()
+        syms = [str(s).strip() for s in (ev.get("symbols") or []) if str(s).strip()]
+        sess_id = str(ev.get("session_id") or "event-session").strip()
+        mkey = ev_id or f"ev_{hashlib.sha256(content.encode('utf-8')).hexdigest()[:12]}"
+        await run_in_threadpool(
+            spanner_client.upsert_scoped_memory,
+            scope_type=st,
+            scope_id=sid,
+            memory_key=mkey,
+            memory_value=content,
+            memory_type="EPISODIC_FACT",
+            category="observation",
+            confidence=0.85,
+            crystallized_belief=content,
+            keywords=", ".join(syms),
+            source_session_id=sess_id,
+            trigger_conditions={"symbols": syms, "session_id": sess_id},
+        )
+        accepted += 1
+    return {
+        "ok": True,
+        "accepted": accepted,
+        "deduplicated": dedup,
+        "duplicates": dedup,
+        "quarantined": 0,
+        "spanner_synced": not getattr(spanner_client, "use_mock", False),
+    }
+
+
+@api.get("/api/v1/memory/delta")
+async def v1_memory_delta(
+    scope_type: str = "project",
+    scope_id: Optional[str] = None,
+    repo: Optional[str] = None,
+    since_ns: int = 0,
+):
+    if _v1_is_personal(scope_type):
+        return JSONResponse(
+            status_code=403,
+            content={"code": "PERSONAL_SCOPE_FORBIDDEN", "error": "/mem/personal records must never leave the local device"},
+        )
+    repo_id = _v1_norm_repo(None, repo, scope_id)
+    st, sid, _ = _v1_map_scope(scope_type, repo_id)
+    recs = await run_in_threadpool(spanner_client.get_scoped_memories, st, sid)
+    epoch = _v1_scope_epochs.get(f"{st}:{sid}", 1 if recs else 0)
+    delta_records = []
+    for r in recs:
+        if _v1_is_observation_record(r):
+            continue
+        delta_records.append(
+            {
+                "scope_type": scope_type.replace("/mem/", "") or "project",
+                "scope_id": repo_id,
+                "memory_key": str(r.get("memory_key") or r.get("preference_key") or ""),
+                "memory_value": str(r.get("memory_value") or ""),
+                "crystallized_belief": str(r.get("crystallized_belief") or r.get("memory_value") or ""),
+                "memory_type": str(r.get("memory_type") or "guardrail"),
+                "category": str(r.get("category") or "consolidated"),
+                "confidence": float(r.get("confidence", 0.95)),
+                "symbols": _v1_record_symbols(r),
+                "support_count": int(r.get("support_count", 1)),
+                "belief_epoch": epoch,
+                "status": "ACTIVE",
+                "last_updated_ns": max(since_ns, int(time.time_ns())),
+            }
+        )
+    return {
+        "records": delta_records,
+        "belief_epoch": epoch,
+        "high_water_ns": int(time.time_ns()),
+        "count": len(delta_records),
+    }
+
+
+# Mount static HTML/CSS/JS frontend at /
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
     api.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

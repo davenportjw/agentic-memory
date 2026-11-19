@@ -44,6 +44,19 @@ ON UserPreferences(UserId, Category);
 CREATE INDEX ScopedMemoriesByTypeAndCategory
 ON ScopedMemories(ScopeType, ScopeId, MemoryType, Category);
 
+CREATE TABLE memory_audit_ledger (
+    mutation_id STRING(128) NOT NULL,
+    timestamp TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+    actor STRING(256) NOT NULL,
+    tool_name STRING(128),
+    file_path STRING(512),
+    scope STRING(64),
+    write_mode STRING(64),
+    prior_belief_snapshot STRING(MAX),
+    new_belief_snapshot STRING(MAX),
+    status STRING(64) NOT NULL
+) PRIMARY KEY (mutation_id);
+
 -- Note: In Spanner ENTERPRISE Edition, you can specify ARRAY<FLOAT64>(VECTOR_LENGTH=>768)
 -- and create a VECTOR INDEX for approximate nearest neighbor (ANN) similarity search:
 -- CREATE VECTOR INDEX UserPreferencesByEmbedding ON UserPreferences(Embedding) OPTIONS (distance_type='COSINE');

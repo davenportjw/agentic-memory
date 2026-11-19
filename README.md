@@ -21,7 +21,8 @@ The **Material Light UI Control Center** provides an interactive dashboard to ex
 
 ### 1. Sign In / Authenticate
 - Navigate to your deployed UI Service URL (e.g., `https://ui-service-<project-hash>.<region>.run.app` or `$UI_SERVICE_URL` from your `.env` file, or `http://localhost:8080` when running locally).
-- Sign in with an authorized Google account via Firebase Authentication, OR click **"Bypass Auth (Local Developer)"** when running in developer/mock mode.
+- Sign in with an authorized Google account via Firebase Authentication, OR click **"Bypass Auth (Local Developer)"** when running locally (the bypass is never available on Cloud Run).
+- The server exchanges the Google sign-in for a 5-day Firebase session cookie (`HttpOnly; Secure; SameSite=Lax`). See [Authentication & Sessions](#authentication--sessions).
 
 ### 2. Step 1 — Conduct an Interview (`InterviewAgent`)
 - Select the **Interview Agent** tab.
@@ -365,11 +366,32 @@ The `terraform/` directory contains complete IaC to provision GCP APIs, BigQuery
 When committing or deploying this repository:
 - **Sensitive Secrets**: Real API keys, project IDs, and personal email addresses are sanitized from source defaults and templates. Never commit `.env` or `.tfvars` files containing live secrets (`.gitignore` excludes them automatically).
 - **Identity-Aware Proxy (IAP) & Reverse Proxy Support**: You can secure Cloud Run or App Engine access using Google Cloud IAP or an authenticating reverse proxy by setting the following environment variables (or corresponding Terraform variables in `terraform/variables.tf`):
-  - `IAP_ENABLED=true` (Enables IAP proxy JWT assertion and header checking)
-  - `IAP_EXPECTED_AUDIENCE=/projects/YOUR_PROJECT_NUMBER/global/backendServices/YOUR_BACKEND_SERVICE_ID`
+  - `IAP_ENABLED=true` (Accepts the IAP JWT assertion after verifying it against IAP's public keys, issuer and audience. Plain identity headers such as `X-Goog-Authenticated-User-Email` are never trusted.)
+  - `IAP_EXPECTED_AUDIENCE=/projects/YOUR_PROJECT_NUMBER/global/backendServices/YOUR_BACKEND_SERVICE_ID` (required; IAP assertions are ignored without it)
   - `IAP_HEADER_NAME=x-goog-iap-jwt-assertion`
   - `IAP_PROXY_URL=https://app.example.com`
 - **Authorized Invokers**: Additional IAM members authorized to call internal backend Cloud Run services can be configured in Terraform via `authorized_invoker_members = ["user:developer@example.com"]`.
+
+### Authentication & Sessions
+The UI service holds no session signing secret. Sessions are Google-signed Firebase session cookies:
+
+1. **Login** — `login.html` signs in with Google (Firebase JS SDK) and POSTs the ID token to `POST /api/auth/session`. The server verifies it (RS256 against Google's securetoken keys, `iss`/`aud` = `FIREBASE_PROJECT_ID`, `exp`, `email_verified`, `firebase.sign_in_provider == "google.com"`, sign-in within 10 minutes), applies `ALLOWED_EMAIL_DOMAINS`, then calls Identity Toolkit `projects/{project}:createSessionCookie` with ADC. The cookie `session` is set `HttpOnly; Secure` (on Cloud Run / HTTPS)`; SameSite=Lax; Path=/` for 5 days.
+2. **Every request** — the middleware verifies the cookie against `https://www.googleapis.com/identitytoolkit/v3/relyingparty/publicKeys` (`iss = https://session.firebase.google.com/{project}`), re-checks verified email, Google provider and the allowlist, and calls `accounts:lookup` (cached 5 minutes) so disabled accounts and revoked sessions are refused. Failures return `401` (API) or redirect to `/login.html`.
+3. **Bearer tokens** — API callers may send `Authorization: Bearer <token>` with a Firebase ID token for this project, or a Google-signed OIDC identity token whose audience is this service's `UI_SERVICE_URL`. The allowlist still applies.
+4. **Allowlist** — `ALLOWED_EMAIL_DOMAINS` accepts emails and domains; `*` allows any verified Google account; an empty value allows nobody.
+5. **Local development** — with `K_SERVICE` unset, `DEV_AUTH_BYPASS` (default `true` locally) lets unauthenticated requests act as the first allowlisted identity and enables the "Bypass Auth (Local Developer)" button. Both are impossible on Cloud Run regardless of `DEV_AUTH_BYPASS`.
+
+**Runtime IAM**: each Cloud Run service runs as its own least-privilege service account (`terraform/iam.tf`). Only `ui-service` needs `roles/firebaseauth.admin` (for `createSessionCookie` and `accounts:lookup`):
+
+| Service | Service account | Roles (scope) |
+| --- | --- | --- |
+| `ui-service` | `es-ui-sa` | `aiplatform.user`, `cloudtrace.agent`, `bigquery.jobUser`, `bigquery.dataEditor`, `firebaseauth.admin`, `monitoring.metricWriter` (project); `spanner.databaseUser` (database `agent_memory_db`); `run.invoker` (services `interview-agent`, `preference-agent`) |
+| `interview-agent` | `es-interview-sa` | `aiplatform.user`, `cloudtrace.agent`, `bigquery.jobUser` (project); `bigquery.dataEditor` (dataset `adk_agent_telemetry`) |
+| `preference-agent` | `es-preference-sa` | `aiplatform.user`, `cloudtrace.agent`, `bigquery.jobUser`, `monitoring.metricWriter` (project); `bigquery.dataEditor` (dataset `adk_agent_telemetry`); `spanner.databaseUser` (database `agent_memory_db`) |
+
+The legacy shared `adk-agent-sa` is kept but holds no project roles. `ui-service` needs project-level `bigquery.dataEditor` because the studio telemetry calls `create_dataset(exists_ok=True)` for `electric_sheep_telemetry`.
+
+Revoke every session for a user by disabling the account or revoking its refresh tokens in Firebase Authentication; the change is enforced within 5 minutes.
 
 ---
 

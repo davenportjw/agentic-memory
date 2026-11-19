@@ -37,7 +37,3 @@ build/
 *.egg
 .hatch/
 
-# Go binaries & test artifacts
-/sheep
-*.test
-*.out

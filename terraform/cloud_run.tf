@@ -5,7 +5,7 @@ resource "google_cloud_run_v2_service" "interview_agent" {
   project  = var.project_id
 
   template {
-    service_account = google_service_account.agent_sa.email
+    service_account = google_service_account.interview_sa.email
 
     containers {
       image = var.container_image
@@ -43,14 +43,6 @@ resource "google_cloud_run_v2_service" "interview_agent" {
       env {
         name  = "BQ_TABLE_ID"
         value = var.bq_table_id
-      }
-      env {
-        name  = "SPANNER_INSTANCE_ID"
-        value = var.spanner_instance_id
-      }
-      env {
-        name  = "SPANNER_DATABASE_ID"
-        value = var.spanner_database_id
       }
       env {
         name  = "OTEL_TO_CLOUD"
@@ -122,7 +114,7 @@ resource "google_cloud_run_v2_service" "preference_agent" {
   project  = var.project_id
 
   template {
-    service_account = google_service_account.agent_sa.email
+    service_account = google_service_account.preference_sa.email
 
     containers {
       image = var.container_image
@@ -239,7 +231,7 @@ resource "google_cloud_run_v2_service" "ui_service" {
   project  = var.project_id
 
   template {
-    service_account = google_service_account.agent_sa.email
+    service_account = google_service_account.ui_sa.email
 
     containers {
       image = var.container_image
@@ -371,7 +363,7 @@ resource "google_cloud_run_service_iam_binding" "interview_agent_invoker" {
   service  = google_cloud_run_v2_service.interview_agent.name
   role     = "roles/run.invoker"
   members = concat(
-    ["serviceAccount:${google_service_account.agent_sa.email}"],
+    ["serviceAccount:${google_service_account.ui_sa.email}"],
     var.authorized_invoker_members
   )
 }
@@ -382,7 +374,7 @@ resource "google_cloud_run_service_iam_binding" "preference_agent_invoker" {
   service  = google_cloud_run_v2_service.preference_agent.name
   role     = "roles/run.invoker"
   members = concat(
-    ["serviceAccount:${google_service_account.agent_sa.email}"],
+    ["serviceAccount:${google_service_account.ui_sa.email}"],
     var.authorized_invoker_members
   )
 }

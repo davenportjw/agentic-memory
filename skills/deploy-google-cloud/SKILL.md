@@ -70,7 +70,7 @@ The **Material Light UI Control Center** provides an interactive dashboard to ex
 ### 1. Authenticating / Logging In
 - Access the UI at `https://ui-service-<PROJECT_NUMBER>.us-central1.run.app` (or `http://localhost:8080` locally).
 - **Google / Firebase Sign-In**: Click **Sign In with Google** if your email domain is authorized in `ALLOWED_EMAIL_DOMAINS`.
-- **Local Developer Bypass**: When running in developer/mock mode (`USE_MOCK_CLIENTS=true`), click **Bypass Auth (Local Developer)** to enter immediately without external authentication.
+- **Local Developer Bypass**: When running locally (`K_SERVICE` unset, `DEV_AUTH_BYPASS` not `false`), click **Bypass Auth (Local Developer)** to enter immediately without external authentication. The bypass is impossible on Cloud Run; there, sign-in is exchanged for a Firebase session cookie, which requires `roles/firebaseauth.admin` on the `ui-service` runtime service account (`es-ui-sa`; the agents run as `es-interview-sa` / `es-preference-sa` without it).
 
 ### 2. Step-by-Step Application Workflow
 1. **Interview Agent (Conversation & Telemetry)**:
@@ -227,7 +227,7 @@ uv run pytest tests/test_ui_service.py -k test_ui_service_topbar_and_layout_inte
 ### 1. `403 Forbidden` / Authentication Errors on Inter-Service Calls
 - **Symptom**: `ui-service` cannot reach `interview-agent` or `preference-agent`.
 - **Root Cause**: `interview-agent` and `preference-agent` are deployed with `--no-allow-unauthenticated`.
-- **Solution**: Ensure the Cloud Run service account assigned to `ui-service` has the `roles/run.invoker` IAM role on both backend agent services, or verify identity token headers in client requests.
+- **Solution**: Ensure the Cloud Run service account assigned to `ui-service` (`es-ui-sa`) has the `roles/run.invoker` IAM role on both backend agent services, or verify identity token headers in client requests.
 
 ### 2. Spanner Database or Table NotFound
 - **Symptom**: Error `500` on `/api/spanner/preferences/{user_id}` or during Dream Harvest.

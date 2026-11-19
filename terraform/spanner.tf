@@ -7,14 +7,26 @@ resource "google_spanner_instance" "adk_instance" {
   project          = var.project_id
 
   depends_on = [google_project_service.required_apis]
+
+  # Sole Terraform owner of this instance is this repo; other repos must use a data source.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Google Cloud Spanner Database and Schema DDL
 resource "google_spanner_database" "adk_database" {
-  instance            = google_spanner_instance.adk_instance.name
-  name                = var.spanner_database_id
-  project             = var.project_id
-  deletion_protection = false
+  instance = google_spanner_instance.adk_instance.name
+  name     = var.spanner_database_id
+  project  = var.project_id
+  # deletion_protection guards against Terraform destroys; enable_drop_protection is the
+  # server-side Spanner guard against DropDatabase from any client.
+  deletion_protection    = true
+  enable_drop_protection = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   ddl = [
     <<EOD
@@ -188,6 +200,50 @@ CREATE TABLE rbac_policies (
 ) PRIMARY KEY (policy_id)
 EOD
     ,
-    "CREATE INDEX ScopedMemoriesByTypeAndCategory ON ScopedMemories(ScopeType, ScopeId, MemoryType, Category)"
+    "CREATE INDEX ScopedMemoriesByTypeAndCategory ON ScopedMemories(ScopeType, ScopeId, MemoryType, Category)",
+    # Retained in append-only google_spanner_database.ddl so applied Terraform state never triggers ForceNew recreation.
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS Revision INT64",
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS BeliefEpoch INT64",
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS Status STRING(32)",
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS Symbols ARRAY<STRING(512)>",
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS SupportSessionIds ARRAY<STRING(128)>",
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS SourceEventIds ARRAY<STRING(128)>",
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS SourceHeadSha STRING(128)",
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS SupersededByKey STRING(128)",
+    "ALTER TABLE ScopedMemories ADD COLUMN IF NOT EXISTS EpochBlobHash STRING(128)",
+    "CREATE INDEX IF NOT EXISTS ScopedMemoriesByUpdated ON ScopedMemories(ScopeType, ScopeId, LastUpdated)",
+    <<EOD
+CREATE TABLE IF NOT EXISTS SheepObservationEvents (
+  ScopeType STRING(32) NOT NULL,
+  ScopeId STRING(128) NOT NULL,
+  IngestedAt TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+  EventId STRING(128) NOT NULL,
+  SessionId STRING(128) NOT NULL,
+  AgentId STRING(128),
+  EventKind STRING(32) NOT NULL,
+  HeadSha STRING(128),
+  Content STRING(MAX) NOT NULL,
+  CanonicalHash STRING(64) NOT NULL,
+  Symbols ARRAY<STRING(512)>,
+  Keywords ARRAY<STRING(128)>,
+  ExpiresAt TIMESTAMP NOT NULL
+) PRIMARY KEY (ScopeType, ScopeId, IngestedAt, EventId),
+  ROW DELETION POLICY (OLDER_THAN(ExpiresAt, INTERVAL 0 DAY))
+EOD
+    ,
+    <<EOD
+CREATE TABLE IF NOT EXISTS SheepCompactionState (
+  ScopeType STRING(32) NOT NULL,
+  ScopeId STRING(128) NOT NULL,
+  LeaseHolder STRING(256),
+  LeaseGeneration INT64 NOT NULL,
+  LeaseExpiresAt TIMESTAMP,
+  HighWaterIngestedAt TIMESTAMP,
+  HighWaterEventId STRING(128),
+  BeliefEpoch INT64 NOT NULL,
+  LastEpochBlobHash STRING(128),
+  UpdatedAt TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+) PRIMARY KEY (ScopeType, ScopeId)
+EOD
   ]
 }

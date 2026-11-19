@@ -7,3 +7,4 @@
 4. **UI Architecture & Layout Integrity (Using `DESIGN.md`)**: When creating or modifying UI pages or navigation in `electric-sheep`:
    - Always adhere to the layout rules in `DESIGN.md` Section 3.1.1 (Top App Bar 2-Child Standard, ensuring `.app-nav` is inside `.app-title-group`) and Section 3.1.2 (`.app-body-layout` consistency across all pages).
    - Verify layout integrity by running the automated DOM verification tests in `tests/test_ui_service.py` (`test_ui_service_topbar_and_layout_integrity`) to assert that the top bar never wraps into an ugly layout and navigation between pages never breaks layout structure.
+5. **Cross-Family Verification (`Gemini` <-> `Claude Opus`)**: Substantive work authored by Gemini must be verified Context-Zero by frontier Claude (Opus), and Claude-authored work by frontier Gemini (Gemini 4), via `swarm`, `agy --model`, or `windlass rate`.

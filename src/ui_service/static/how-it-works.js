@@ -5,6 +5,7 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
+  initThemeToggle();
   initFlowchartSelector();
   initCodeSpotlightTabs();
   initCodeCopyButtons();
@@ -18,13 +19,39 @@ document.addEventListener("DOMContentLoaded", () => {
   initMathVisualizer();
 });
 
+function initThemeToggle() {
+  const popover = document.getElementById("viewMenuPopover");
+  const applyTheme = (theme) => {
+    const isDark = theme === "dark";
+    if (isDark) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+    document.querySelectorAll("[data-toggle-theme]").forEach((btn) => {
+      btn.textContent = isDark ? "Light theme" : "Dark theme";
+    });
+  };
+  applyTheme(localStorage.getItem("sheep-theme") || "light");
+  document.querySelectorAll("[data-toggle-theme]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      localStorage.setItem("sheep-theme", next);
+      applyTheme(next);
+      if (popover && typeof popover.hidePopover === "function") {
+        try { popover.hidePopover(); } catch (_) {}
+      }
+    });
+  });
+}
+
 /* ==========================================================================
    1. Interactive 5-State System Flowchart Selector
    ========================================================================== */
 const FLOW_STAGE_DATA = {
   1: {
     title: "1. Live Dialogue: InterviewAgent (Google ADK 2.0)",
-    desc: "<strong>Live Dialogue:</strong> The <code>InterviewAgent</code> engages in conversational turns using Google ADK 2.0 and Gemini 3.8 Flash on Gemini platform. Facts are captured via tool execution (<code>record_user_answer</code>) without blocking on persistent database writes.",
+    desc: "<strong>Live Dialogue:</strong> The <code>InterviewAgent</code> engages in conversational turns using Google ADK 2.0 and Gemini 3.8 Flash. Facts are captured via tool execution (<code>record_user_answer</code>) without blocking on persistent database writes.",
     codeTab: "1"
   },
   2: {
@@ -170,7 +197,7 @@ const SANDBOX_DATA = {
     bq: `{
   "timestamp": "2026-10-12T20:31:00Z",
   "session_id": "session-ui-001",
-  "user_id": "demo-user-42",
+  "user_id": "alex@acme.example",
   "agent_name": "InterviewAgent",
   "event_type": "USER_PROMPT",
   "message": "My favorite language is Python and I am a Principal Cloud Architect"
@@ -206,11 +233,11 @@ ORDER BY timestamp ASC;
 
 -- 2. Cloud Spanner Upsert Mutations
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
-VALUES ('demo-user-42', 'favorite_language', 'Python', 'language', 0.98, 'session-ui-001', 'The user\\'s favorite programming language is Python.', 'python, language, programming', PENDING_COMMIT_TIMESTAMP());
+VALUES ('alex@acme.example', 'favorite_language', 'Python', 'language', 0.98, 'session-ui-001', 'The user\\'s favorite programming language is Python.', 'python, language, programming', PENDING_COMMIT_TIMESTAMP());
 
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
-VALUES ('demo-user-42', 'job_role', 'Principal Cloud Architect', 'role', 0.99, 'session-ui-001', 'The user works as a Principal Cloud Architect.', 'architect, principal, cloud, role', PENDING_COMMIT_TIMESTAMP());`,
-    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'demo-user-42' in session 'session-ui-001'.
+VALUES ('alex@acme.example', 'job_role', 'Principal Cloud Architect', 'role', 0.99, 'session-ui-001', 'The user works as a Principal Cloud Architect.', 'architect, principal, cloud, role', PENDING_COMMIT_TIMESTAMP());`,
+    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'alex@acme.example' in session 'session-ui-001'.
 Extract long-term semantic beliefs and capture user intent.
 
 Conversation transcript:
@@ -223,7 +250,7 @@ Requirements:
 4. Return valid JSON matching the schema.`,
     spanner: `INSERT OR UPDATE UserPreferences:
 ---
-UserId: "demo-user-42"
+UserId: "alex@acme.example"
 PreferenceKey: "favorite_language"
 PreferenceValue: "Python"
 Category: "language"
@@ -232,7 +259,7 @@ CrystallizedBelief: "The user's favorite programming language is Python."
 Keywords: "python, language, programming"
 LastUpdated: PENDING_COMMIT_TIMESTAMP()
 
-UserId: "demo-user-42"
+UserId: "alex@acme.example"
 PreferenceKey: "job_role"
 PreferenceValue: "Principal Cloud Architect"
 Category: "role"
@@ -245,7 +272,7 @@ LastUpdated: PENDING_COMMIT_TIMESTAMP()`
     bq: `{
   "timestamp": "2026-10-12T20:32:14Z",
   "session_id": "session-ui-001",
-  "user_id": "demo-user-42",
+  "user_id": "alex@acme.example",
   "agent_name": "InterviewAgent",
   "event_type": "USER_PROMPT",
   "message": "I deploy microservices to Cloud Run using Terraform and Spanner"
@@ -289,11 +316,11 @@ ORDER BY timestamp ASC;
 
 -- 2. Cloud Spanner Upsert Mutations
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
-VALUES ('demo-user-42', 'deploy_target', 'Google Cloud Run', 'infrastructure', 0.97, 'session-ui-001', 'The user deploys microservices to Google Cloud Run.', 'cloud run, serverless, microservices, deploy', PENDING_COMMIT_TIMESTAMP());
+VALUES ('alex@acme.example', 'deploy_target', 'Google Cloud Run', 'infrastructure', 0.97, 'session-ui-001', 'The user deploys microservices to Google Cloud Run.', 'cloud run, serverless, microservices, deploy', PENDING_COMMIT_TIMESTAMP());
 
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
-VALUES ('demo-user-42', 'iac_tool', 'Terraform', 'devops', 0.95, 'session-ui-001', 'The user manages infrastructure as code using Terraform.', 'terraform, iac, devops, infrastructure', PENDING_COMMIT_TIMESTAMP());`,
-    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'demo-user-42' in session 'session-ui-001'.
+VALUES ('alex@acme.example', 'iac_tool', 'Terraform', 'devops', 0.95, 'session-ui-001', 'The user manages infrastructure as code using Terraform.', 'terraform, iac, devops, infrastructure', PENDING_COMMIT_TIMESTAMP());`,
+    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'alex@acme.example' in session 'session-ui-001'.
 Extract long-term semantic beliefs and capture user intent.
 
 Conversation transcript:
@@ -306,7 +333,7 @@ Requirements:
 4. Return valid JSON matching the schema.`,
     spanner: `INSERT OR UPDATE UserPreferences:
 ---
-UserId: "demo-user-42"
+UserId: "alex@acme.example"
 PreferenceKey: "deploy_target"
 PreferenceValue: "Google Cloud Run"
 Category: "infrastructure"
@@ -315,7 +342,7 @@ CrystallizedBelief: "The user deploys microservices to Google Cloud Run."
 Keywords: "cloud run, serverless, microservices, deploy"
 LastUpdated: PENDING_COMMIT_TIMESTAMP()
 
-UserId: "demo-user-42"
+UserId: "alex@acme.example"
 PreferenceKey: "iac_tool"
 PreferenceValue: "Terraform"
 Category: "devops"
@@ -324,7 +351,7 @@ CrystallizedBelief: "The user manages infrastructure as code using Terraform."
 Keywords: "terraform, iac, devops, infrastructure"
 LastUpdated: PENDING_COMMIT_TIMESTAMP()
 
-UserId: "demo-user-42"
+UserId: "alex@acme.example"
 PreferenceKey: "database"
 PreferenceValue: "Google Cloud Spanner"
 Category: "database"
@@ -337,7 +364,7 @@ LastUpdated: PENDING_COMMIT_TIMESTAMP()`
     bq: `{
   "timestamp": "2026-10-12T20:33:40Z",
   "session_id": "session-ui-001",
-  "user_id": "demo-user-42",
+  "user_id": "alex@acme.example",
   "agent_name": "InterviewAgent",
   "event_type": "USER_PROMPT",
   "message": "I prefer dark mode UI and writing Go tests with pytest and uv"
@@ -373,11 +400,11 @@ ORDER BY timestamp ASC;
 
 -- 2. Cloud Spanner Upsert Mutations
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
-VALUES ('demo-user-42', 'ui_theme', 'Dark Mode', 'preference', 0.99, 'session-ui-001', 'The user prefers dark mode UI.', 'dark mode, theme, ui', PENDING_COMMIT_TIMESTAMP());
+VALUES ('alex@acme.example', 'ui_theme', 'Dark Mode', 'preference', 0.99, 'session-ui-001', 'The user prefers dark mode UI.', 'dark mode, theme, ui', PENDING_COMMIT_TIMESTAMP());
 
 INSERT OR UPDATE UserPreferences (user_id, preference_key, preference_value, category, confidence, source_session_id, crystallized_belief, keywords, updated_at)
-VALUES ('demo-user-42', 'test_runner', 'uv + pytest', 'testing', 0.96, 'session-ui-001', 'The user runs tests using uv and pytest.', 'uv, pytest, testing, python', PENDING_COMMIT_TIMESTAMP());`,
-    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'demo-user-42' in session 'session-ui-001'.
+VALUES ('alex@acme.example', 'test_runner', 'uv + pytest', 'testing', 0.96, 'session-ui-001', 'The user runs tests using uv and pytest.', 'uv, pytest, testing, python', PENDING_COMMIT_TIMESTAMP());`,
+    dreamPrompt: `You are a memory synthesis engine performing offline consolidation over conversation logs for user 'alex@acme.example' in session 'session-ui-001'.
 Extract long-term semantic beliefs and capture user intent.
 
 Conversation transcript:
@@ -390,7 +417,7 @@ Requirements:
 4. Return valid JSON matching the schema.`,
     spanner: `INSERT OR UPDATE UserPreferences:
 ---
-UserId: "demo-user-42"
+UserId: "alex@acme.example"
 PreferenceKey: "ui_theme"
 PreferenceValue: "dark mode"
 Category: "preferences"
@@ -399,7 +426,7 @@ CrystallizedBelief: "The user prefers a dark mode UI theme."
 Keywords: "dark mode, theme, ui, appearance"
 LastUpdated: PENDING_COMMIT_TIMESTAMP()
 
-UserId: "demo-user-42"
+UserId: "alex@acme.example"
 PreferenceKey: "python_test_runner"
 PreferenceValue: "uv + pytest"
 Category: "testing"
@@ -601,9 +628,9 @@ const ARCH_DIAGRAM_DATA = {
   "2": {
     badgeNum: "2",
     title: "Step 2: Memory Synthesis (Gemini 3.8 Flash)",
-    techBadge: "Gemini platform • gemini-3.8-flash",
+    techBadge: "Vertex AI • gemini-3.8-flash",
     desc: "During offline memory consolidation, the engine reads session logs from BigQuery and invokes Gemini 3.8 Flash with a typed JSON schema to distill structured semantic beliefs and confidence scores.",
-    langTag: "Python / Gemini platform Gemini 3.8 Flash",
+    langTag: "Python / Gemini 3.8 Flash",
     code: `# Distill structured preferences via Gemini 3.8 Flash\nresponse = genai_client.models.generate_content(\n  model="gemini-3.8-flash",\n  contents=f"Extract structured beliefs from session logs:\\n{logs}",\n  config=types.GenerateContentConfig(\n    response_mime_type="application/json",\n    temperature=0.2,\n  ),\n)`
   },
   "3": {
@@ -612,7 +639,7 @@ const ARCH_DIAGRAM_DATA = {
     techBadge: "Google Cloud Spanner • UserPreferences",
     desc: "Distilled beliefs are committed to Cloud Spanner table <code>UserPreferences</code> using primary key <code>(UserId, PreferenceKey)</code>, ensuring structured, durable preference persistence across sessions.",
     langTag: "SQL / Cloud Spanner Mutations",
-    code: `-- Spanner Preference Upsert Mutation\nINSERT OR UPDATE UserPreferences (\n  UserId, PreferenceKey, PreferenceValue, Category,\n  Confidence, SourceSessionId, CrystallizedBelief, Keywords, LastUpdated\n) VALUES (\n  'demo-user-42',\n  'favorite_language',\n  'Python',\n  'language',\n  0.98,\n  'session-ui-001',\n  'The user\\'s favorite programming language is Python.',\n  'python, language, programming',\n  PENDING_COMMIT_TIMESTAMP()\n);`
+    code: `-- Spanner Preference Upsert Mutation\nINSERT OR UPDATE UserPreferences (\n  UserId, PreferenceKey, PreferenceValue, Category,\n  Confidence, SourceSessionId, CrystallizedBelief, Keywords, LastUpdated\n) VALUES (\n  'alex@acme.example',\n  'favorite_language',\n  'Python',\n  'language',\n  0.98,\n  'session-ui-001',\n  'The user\\'s favorite programming language is Python.',\n  'python, language, programming',\n  PENDING_COMMIT_TIMESTAMP()\n);`
   },
   "4": {
     badgeNum: "4",

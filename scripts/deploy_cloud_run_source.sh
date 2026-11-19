@@ -38,6 +38,11 @@ IAP_EXPECTED_AUDIENCE="${IAP_EXPECTED_AUDIENCE:-}"
 IAP_HEADER_NAME="${IAP_HEADER_NAME:-x-goog-iap-jwt-assertion}"
 IAP_PROXY_URL="${IAP_PROXY_URL:-}"
 
+# Dedicated least-privilege runtime identities (one per service; see terraform/iam.tf)
+UI_SERVICE_ACCOUNT="${UI_SERVICE_ACCOUNT:-es-ui-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
+INTERVIEW_SERVICE_ACCOUNT="${INTERVIEW_SERVICE_ACCOUNT:-es-interview-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
+PREFERENCE_SERVICE_ACCOUNT="${PREFERENCE_SERVICE_ACCOUNT:-es-preference-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
+
 echo "================================================================================"
 echo "  Deploying Google ADK 2.0 Multi-Agent Demo to Google Cloud Run"
 echo "  Project:  ${PROJECT_ID}"
@@ -50,10 +55,11 @@ echo "[1/3] Deploying interview-agent..."
 gcloud run deploy interview-agent \
   --project="${PROJECT_ID}" \
   --region="${REGION}" \
+  --service-account="${INTERVIEW_SERVICE_ACCOUNT}" \
   --source=. \
   --clear-base-image \
   --no-allow-unauthenticated \
-  --set-env-vars="SERVICE_MODULE=src.interview_agent.server,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=true,MODEL_NAME=${MODEL_NAME},BQ_DATASET_ID=${BQ_DATASET_ID},BQ_TABLE_ID=${BQ_TABLE_ID},SPANNER_INSTANCE_ID=${SPANNER_INSTANCE_ID},SPANNER_DATABASE_ID=${SPANNER_DATABASE_ID},USE_MOCK_CLIENTS=false,IAP_ENABLED=${IAP_ENABLED},IAP_EXPECTED_AUDIENCE=${IAP_EXPECTED_AUDIENCE},IAP_HEADER_NAME=${IAP_HEADER_NAME},IAP_PROXY_URL=${IAP_PROXY_URL}" \
+  --set-env-vars="SERVICE_MODULE=src.interview_agent.server,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=true,MODEL_NAME=${MODEL_NAME},BQ_DATASET_ID=${BQ_DATASET_ID},BQ_TABLE_ID=${BQ_TABLE_ID},USE_MOCK_CLIENTS=false,IAP_ENABLED=${IAP_ENABLED},IAP_EXPECTED_AUDIENCE=${IAP_EXPECTED_AUDIENCE},IAP_HEADER_NAME=${IAP_HEADER_NAME},IAP_PROXY_URL=${IAP_PROXY_URL}" \
   --quiet
 
 echo ""
@@ -61,6 +67,7 @@ echo "[2/3] Deploying preference-agent..."
 gcloud run deploy preference-agent \
   --project="${PROJECT_ID}" \
   --region="${REGION}" \
+  --service-account="${PREFERENCE_SERVICE_ACCOUNT}" \
   --source=. \
   --clear-base-image \
   --no-allow-unauthenticated \
@@ -72,6 +79,7 @@ echo "[3/3] Deploying ui-service..."
 gcloud run deploy ui-service \
   --project="${PROJECT_ID}" \
   --region="${REGION}" \
+  --service-account="${UI_SERVICE_ACCOUNT}" \
   --source=. \
   --clear-base-image \
   --allow-unauthenticated \

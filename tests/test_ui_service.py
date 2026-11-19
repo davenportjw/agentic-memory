@@ -222,7 +222,7 @@ def test_ui_service_auth_endpoints_and_login_protection():
     assert cfg_data["allowedEmailDomains"] == expected_domain
 
     # 3. Create dev session (bypass auth in dev/mock mode)
-    sess_res = client.post("/api/auth/session", json={"idToken": "dev-admin-token"})
+    sess_res = client.post("/api/auth/session", json={"idToken": "local-dev-login"})
     assert sess_res.status_code == 200
     assert sess_res.json()["email"] == expected_email
 
@@ -1379,7 +1379,6 @@ def test_studio_toolbar_dropdowns_and_scroll_integrity() -> None:
         "engineConfigDropdown",
         "toolbarViewModeBadge",
         "toolbarCurrentTitle",
-        "toolbarCurrentSubtitle",
         "activeStageDropdownLabel",
     ):
         assert f'id="{expected_id}"' in html, f"Missing expected toolbar element #{expected_id} in studio.html"
@@ -1441,4 +1440,526 @@ def test_full_viewport_scaling_and_responsive_breakpoints() -> None:
     # 4. Verify responsive matchMedia auto-collapse in studio.js
     assert 'window.matchMedia("(max-width: 1200px)")' in js_text
     assert 'window.matchMedia("(max-width: 900px)")' in js_text
+
+
+def test_plain_english_ux_login_index_and_how_it_works() -> None:
+    """Verify Workspace-style restraint copy, zero raw LaTeX on how-it-works.html, and removal of cloud chrome badges."""
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    client = TestClient(api)
+
+    # 1. login.html restrained copy (1-2 word button labels, zero explanatory subtitle blurb)
+    login_html = (static_dir / "login.html").read_text(encoding="utf-8")
+    assert "Control Center Login" in login_html
+    assert "Sign in" in login_html
+    assert "Local dev" in login_html
+    assert "Sign in with an authorized account" not in login_html
+    assert "Google ADK 2.0 Multi-Agent Demo UI" not in login_html
+    assert "Bypass Auth (Local Developer)" not in login_html
+
+    # 2. how-it-works.html & how-it-works.js: zero raw unrendered LaTeX, zero inert inputs, clean copy
+    how_res = client.get("/how-it-works.html")
+    assert how_res.status_code == 200
+    how_html = how_res.text
+    how_js = (static_dir / "how-it-works.js").read_text(encoding="utf-8")
+
+    assert r"\(" not in how_html, "how-it-works.html must not contain raw unrendered \\( LaTeX"
+    assert r"\)" not in how_html, "how-it-works.html must not contain raw unrendered \\) LaTeX"
+    assert r"\tau" not in how_html
+    assert r"\ge" not in how_html
+    assert "Gemini platform Gemini 3.8 Flash" not in how_html
+    assert "Gemini platform global" not in how_html
+    assert "Gemini platform global" not in how_js
+    assert 'id="userIdInput"' not in how_html, "Read-only how-it-works.html must not render inert userIdInput"
+    assert 'id="sessionIdInput"' not in how_html, "Read-only how-it-works.html must not render inert sessionIdInput"
+    assert 'class="session-info"' in how_html
+    assert 'id="sessionInfoBtn"' in how_html
+    assert 'id="sessionInfoTooltip"' in how_html
+
+    # 3. index.html & app.js: 1-2 word nav & button labels, zero subtitle blurbs, and recall badges
+    index_res = client.get("/")
+    assert index_res.status_code == 200
+    index_html = index_res.text
+    app_js = (static_dir / "app.js").read_text(encoding="utf-8")
+
+    assert 'class="model-badge"' not in index_html
+    assert "Gemini platform global" not in index_html
+    assert "v2.0 Production" not in index_html
+    assert "Capture agent conversations, extract reusable preferences and rules" not in index_html
+    for expected_label in (
+        "Send",
+        "New chat",
+        "Local Sessions",
+        "Live Chat",
+        "Upload Transcript",
+    ):
+        assert expected_label in index_html, f"Expected concise label '{expected_label}' in index.html"
+
+    for forbidden_jargon in (
+        "Spanner &amp; BQ Connected",
+        "Ingest to BigQuery",
+        "Ingest Telemetry into BigQuery",
+        "Refresh BigQuery Traces",
+        "Refresh Spanner",
+        "Waking Life: Episodic Trajectories",
+        "Antigravity Sessions",
+        "Interactive Dialogue",
+        "BYOT Telemetry Dropzone",
+        "(NREM)",
+        "(REM)",
+        "(GATE)",
+    ):
+        assert forbidden_jargon not in index_html, f"Forbidden jargon '{forbidden_jargon}' still present in index.html"
+
+    assert "Direct Memory Hit" in app_js
+    assert "Model Fallback" in app_js
+
+
+def test_studio_plain_english_intent_and_interactive_handler_fixes() -> None:
+    """Verify fixed Studio JS handlers, restrained 1-2 word button labels, humanized dropdown options, and zero fake file-tree cosplay."""
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    studio_html = (static_dir / "studio.html").read_text(encoding="utf-8")
+    studio_js = (static_dir / "studio.js").read_text(encoding="utf-8")
+
+    # 1. Interactive JS bug fixes
+    assert 'getAttribute("data-signal-filter")' in studio_js
+    assert 'getElementById("evalAlphaSlider")' in studio_js
+    assert 'getElementById("ingestSourceSelect")' in studio_js
+    assert "ingestSourceStreamSelect" not in studio_js
+    assert 'expectedFact: "python_package_manager = uv"' not in studio_js
+
+    # 2. Log Sources & Portable Backups (replacing fake /streams/telemetry/*.sock cosplay)
+    assert 'id="studioFileDataTree"' in studio_html
+    for expected_tree_label in (
+        "Session Transcripts",
+        "Live Chat Events",
+        "Export Memories (.json)",
+        "Import Memories (.json)",
+    ):
+        assert expected_tree_label in studio_html, f"Expected '{expected_tree_label}' in #studioFileDataTree"
+
+    for fake_path in (
+        "bigquery_traces.tbl",
+        "live_stream.sock",
+        "/streams/telemetry",
+        "/packs/portable",
+    ):
+        assert fake_path not in studio_html, f"Fake file-tree path '{fake_path}' must be removed from studio.html"
+        assert fake_path not in studio_js, f"Fake file-tree path '{fake_path}' must be removed from studio.js"
+
+    # 3. Consolidated Seed & Reset controls (1-2 word labels)
+    assert 'id="intentSeedMultiScope"' not in studio_html, "Duplicate second seed button must be removed"
+    assert 'id="seedMultiScopeBtn"' in studio_html
+    assert "Load sample" in studio_html
+    assert 'id="zeroResetBtn"' in studio_html
+
+    # 4. Mode clarity & removal of stale instructions / raw REST routes
+    for stale_ref in (
+        "+ New",
+        "Intent 3",
+        "Intent 4",
+        "MEMORY EXPLORER",
+        "POST /api/studio/",
+        "Record &amp; Settings JSON Inspector",
+    ):
+        assert stale_ref not in studio_html, f"Stale reference or raw route '{stale_ref}' must be removed from studio.html"
+    assert "unanchored" not in studio_html.lower()
+
+    # 5. Restrained 1-2 word button labels & plain-English option labels across studio.html & studio.js
+    for plain_label in (
+        "Search",
+        "Save rule",
+        "Add note",
+        "Run eval",
+        "Load sample",
+        "Recommended Settings",
+        "Active Retrieval Settings",
+        "Embedding Size",
+        "Compact Bullets",
+        "Workflow / How-To",
+        "Strict Rule (Guardrail)",
+        "Meaning Match Only",
+    ):
+        assert plain_label in studio_html, f"Missing plain-English label '{plain_label}' in studio.html"
+
+    # Backend option values must remain 100% intact
+    for preserved_val in (
+        'value="COMPACT_BULLET"',
+        'value="PROCEDURAL_SKILL"',
+        'value="INVARIANT_GUARDRAIL"',
+        'value="SEMANTIC_COSINE"',
+    ):
+        assert preserved_val in studio_html, f"Backend contract attribute {preserved_val} must stay unchanged"
+
+    for js_plain_label in (
+        "Compact (<80 tokens)",
+        "Balanced (80–160 tokens)",
+        "Detailed (>160 tokens)",
+        "Wrong Answer (Save as Test Case)",
+        "Helpful (Save as Test Case)",
+    ):
+        assert js_plain_label in studio_js, f"Missing plain-English label '{js_plain_label}' in studio.js"
+
+    for forbidden_studio_jargon in (
+        "10-Workspace Enterprise Workbench",
+        "Eval &amp; Evolve",
+        "Adversarial Evaluation &amp; Optimization",
+        "Pareto Fitness",
+        "Champion Genome",
+        "Active Runtime Genome",
+        "Matryoshka Slice Benchmark",
+        "Matryoshka Vector Slice",
+        "MAP-Elites Archive",
+        "Tree-Conditioned",
+        "Flag Regression (-1 EvalCase)",
+        "Reinforce (+1 EvalCase)",
+    ):
+        assert forbidden_studio_jargon not in studio_html, (
+            f"Forbidden jargon '{forbidden_studio_jargon}' must be removed from studio.html"
+        )
+        assert forbidden_studio_jargon not in studio_js, (
+            f"Forbidden jargon '{forbidden_studio_jargon}' must be removed from studio.js"
+        )
+
+
+def test_workspace_style_restraint_and_view_popover_contract() -> None:
+    """Verify Google Workspace-style restraint across Python Web Control Center:
+    - DESIGN.md 2-child topbar (.app-title-group containing .app-nav + .session-info/.topbar-controls)
+    - 1-2 word nav links: Chat, Memory, Guide
+    - Native HTML Popover View menu (popovertarget='viewMenuPopover', popover='auto', polyfill feature-detect, [popover]:is(:popover-open, .\\:popover-open), zero role='menu'/aria-haspopup mismatch)
+    - Zero KPI stat card grids, zero explanatory subtitle blurbs, zero raw JSON <pre> dumps on everyday views, <=1 primary button per visible screen
+    """
+    import re
+
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    client = TestClient(api)
+    css_text = (static_dir / "style.css").read_text(encoding="utf-8")
+
+    # CSS rule for @oddbird/popover-polyfill compatibility per modern-web-guidance
+    assert "[popover]:is(:popover-open, .\\:popover-open)" in css_text
+
+    for page in ("/", "/studio.html", "/how-it-works.html"):
+        res = client.get(page)
+        assert res.status_code == 200
+        html = res.text
+
+        # 1-2 word top-bar nav labels
+        for nav_word in (">Chat<", ">Memory<", ">Guide<"):
+            assert nav_word in html, f"Expected 1-2 word nav link {nav_word} on {page}"
+
+        # Native HTML Popover View button & popover container + conditional polyfill feature-detect
+        assert 'popovertarget="viewMenuPopover"' in html, f"Missing View popover button on {page}"
+        assert ">View</button>" in html, f"Missing 'View' button label on {page}"
+        assert 'id="viewMenuPopover"' in html and 'popover="auto"' in html, (
+            f"Missing #viewMenuPopover popover='auto' on {page}"
+        )
+        assert 'if (!("popover" in HTMLElement.prototype))' in html, (
+            f"Missing conditional @oddbird/popover-polyfill feature detect on {page}"
+        )
+        assert "@oddbird/popover-polyfill" in html, f"Missing @oddbird/popover-polyfill import on {page}"
+
+        # Zero role="menu" or aria-haspopup mismatch on native popover or invoker
+        view_btn_match = re.search(r"<button[^>]*popovertarget=\"viewMenuPopover\"[^>]*>", html)
+        assert view_btn_match is not None
+        assert "aria-haspopup" not in view_btn_match.group(0), f"Forbidden aria-haspopup on View popover button ({page})"
+        popover_tag_match = re.search(r"<div[^>]*id=\"viewMenuPopover\"[^>]*>", html)
+        assert popover_tag_match is not None
+        assert 'role="menu"' not in popover_tag_match.group(0), f"Forbidden role='menu' on #viewMenuPopover ({page})"
+
+        # Zero KPI stat card grids & zero explanatory subtitle blurbs
+        for banned_class in (
+            "studio-kpi-row",
+            "studio-kpi-card",
+            "nrem-stat-grid",
+            "nrem-stat-box",
+            "math-metrics-grid",
+            "math-metric-box",
+            'class="card-subtitle"',
+            'class="ws-subtitle"',
+        ):
+            assert banned_class not in html, f"Banned KPI grid or subtitle blurb '{banned_class}' on {page}"
+
+    # Everyday views (login.html, index.html, studio.html): zero raw JSON <pre> dumps & <=1 primary button per visible view
+    login_html = (static_dir / "login.html").read_text(encoding="utf-8")
+    assert 'class="login-subtitle"' not in login_html
+    assert len(re.findall(r'class="[^"]*\bbtn-primary\b[^"]*"', login_html)) <= 1
+
+    index_html = (static_dir / "index.html").read_text(encoding="utf-8")
+    assert "<pre id=\"mcpOutputContent\"" not in index_html, "Everyday index.html must not use raw JSON <pre> dump for MCP output"
+    assert "btn-harvest" not in index_html, "Competing primary .btn-harvest must be removed on index.html"
+    assert len(re.findall(r'class="[^"]*\bbtn-primary\b[^"]*"', index_html)) <= 1, (
+        "index.html must expose at most 1 primary button"
+    )
+
+    studio_html = (static_dir / "studio.html").read_text(encoding="utf-8")
+    assert "<pre id=\"inspectorContent\"" not in studio_html, (
+        "Everyday studio.html inspector must render structured rows, not a raw JSON <pre> schema dump"
+    )
+
+
+def test_brand_v21_tokens_and_v1_memory_api() -> None:
+    """Verify Brand v2.1 CSS tokens, inline sheep.svg mark, favicon.svg, and live /api/v1/memory/* endpoints."""
+    client = TestClient(api)
+
+    # 1. /favicon.svg serves badge SVG
+    fav_res = client.get("/favicon.svg")
+    assert fav_res.status_code == 200
+    assert "<svg" in fav_res.text
+
+    # 2. Brand v2.1 tokens + dark theme in style.css, and inline SVG mark in HTML pages
+    css_text = client.get("/style.css").text.lower()
+    for token_pair in (
+        "--bg-canvas: #f6f5f0",
+        "--surface-card: #ffffff",
+        "--surface-muted: #eceae2",
+        "--border-subtle: #dad6ca",
+        "--text-primary: #14171c",
+        "--text-secondary: #38414e",
+        "--text-muted: #556070",
+        "--color-primary: #6a359c",
+        "--color-primary-hover: #53277d",
+        "--color-success: #0b6a48",
+        "--color-warn: #b83710",
+        'html[data-theme="dark"]',
+        "#0b0e13",
+        "#121720",
+        "#be94ff",
+    ):
+        assert token_pair in css_text, f"Missing Brand v2.1 token {token_pair} in style.css"
+
+    for page in ("/", "/studio.html", "/how-it-works.html"):
+        html = client.get(page).text
+        assert 'href="favicon.svg"' in html, f"Missing favicon.svg link on {page}"
+        assert "🐑" not in html, f"Legacy sheep emoji still in brand header on {page}"
+
+    # 3. Live /api/v1/memory/* adapter endpoints backed by spanner_client + telemetry_sink
+    mounts_res = client.get("/api/v1/memory/mounts")
+    assert mounts_res.status_code == 200
+    prefixes = [m["prefix"] for m in mounts_res.json()["mounts"]]
+    assert "/mem/personal" in prefixes
+    assert "/mem/project" in prefixes
+    assert "/mem/org" in prefixes
+
+    obs_res = client.post(
+        "/api/v1/memory/observe",
+        json={
+            "repo_root": "org/pytest-repo",
+            "session_id": "sess-v1-a",
+            "scope": "/mem/project",
+            "content": "WebhookDispatcher must honor Retry-After headers before exponential backoff",
+            "symbols": ["WebhookDispatcher", "RetryPolicy"],
+        },
+    )
+    assert obs_res.status_code == 200
+    assert obs_res.json()["ok"] is True
+
+    # Second distinct session observation so Dream consolidation promotes cleanly
+    obs_res_2 = client.post(
+        "/api/v1/memory/observe",
+        json={
+            "repo_root": "org/pytest-repo",
+            "session_id": "sess-v1-b",
+            "scope": "/mem/project",
+            "content": "WebhookDispatcher must honor Retry-After headers before exponential backoff",
+            "symbols": ["WebhookDispatcher", "RetryPolicy"],
+        },
+    )
+    assert obs_res_2.status_code == 200
+
+    note_res = client.get("/api/v1/memory/note", params={"repo_root": "org/pytest-repo", "symbol": "WebhookDispatcher"})
+    assert note_res.status_code == 200
+    assert "WebhookDispatcher" in note_res.json()["note"]
+    assert note_res.json()["bytes"] <= 200
+
+    inj_res = client.post(
+        "/api/v1/memory/inject",
+        json={
+            "repo_root": "org/pytest-repo",
+            "session_id": "sess-inject-01",
+            "symbols": ["WebhookDispatcher"],
+        },
+    )
+    assert inj_res.status_code == 200
+    assert inj_res.json()["bytes"] > 0
+    assert inj_res.json()["bytes"] <= 200
+
+    fault_res = client.post(
+        "/api/v1/memory/fault",
+        json={
+            "repo_root": "org/pytest-repo",
+            "session_id": "sess-v1-a",
+            "prompt_summary": "stabilize webhook retry jitter",
+            "searched_queries": ["pkg/webhook", "jitter"],
+            "resolved_symbols": ["WebhookDispatcher"],
+            "extra_read_steps": 3,
+        },
+    )
+    assert fault_res.status_code == 200
+    assert fault_res.json()["bound"] is True
+
+    dream_res = client.post(
+        "/api/v1/memory/dream",
+        json={
+            "scope_type": "project",
+            "scope_id": "org/pytest-repo",
+            "mode": "nrem",
+            "min_sessions": 2,
+        },
+    )
+    assert dream_res.status_code == 200
+    assert dream_res.json()["promoted"] >= 1
+    assert dream_res.json()["belief_epoch"] >= 1
+
+    recall_res = client.post(
+        "/api/v1/memory/recall",
+        json={
+            "repo_root": "org/pytest-repo",
+            "intent": "WebhookDispatcher retry backoff",
+            "mount": "scoped",
+        },
+    )
+    assert recall_res.status_code == 200
+    assert recall_res.json()["bytes"] <= 2048
+    assert "Retry-After" in recall_res.json()["frame"]
+
+    clean_res = client.get("/api/v1/memory/recall", params={"mount": "clean", "intent": "WebhookDispatcher"})
+    assert clean_res.status_code == 200
+    assert clean_res.json()["bytes"] == 0
+
+    events_res = client.get("/api/v1/memory/events", params={"scope_type": "project", "scope_id": "org/pytest-repo"})
+    assert events_res.status_code == 200
+    assert events_res.json()["count"] >= 1
+
+    forbid_ev = client.get("/api/v1/memory/events", params={"scope_type": "personal"})
+    assert forbid_ev.status_code == 403
+
+    delta_res = client.get("/api/v1/memory/delta", params={"scope_type": "project", "scope_id": "org/pytest-repo"})
+    assert delta_res.status_code == 200
+    assert delta_res.json()["count"] >= 1
+
+    diff_res = client.post(
+        "/api/v1/memory/reconcile-diff",
+        json={
+            "repo_root": "org/pytest-repo",
+            "diff": "diff --git a/w.go b/w.go\n--- a/w.go\n+++ b/w.go\n@@ -1,1 +1,1 @@\n-func WebhookDispatcher() {}\n+func ModernWebhookDispatcher() {}\n",
+        },
+    )
+    assert diff_res.status_code == 200
+    assert diff_res.json()["old_to_new"].get("WebhookDispatcher") == "ModernWebhookDispatcher"
+
+    evict_res = client.post(
+        "/api/v1/memory/evict",
+        json={
+            "repo_root": "org/pytest-repo",
+            "old_to_new": {"RetryPolicy": "AdaptiveRetryPolicy"},
+        },
+    )
+    assert evict_res.status_code == 200
+    assert evict_res.json()["updated"] == 1
+
+    metrics_res = client.get("/api/v1/memory/metrics", params={"repo_root": "org/pytest-repo"})
+    assert metrics_res.status_code == 200
+    m_json = metrics_res.json()
+    assert m_json["beliefs_promoted"] >= 1
+    assert m_json["delivered_notes_count"] >= 1
+    assert m_json["evicted_renames_count"] >= 2
+
+
+def test_ui_service_visual_restraint_and_zero_seeded_defaults() -> None:
+    """Verify Workspace-style visual restraint, styled View popover button, single-row topbar at 800px, and zero seeded default literals."""
+    client = TestClient(api)
+    index_html = client.get("/").text
+    studio_html = client.get("/studio").text
+    guide_html = client.get("/how-it-works.html").text
+    app_js = client.get("/app.js").text
+    studio_js = client.get("/studio.js").text
+    css_text = client.get("/style.css").text
+
+    for page_name, html in (("/", index_html), ("/studio", studio_html), ("/how-it-works.html", guide_html)):
+        assert 'popovertarget="viewMenuPopover" class="btn btn-secondary btn-sm"' in html, (
+            f"{page_name} View button must use .btn .btn-secondary .btn-sm so browser bevel border never renders"
+        )
+
+    assert ".app-bar-content {\n    flex-wrap: wrap;" not in css_text, (
+        "style.css must never wrap .app-bar-content onto two rows at 800px"
+    )
+
+    combined_ui = "\n".join([index_html, studio_html, app_js, studio_js])
+    for forbidden in (
+        "ACTIVE SCOPE PILLS",
+        "Agent Memory Workbench",
+        'value="user:default"',
+        'value="team:default"',
+        'value="agent:default"',
+        'value="demo-user-42"',
+        "Preset: cfg-gen1",
+        "Summarize & Extract",
+        "Summarize &amp; Extract",
+        "Save Usefulness Attribution to Spanner",
+        "Global Lakehouse Traces",
+    ):
+        assert forbidden not in combined_ui, f"Forbidden jargon or seeded literal {forbidden!r} leaked into UI chrome"
+
+
+def test_adversarial_round2_remediation_contracts() -> None:
+    """Verify Round 2 Context-Zero remediation across static HTML and JS:
+    - Zero alert() stubs
+    - Zero <small class='menu-item-desc'> explanatory blurbs
+    - Zero Cloud Spanner / BigQuery / GCS Lakehouse product names in user-visible messages/labels
+    - Zero pre-seeded identity value='...' literals or 'demo-user-42' anywhere in static UI/docs
+    - Zero <pre class='sandbox-json-view'> raw JSON dumps
+    - 1-2 word workspace & walkthrough menu labels
+    """
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    index_html = (static_dir / "index.html").read_text(encoding="utf-8")
+    studio_html = (static_dir / "studio.html").read_text(encoding="utf-8")
+    guide_html = (static_dir / "how-it-works.html").read_text(encoding="utf-8")
+    login_html = (static_dir / "login.html").read_text(encoding="utf-8")
+    app_js = (static_dir / "app.js").read_text(encoding="utf-8")
+    studio_js = (static_dir / "studio.js").read_text(encoding="utf-8")
+    guide_js = (static_dir / "how-it-works.js").read_text(encoding="utf-8")
+
+    assert "alert(" not in app_js, "app.js must not use browser alert() stubs"
+    assert "alert(" not in studio_js, "studio.js must not use browser alert() stubs"
+    assert "menu-item-desc" not in studio_html, "studio.html must not contain <small class='menu-item-desc'> blurbs"
+    assert "menu-item-desc" not in index_html, "index.html must not contain <small class='menu-item-desc'> blurbs"
+    assert '<pre class="sandbox-json-view"' not in guide_html, "how-it-works.html must not use <pre class='sandbox-json-view'> dumps"
+    assert "demo-user-42" not in guide_html
+    assert "demo-user-42" not in guide_js
+
+    everyday_chrome = "\n".join([index_html, studio_html, login_html, app_js, studio_js])
+    for leaked_cloud_or_seed in (
+        "Cloud Spanner",
+        "in Spanner",
+        "to Spanner",
+        "from Spanner",
+        "Spanner preferences",
+        "Spanner push failed",
+        "Spanner Transaction Committed",
+        "Spanner Database Sync Status",
+        "Inspect Spanner Record",
+        "into BigQuery",
+        "to BigQuery",
+        "from BigQuery",
+        "BigQuery Lakehouse",
+        "GCS Lakehouse",
+        'value="user:developer"',
+        'value="team:platform-eng"',
+        'value="agent:code-reviewer"',
+        'value="org:acme"',
+        'value="session-01"',
+        'value="byot-session-001"',
+        "Benchmark &amp; Auto-Tune",
+        "Entities &amp; Scopes",
+        "Security &amp; RBAC",
+        "Step 1: Load &amp; Inspect Sessions",
+        "🚀 Save Staged Memories",
+        "🚀 Push & Sync Staged Memories to Spanner",
+    ):
+        assert leaked_cloud_or_seed not in everyday_chrome, (
+            f"Leaked cloud product name, seeded default, or >2-word label {leaked_cloud_or_seed!r}"
+        )
+
+
+
+
 

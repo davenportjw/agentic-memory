@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const userIdInput = document.getElementById("userIdInput");
   const sessionIdInput = document.getElementById("sessionIdInput");
 
-  // --- Stage 2 BigQuery Telemetry Lakehouse Elements ---
+  // --- Stage 2 Recorded Turns Elements ---
   const refreshLogsBtn = document.getElementById("refreshLogsBtn");
   const logsTableBody = document.getElementById("logsTableBody");
   const logFilters = document.querySelectorAll("#logFilters .intent-pill");
@@ -26,12 +26,42 @@ document.addEventListener("DOMContentLoaded", () => {
   const lakehouseActiveScopeBadge = document.getElementById("lakehouseActiveScopeBadge");
 
   let lakehouseSessionsMap = new Map();
+  const autoSessionId = `sess-${Date.now().toString(36)}`;
+
+  function resolveActiveUserId() {
+    const typed = userIdInput ? userIdInput.value.trim() : "";
+    if (typed) return typed;
+    try {
+      const stored = sessionStorage.getItem("electric_sheep_user_email");
+      if (stored && stored.trim()) return `user:${stored.trim()}`;
+    } catch (_) {}
+    return "user:current";
+  }
 
   function getParams() {
     return {
-      user_id: (userIdInput ? userIdInput.value : "demo-user-42").trim() || "demo-user-42",
-      session_id: (sessionIdInput ? sessionIdInput.value : "session-ui-001").trim() || "session-ui-001",
+      user_id: resolveActiveUserId(),
+      session_id: (sessionIdInput ? sessionIdInput.value : "").trim() || autoSessionId,
     };
+  }
+
+  function formatStepBadge(raw) {
+    const map = {
+      USER_PROMPT: "Prompt",
+      AGENT_RESPONSE: "Reply",
+      SYSTEM_MESSAGE: "System",
+      EPHEMERAL_MESSAGE: "Context",
+      ERROR_MESSAGE: "Error",
+      GENERIC: "Event",
+      TOOL_CALL: "Tool",
+      TOOL_RESULT: "Result",
+      USER_EXPLICIT: "User",
+      SYSTEM_SDK: "System",
+      SYSTEM: "System",
+      MODEL: "Model",
+    };
+    const key = String(raw || "").trim().toUpperCase();
+    return map[key] || (raw ? String(raw) : "Step");
   }
 
   function ensureSessionInDropdown(sid) {
@@ -54,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isActiveScope) {
       if (lakehouseActiveScopeBadge) {
         lakehouseActiveScopeBadge.textContent = `Scope: Active Session (${session_id})`;
-        lakehouseActiveScopeBadge.className = "intent-pill pill-neutral";
+        lakehouseActiveScopeBadge.className = "quiet-tnum-status";
       }
       if (lakehouseSessionBadge) {
         lakehouseSessionBadge.style.display = "inline-flex";
@@ -75,15 +105,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!selectedVal || selectedVal === "ALL") {
       if (lakehouseSessionBadge) lakehouseSessionBadge.style.display = "none";
       if (lakehouseActiveScopeBadge) {
-        lakehouseActiveScopeBadge.textContent = "Scope: All Sessions (Everything)";
-        lakehouseActiveScopeBadge.className = "intent-pill pill-primary";
+        lakehouseActiveScopeBadge.textContent = "All sessions";
+        lakehouseActiveScopeBadge.className = "quiet-tnum-status";
       }
       return;
     }
 
     if (lakehouseActiveScopeBadge) {
       lakehouseActiveScopeBadge.textContent = `Scope: ${selectedVal}`;
-      lakehouseActiveScopeBadge.className = "intent-pill pill-neutral";
+      lakehouseActiveScopeBadge.className = "quiet-tnum-status";
     }
 
     if (lakehouseSessionBadge) {
@@ -118,12 +148,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const dreamHelp = document.getElementById("dreamScopeHelp");
     const spannerUserVal = document.getElementById("spannerUserScopeVal");
     const mcpUserVal = document.getElementById("mcpUserScopeVal");
+    const topbarQuietScope = document.getElementById("topbarQuietScope");
 
     if (dreamSessionVal) dreamSessionVal.textContent = session_id;
     if (dreamUserVal) dreamUserVal.textContent = user_id;
-    if (dreamHelp) dreamHelp.innerHTML = `🎯 Will consolidate active session <strong>${escapeHtml(session_id)}</strong> into Spanner`;
+    if (dreamHelp) dreamHelp.innerHTML = `Consolidate session <strong>${escapeHtml(session_id)}</strong>`;
     if (spannerUserVal) spannerUserVal.textContent = user_id;
     if (mcpUserVal) mcpUserVal.textContent = user_id;
+    if (topbarQuietScope) {
+      const shortSid = session_id && session_id.length > 14 ? `${session_id.substring(0, 12)}…` : session_id;
+      topbarQuietScope.textContent = `${user_id} · ${shortSid}`;
+    }
 
     updateLakehouseBadge();
   }
@@ -343,21 +378,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const PRESETS = {
     python: `[
-  {"event_type": "USER_PROMPT", "message": "Can you run pytest to test the Spanner preference client and ensure uv is used?"},
-  {"event_type": "AGENT_RESPONSE", "message": "I will execute \`uv run pytest tests/test_spanner_client.py\` using uv. We never use global pip install."},
-  {"event_type": "TOOL_CALL", "message": "run_command(CommandLine='uv run pytest tests/test_spanner_client.py')"},
+  {"event_type": "USER_PROMPT", "message": "Can you run pytest to test the preference client and ensure uv is used?"},
+  {"event_type": "AGENT_RESPONSE", "message": "I will execute \`uv run pytest tests/test_preferences.py\` using uv. We never use global pip install."},
+  {"event_type": "TOOL_CALL", "message": "run_command(CommandLine='uv run pytest tests/test_preferences.py')"},
   {"event_type": "TOOL_RESULT", "message": "6 passed in 2.14s. All tests clean."},
   {"event_type": "AGENT_RESPONSE", "message": "Tests succeeded using uv virtual environment."}
 ]`,
     docker: `[
   {"event_type": "USER_PROMPT", "message": "Please package this into a container image with docker build."},
   {"event_type": "AGENT_RESPONSE", "message": "Checking system environment for Docker daemon... Docker is not installed on this Apple Silicon machine."},
-  {"event_type": "USER_PROMPT", "message": "Right, remember the rule: Docker is not installed, use Cloud Run source deployment or apple container."},
-  {"event_type": "AGENT_RESPONSE", "message": "Understood. Docker is prohibited; we will deploy via Cloud Run source build ./scripts/deploy_cloud_run_source.sh and prune dangling images."}
+  {"event_type": "USER_PROMPT", "message": "Right, remember the rule: Docker is not installed, use apple container or local service builds."},
+  {"event_type": "AGENT_RESPONSE", "message": "Understood. Docker is prohibited; we will build using local service tooling and prune dangling images."}
 ]`,
     terraform: `[
-  {"event_type": "USER_PROMPT", "message": "Update the Spanner database DDL in terraform/spanner.tf and apply."},
-  {"event_type": "AGENT_RESPONSE", "message": "Editing terraform/spanner.tf to declare the UserPreferences and UserSessionSummaries tables with 768-dim vector embeddings."},
+  {"event_type": "USER_PROMPT", "message": "Update the database schema in terraform/database.tf and validate."},
+  {"event_type": "AGENT_RESPONSE", "message": "Editing terraform/database.tf to declare the UserPreferences and UserSessionSummaries tables with 768-dim vector embeddings."},
   {"event_type": "TOOL_CALL", "message": "run_command(CommandLine='terraform fmt && terraform validate')"},
   {"event_type": "TOOL_RESULT", "message": "Success! The configuration is valid."},
   {"event_type": "AGENT_RESPONSE", "message": "Terraform formatting and validation passed with zero errors."}
@@ -472,17 +507,21 @@ document.addEventListener("DOMContentLoaded", () => {
     byotIngestBtn.addEventListener("click", async () => {
       const rawText = (byotContent.value || "").trim();
       if (!rawText) {
-        alert("Please paste a transcript or select a preset before ingesting.");
+        if (byotStatusText) {
+          byotStatusText.style.display = "inline-flex";
+          byotStatusText.textContent = "Paste a transcript or load a sample first.";
+          byotStatusText.className = "byot-status-badge pill-neutral";
+        }
         return;
       }
-      const targetSession = (byotSessionId.value || "byot-session-001").trim();
+      const targetSession = (byotSessionId.value || "").trim() || autoSessionId;
       const format = byotFormat.value || "auto";
       const { user_id } = getParams();
 
       byotIngestBtn.disabled = true;
       if (byotStatusText) {
         byotStatusText.style.display = "inline-flex";
-        byotStatusText.textContent = "Ingesting into BigQuery...";
+        byotStatusText.textContent = "Importing turns...";
         byotStatusText.className = "byot-status-badge pill-neutral";
       }
 
@@ -500,7 +539,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (data.status === "success") {
           if (byotStatusText) {
-            byotStatusText.textContent = `✓ Ingested ${data.turns_ingested} turns to BigQuery!`;
+            byotStatusText.textContent = `Imported ${data.turns_ingested} turns.`;
             byotStatusText.className = "byot-status-badge pill-success";
           }
           setSessionId(targetSession);
@@ -539,13 +578,13 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       sessionSelect.innerHTML = "";
       if (!data.sessions || data.sessions.length === 0) {
-        sessionSelect.innerHTML = "<option value=''>No local Antigravity sessions found</option>";
+        sessionSelect.innerHTML = "<option value=''>No local sessions found</option>";
         metaStatus.textContent = "No Local Sessions";
         metaStatus.className = "intent-pill pill-neutral";
         turnsStreamBox.innerHTML = `
           <div class='empty-state-card'>
-            <strong>No local Antigravity sessions found in ~/.gemini/antigravity.</strong><br>
-            <span style="display:inline-block; margin-top: 6px;">When hosted on Google Cloud Run, local machine sessions are not present in the container. Click <strong>Interactive Dialogue</strong> above to chat directly with InterviewAgent and generate live session logs!</span>
+            <strong>No local sessions found in ~/.gemini/antigravity.</strong><br>
+            <span style="display:inline-block; margin-top: 6px;">When hosted remotely, local workstation sessions are not present in the container. Click <strong>Live Chat</strong> above to chat directly with InterviewAgent and generate live session logs!</span>
           </div>
         `;
         return;
@@ -553,8 +592,12 @@ document.addEventListener("DOMContentLoaded", () => {
       data.sessions.forEach((s) => {
         const opt = document.createElement("option");
         opt.value = s.session_id;
+        const turnTotal = s.turns_count ?? s.turn_count ?? (Array.isArray(s.turns) ? s.turns.length : null);
+        const turnsPrefix = turnTotal !== null && turnTotal !== undefined ? `[${turnTotal} turns] ` : "";
         const timeShort = s.timestamp ? s.timestamp.substring(0, 16).replace("T", " ") : "";
-        opt.textContent = `[${s.turns_count} turns] ${s.title.substring(0, 50)} (${timeShort})`;
+        const timeSuffix = timeShort ? ` (${timeShort})` : "";
+        const titleStr = (s.title || s.session_id || "Session").substring(0, 50);
+        opt.textContent = `${turnsPrefix}${titleStr}${timeSuffix}`;
         sessionSelect.appendChild(opt);
       });
       if (data.sessions.length > 0) {
@@ -614,8 +657,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       card.innerHTML = `
         <div class="turn-header">
-          <span>Step ${t.step_index} • ${t.source}</span>
-          <span class="intent-pill pill-neutral">${t.turn_type}</span>
+          <span>Step ${t.step_index} · ${escapeHtml(formatStepBadge(t.source))}</span>
+          <span class="quiet-tnum-status">${escapeHtml(formatStepBadge(t.turn_type))}</span>
         </div>
         ${bodyContent}
       `;
@@ -712,7 +755,7 @@ document.addEventListener("DOMContentLoaded", () => {
     box.scrollTop = box.scrollHeight;
   }
 
-  // --- Stage 2 BigQuery Telemetry Lakehouse Scope & Controller ---
+  // --- Stage 2 Recorded Turns Scope & Controller ---
   function setLakehouseScope(scopeType) {
     if (scopeType === "ALL") {
       if (lakehouseScopeAllBtn) lakehouseScopeAllBtn.classList.add("active");
@@ -751,7 +794,7 @@ document.addEventListener("DOMContentLoaded", () => {
       lakehouseSessionsMap.clear();
       const currentSelected = lakehouseSessionSelect.value || "ALL";
 
-      lakehouseSessionSelect.innerHTML = '<option value="ALL">All Sessions (Global Lakehouse Traces)</option>';
+      lakehouseSessionSelect.innerHTML = '<option value="ALL">All sessions</option>';
 
       sessions.forEach((s) => {
         lakehouseSessionsMap.set(s.session_id, s);
@@ -923,14 +966,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (dreamScopeHelp) {
       dreamScopeHelp.innerHTML = isMulti
-        ? `🌐 Consolidating <strong>all historical sessions</strong> for user <strong>${escapeHtml(user_id)}</strong> into Spanner`
-        : `🎯 Consolidating active session <strong>${escapeHtml(session_id)}</strong> into Spanner`;
+        ? `Consolidating all sessions for <strong>${escapeHtml(user_id)}</strong>`
+        : `Consolidating session <strong>${escapeHtml(session_id)}</strong>`;
     }
 
     harvestStatus.innerHTML = `
       <div class="dream-placeholder">
-        <span class="dream-icon">⚙️</span>
-        <p><strong>Memory Synthesis in Progress (${isMulti ? "All Sessions" : session_id}):</strong> Distilling telemetry lakehouse logs and crystallizing long-term beliefs with <strong>Gemini 3.8 Flash</strong> on Gemini platform...</p>
+        <p><strong>Extracting rules (${isMulti ? "All sessions" : escapeHtml(session_id)}):</strong> Analyzing session turns...</p>
       </div>
     `;
 
@@ -949,9 +991,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       harvestStatus.innerHTML = `
         <div class="dream-placeholder" style="border-color: var(--color-success); background-color: #f0fdf4;">
-          <span class="dream-icon">✨</span>
           <div>
-            <strong>Memory Consolidation Complete:</strong> Synthesized <strong>${data.preferences_synced || 0}</strong> crystallized beliefs into Google Cloud Spanner table <code>UserPreferences</code>.
+            <strong>Extraction complete:</strong> Saved <strong>${data.preferences_synced || 0}</strong> rules.
           </div>
         </div>
       `;
@@ -1060,7 +1101,7 @@ document.addEventListener("DOMContentLoaded", () => {
         dreamPromptCode.textContent = data.prompt_used;
       }
 
-      // Downstream refresh: update Spanner Crystalline Matrix and BigQuery Lakehouse traces
+      // Downstream refresh: update saved rules and recorded turns
       await Promise.allSettled([
         fetchSpannerPrefs(),
         fetchSpannerGuardrails(),
@@ -1084,7 +1125,7 @@ document.addEventListener("DOMContentLoaded", () => {
   harvestBtn.addEventListener("click", () => executeDreamHarvest(false));
   multiHarvestBtn.addEventListener("click", () => executeDreamHarvest(true));
 
-  // --- Stage 4 Spanner Crystalline Matrix ---
+  // --- Stage 4 Saved Rules ---
   const refreshSpannerBtn = document.getElementById("refreshSpannerBtn");
   const spannerTableBody = document.getElementById("spannerTableBody");
   const spannerCategoryFilters = document.querySelectorAll("#spannerCategoryFilters .intent-pill");
@@ -1099,8 +1140,8 @@ document.addEventListener("DOMContentLoaded", () => {
       currentPrefs = data.preferences || [];
       renderSpannerTable();
     } catch (err) {
-      console.error("Error fetching Spanner prefs:", err);
-      spannerTableBody.innerHTML = `<tr><td colspan="5" class="empty-state" style="color: var(--color-warn);">Failed to load Spanner preferences: ${escapeHtml(err.message)}</td></tr>`;
+      console.error("Error fetching preferences:", err);
+      spannerTableBody.innerHTML = `<tr><td colspan="5" class="empty-state" style="color: var(--color-warn);">Failed to load saved preferences: ${escapeHtml(err.message)}</td></tr>`;
       throw err;
     }
   }
@@ -1113,7 +1154,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       renderSpannerSummaries(data.summaries || []);
     } catch (err) {
-      console.error("Error fetching Spanner summaries:", err);
+      console.error("Error fetching session summaries:", err);
       spannerSummariesList.innerHTML = `<div class='empty-state' style="color: var(--color-warn);">Failed to load session summaries: ${escapeHtml(err.message)}</div>`;
       throw err;
     }
@@ -1132,7 +1173,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (filtered.length === 0) {
-      spannerTableBody.innerHTML = `<tr><td colspan="5" class="empty-state">No preferences found in Spanner for user '${getParams().user_id}'.</td></tr>`;
+      spannerTableBody.innerHTML = `<tr><td colspan="5" class="empty-state">No saved preferences for '${escapeHtml(getParams().user_id)}'.</td></tr>`;
       return;
     }
 
@@ -1190,7 +1231,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       renderSpannerGuardrails(data.guardrails || []);
     } catch (err) {
-      console.error("Error fetching Spanner guardrails:", err);
+      console.error("Error fetching guardrails:", err);
       const container = document.getElementById("spannerGuardrailsList");
       if (container) {
         container.innerHTML = `<div class="empty-state" style="color: var(--color-warn);">Failed to load guardrails: ${escapeHtml(err.message)}</div>`;
@@ -1207,7 +1248,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (!container) return;
     if (guardrails.length === 0) {
-      container.innerHTML = '<div class="empty-state">No procedural guardrails stored in Spanner yet.</div>';
+      container.innerHTML = '<div class="empty-state">No procedural guardrails saved yet.</div>';
       return;
     }
     container.innerHTML = guardrails.map((g) => {
@@ -1275,7 +1316,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       const elapsed = Math.round(performance.now() - startTime);
       const isCache = data.source === "SPANNER_CACHE";
-      const badge = `<span class="intent-pill ${isCache ? 'pill-success' : 'pill-warn'}">${isCache ? 'SPANNER_CACHE' : 'LLM_FALLBACK'} (${data.latency_ms || elapsed}ms)</span>`;
+      const badge = `<span class="intent-pill ${isCache ? 'pill-success' : 'pill-warn'}">${isCache ? 'Direct Memory Hit' : 'Model Fallback'} (${data.latency_ms || elapsed}ms)</span>`;
       
       const div = document.createElement("div");
       div.className = "msg agent-msg";
@@ -1291,6 +1332,38 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // New Chat handler + Theme toggle inside View popover
+  const newChatBtn = document.getElementById("newChatBtn");
+  if (newChatBtn) {
+    newChatBtn.addEventListener("click", () => {
+      const nextId = `session-ui-${Math.floor(Date.now() / 1000) % 100000}`;
+      if (sessionIdInput) sessionIdInput.value = nextId;
+      if (interviewChatBox) {
+        interviewChatBox.innerHTML =
+          '<div class="msg agent-msg"><div class="msg-sender">InterviewAgent</div><div class="msg-text">Started new session. Share your preferences or workflow rules.</div></div>';
+      }
+      updateAllScopeIndicators();
+      fetchLogs();
+    });
+  }
+
+  document.querySelectorAll("[data-toggle-theme]").forEach((btn) => {
+    const syncLabel = () => {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      btn.textContent = isDark ? "Light theme" : "Dark theme";
+    };
+    syncLabel();
+    btn.addEventListener("click", () => {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const next = isDark ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try {
+        localStorage.setItem("electric_sheep_theme", next);
+      } catch (_) {}
+      syncLabel();
+    });
+  });
+
   // Live MCP Runner
   const mcpToolSelect = document.getElementById("mcpToolSelect");
   const mcpArgInput = document.getElementById("mcpArgInput");
@@ -1304,9 +1377,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   executeMcpBtn.addEventListener("click", async () => {
     executeMcpBtn.disabled = true;
-    mcpOutputContent.textContent = "Executing tool against Cloud Spanner...";
-    mcpLatencyBadge.textContent = "Latency: running...";
-    mcpLatencyBadge.className = "intent-pill pill-neutral";
+    mcpOutputContent.textContent = "Running tool...";
+    mcpLatencyBadge.textContent = "Running...";
+    mcpLatencyBadge.className = "quiet-tnum-status";
 
     let args = {};
     try {
@@ -1328,30 +1401,60 @@ document.addEventListener("DOMContentLoaded", () => {
         let errDetail = `HTTP ${res.status}`;
         try {
           const errData = await res.json();
-          errDetail = errData.detail || JSON.stringify(errData);
+          errDetail = errData.detail || errDetail;
         } catch (_) {
           errDetail = await res.text();
         }
         throw new Error(errDetail);
       }
       const data = await res.json();
-      mcpOutputContent.textContent = data.result || JSON.stringify(data, null, 2);
-      mcpLatencyBadge.textContent = `Latency: ${data.latency_ms}ms (Target: ${data.sla})`;
-      mcpLatencyBadge.className = "intent-pill pill-success";
-      
-      // Refresh all Spanner sections on MCP execution
+      const summaryText = typeof data.result === "string" && data.result.trim()
+        ? data.result
+        : `${data.tool_name || mcpToolSelect.value}: completed`;
+      mcpOutputContent.textContent = summaryText;
+      mcpLatencyBadge.textContent = `${data.latency_ms} ms`;
+      mcpLatencyBadge.className = "quiet-tnum-status";
+
       await Promise.allSettled([
         fetchSpannerPrefs(),
         fetchSpannerGuardrails(),
         fetchSpannerSummaries(),
       ]);
     } catch (err) {
-      mcpOutputContent.textContent = `MCP Execution Error: ${err.message || err}`;
-      mcpLatencyBadge.textContent = "Latency: Error";
-      mcpLatencyBadge.className = "intent-pill pill-warn";
+      mcpOutputContent.textContent = `Tool error: ${err.message || err}`;
+      mcpLatencyBadge.textContent = "Error";
+      mcpLatencyBadge.className = "quiet-tnum-status";
     } finally {
       executeMcpBtn.disabled = false;
     }
+  });
+
+  // Theme & View Popover handlers
+  const viewMenuPopover = document.getElementById("viewMenuPopover");
+  const hideViewPopover = () => {
+    if (viewMenuPopover && typeof viewMenuPopover.hidePopover === "function") {
+      try { viewMenuPopover.hidePopover(); } catch (_) {}
+    }
+  };
+  const applySavedTheme = (theme) => {
+    const isDark = theme === "dark";
+    if (isDark) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+    document.querySelectorAll("[data-toggle-theme]").forEach((btn) => {
+      btn.textContent = isDark ? "Light theme" : "Dark theme";
+    });
+  };
+  applySavedTheme(localStorage.getItem("sheep-theme") || "light");
+  document.querySelectorAll("[data-toggle-theme]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      localStorage.setItem("sheep-theme", next);
+      applySavedTheme(next);
+      hideViewPopover();
+    });
   });
 
   // Modal handlers
@@ -1361,9 +1464,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const githubDismissBtn = document.getElementById("githubModalDismissBtn");
 
   if (githubBtn && githubModal) {
-    githubBtn.addEventListener("click", () => githubModal.showModal());
-    githubCloseBtn.addEventListener("click", () => githubModal.close());
-    githubDismissBtn.addEventListener("click", () => githubModal.close());
+    githubBtn.addEventListener("click", () => {
+      hideViewPopover();
+      githubModal.showModal();
+    });
+    if (githubCloseBtn) githubCloseBtn.addEventListener("click", () => githubModal.close());
+    if (githubDismissBtn) githubDismissBtn.addEventListener("click", () => githubModal.close());
   }
 
   function escapeHtml(str) {
