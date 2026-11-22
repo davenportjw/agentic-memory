@@ -51,7 +51,7 @@ function initThemeToggle() {
 const FLOW_STAGE_DATA = {
   1: {
     title: "1. Live Dialogue: InterviewAgent (Google ADK 2.0)",
-    desc: "<strong>Live Dialogue:</strong> The <code>InterviewAgent</code> engages in conversational turns using Google ADK 2.0 and Gemini 3.8 Flash. Facts are captured via tool execution (<code>record_user_answer</code>) without blocking on persistent database writes.",
+    desc: "<strong>Live Dialogue:</strong> The <code>InterviewAgent</code> engages in conversational turns using Google ADK 2.0 and Gemini 4 Hydrogen. Facts are captured via tool execution (<code>record_user_answer</code>) without blocking on persistent database writes.",
     codeTab: "1"
   },
   2: {
@@ -60,8 +60,8 @@ const FLOW_STAGE_DATA = {
     codeTab: "2"
   },
   3: {
-    title: "3. Memory Synthesis: Gemini 3.8 Flash Distillation",
-    desc: "<strong>Memory Synthesis:</strong> When synthesis triggers, the synchronizer aggregates BigQuery logs and invokes Gemini 3.8 Flash with a strict JSON schema to distill structured preferences.",
+    title: "3. Memory Synthesis: Gemini 4 Neon Distillation",
+    desc: "<strong>Memory Synthesis:</strong> When synthesis triggers, the synchronizer aggregates BigQuery logs and invokes Gemini 4 Neon with a strict JSON schema to resolve cross-session conflicts and distill structured preferences.",
     codeTab: "3"
   },
   4: {
@@ -627,11 +627,11 @@ const ARCH_DIAGRAM_DATA = {
   },
   "2": {
     badgeNum: "2",
-    title: "Step 2: Memory Synthesis (Gemini 3.8 Flash)",
-    techBadge: "Vertex AI • gemini-3.8-flash",
-    desc: "During offline memory consolidation, the engine reads session logs from BigQuery and invokes Gemini 3.8 Flash with a typed JSON schema to distill structured semantic beliefs and confidence scores.",
-    langTag: "Python / Gemini 3.8 Flash",
-    code: `# Distill structured preferences via Gemini 3.8 Flash\nresponse = genai_client.models.generate_content(\n  model="gemini-3.8-flash",\n  contents=f"Extract structured beliefs from session logs:\\n{logs}",\n  config=types.GenerateContentConfig(\n    response_mime_type="application/json",\n    temperature=0.2,\n  ),\n)`
+    title: "Step 2: Memory Synthesis (Gemini 4 Neon)",
+    techBadge: "Vertex AI • gemini-4-neon",
+    desc: "During offline memory consolidation, the engine reads session logs from BigQuery and invokes Gemini 4 Neon with a typed JSON schema to resolve cross-session conflicts and distill structured semantic beliefs.",
+    langTag: "Python / Gemini 4 Neon",
+    code: `# Distill structured preferences via Gemini 4 Neon\nresponse = genai_client.models.generate_content(\n  model="gemini-4-neon",\n  contents=f"Extract structured beliefs from session logs:\\n{logs}",\n  config=types.GenerateContentConfig(\n    response_mime_type="application/json",\n    temperature=0.2,\n  ),\n)`
   },
   "3": {
     badgeNum: "3",

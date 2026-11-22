@@ -412,3 +412,156 @@ def test_mcp_server_multi_scope_tools():
     finally:
         client.delete_scoped_memories("USER", "user:mcp_tester")
         client.delete_scoped_memories("TEAM", "team:mcp_team")
+
+
+def test_alpha_evolve_iter_progress_and_threshold_auto_apply():
+    """Verify iter_evolution emits ordered real progress events and respects auto_apply_min_gain."""
+    spanner_client = SpannerPreferenceClient(use_mock=True)
+    eval_engine = EvalEngine(spanner_client=spanner_client, use_mock=True)
+    evolve_engine = AlphaEvolveEngine(
+        spanner_client=spanner_client,
+        eval_engine=eval_engine,
+        use_mock=True,
+    )
+
+    # 1. Threshold NOT met (impossibly high gain) -> must NOT auto-apply
+    initial_cfg_id = evolve_engine.get_active_config().config_id
+    evolve_engine.archive = MAPElitesArchive()
+    events_hold = list(
+        evolve_engine.iter_evolution(
+            generations=2,
+            alpha_quality_weight=0.65,
+            candidates_per_generation=2,
+            auto_apply_min_gain=5.0,
+        )
+    )
+    types_hold = [e["type"] for e in events_hold]
+    assert types_hold[0] == "start"
+    assert "baseline" in types_hold
+    assert types_hold.count("candidate") == 4
+    assert types_hold[-1] == "complete"
+    complete_hold = events_hold[-1]["result"]
+    assert complete_hold["auto_applied"] is False
+    assert "Held for review" in (complete_hold["auto_apply_reason"] or "")
+    assert evolve_engine.get_active_config().config_id == initial_cfg_id
+
+    # 2. Threshold met -> must auto-promote champion to active config
+    evolve_engine.archive = MAPElitesArchive()
+    events_apply = list(
+        evolve_engine.iter_evolution(
+            generations=2,
+            alpha_quality_weight=0.65,
+            candidates_per_generation=2,
+            auto_apply_min_gain=0.0,
+        )
+    )
+    complete_apply = events_apply[-1]["result"]
+    assert complete_apply["auto_applied"] is True
+    assert "Auto-applied winner" in (complete_apply["auto_apply_reason"] or "")
+    assert (
+        evolve_engine.get_active_config().config_id
+        == complete_apply["champion"]["config"]["config_id"]
+    )
+
+    # 3. Back-to-back runs with different alpha_quality_weight WITHOUT resetting archive:
+    #    run 2's champion must belong to run 2 (never a stale entry from run 1)
+    run1_events = list(
+        evolve_engine.iter_evolution(
+            generations=1,
+            alpha_quality_weight=0.95,
+            candidates_per_generation=2,
+            auto_apply_min_gain=None,
+        )
+    )
+    run1_ids = {
+        e["entry"]["config"]["config_id"]
+        for e in run1_events
+        if e["type"] in ("baseline", "candidate")
+    }
+    run2_events = list(
+        evolve_engine.iter_evolution(
+            generations=1,
+            alpha_quality_weight=0.2,
+            candidates_per_generation=2,
+            auto_apply_min_gain=0.0,
+        )
+    )
+    run2_ids = {
+        e["entry"]["config"]["config_id"]
+        for e in run2_events
+        if e["type"] in ("baseline", "candidate")
+    }
+    run2_champ_id = run2_events[-1]["result"]["champion"]["config"]["config_id"]
+    assert run2_champ_id in run2_ids
+    assert run2_champ_id not in run1_ids
+
+
+def test_studio_evolve_stream_sse_and_graph_ui_wiring():
+    """Verify POST /api/studio/evolve/stream emits SSE JSON events and graph UI wires Evolve popover + HUD."""
+    import json
+    from pathlib import Path
+    from fastapi.testclient import TestClient
+    import src.ui_service.server as ui_srv
+
+    spanner_client = SpannerPreferenceClient(use_mock=True)
+    eval_engine = EvalEngine(spanner_client=spanner_client, use_mock=True)
+    mock_evolve = AlphaEvolveEngine(
+        spanner_client=spanner_client,
+        eval_engine=eval_engine,
+        use_mock=True,
+    )
+    orig_evolve = ui_srv.alpha_evolve
+    ui_srv.alpha_evolve = mock_evolve
+    try:
+        client = TestClient(ui_srv.api)
+        resp = client.post(
+            "/api/studio/evolve/stream",
+            json={
+                "generations": 2,
+                "candidates_per_generation": 2,
+                "alpha_quality_weight": 0.65,
+                "auto_apply_min_gain": 0.01,
+            },
+        )
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers.get("content-type", "")
+
+        parsed = []
+        for frame in resp.text.split("\n\n"):
+            lines = [ln[5:].strip() for ln in frame.split("\n") if ln.startswith("data:")]
+            if lines:
+                parsed.append(json.loads("\n".join(lines)))
+
+        assert parsed[0]["type"] == "start"
+        assert parsed[-1]["type"] == "complete"
+        res = parsed[-1]["result"]
+        assert res["status"] == "EVOLUTION_COMPLETE"
+        assert "archive_summary" in res
+        assert "active_config" in res
+        assert res["auto_applied"] is True
+
+        # Reject out-of-bounds threshold values
+        bad_neg = client.post(
+            "/api/studio/evolve/stream",
+            json={"generations": 1, "candidates_per_generation": 1, "auto_apply_min_gain": -0.1},
+        )
+        assert bad_neg.status_code == 422
+        bad_hi = client.post(
+            "/api/studio/evolve/stream",
+            json={"generations": 1, "candidates_per_generation": 1, "auto_apply_min_gain": 1.5},
+        )
+        assert bad_hi.status_code == 422
+    finally:
+        ui_srv.alpha_evolve = orig_evolve
+
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    graph_js = (static_dir / "memory_graph.js").read_text(encoding="utf-8")
+    studio_js = (static_dir / "studio.js").read_text(encoding="utf-8")
+    assert 'id="esGraphEvolveBtn"' in graph_js
+    assert 'id="esGraphEvolvePopover"' in graph_js
+    assert 'id="esGraphEvolveAutoApply"' in graph_js
+    assert 'id="esGraphEvolveMinGain"' in graph_js
+    assert 'id="memoryGraphEvolveHud"' in graph_js
+    assert 'id="esGraphEvolveProgress"' in graph_js
+    assert "/api/studio/evolve/stream" in studio_js
+    assert "applyGraphEvolveWinner" in studio_js

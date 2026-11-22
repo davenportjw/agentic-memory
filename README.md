@@ -49,7 +49,7 @@ The **Material Light UI Control Center** provides an interactive dashboard to ex
 
 ## 🌐 Accessing Live Services & Programmatic Endpoints
 
-All microservices can be run locally or deployed to Google Cloud Run in your Google Cloud project (configured via `GOOGLE_CLOUD_PROJECT` in your `.env` file) using default model **`gemini-3.8-flash`**.
+All microservices can be run locally or deployed to Google Cloud Run in your Google Cloud project (configured via `GOOGLE_CLOUD_PROJECT` in your `.env` file) using default models **`gemini-4-hydrogen`** (interactive agents & fast summarization) and **`gemini-4-neon`** (offline REM synthesis, adversarial evals, and AlphaEvolve retrieval tuning).
 
 ### 1. Configuring Service URLs (`.env` file)
 Copy `.env.example` to `.env` to configure your GCP project ID and service endpoints:
@@ -106,6 +106,10 @@ All endpoints return structured JSON and can be called programmatically via `cur
 | `/api/studio/eval/run` | `POST` | Run 7-metric adversarial evaluation suite against active config | `{"alpha_quality_weight": 0.65}` |
 | `/api/studio/evolve/archive` | `GET` | Fetch AlphaEvolve MAP-Elites QD archive & active MemoryConfig | N/A |
 | `/api/studio/evolve/run` | `POST` | Run AlphaEvolve evolutionary optimization across generations | `{"generations": 3}` |
+| `/api/studio/jobs` | `GET` / `POST` | List or launch async background jobs (compaction, auto-tune, benchmark, ingest, transform) | `{"job_type": "dream_compaction"}` |
+| `/api/studio/jobs/stream` | `GET` | Live Server-Sent Events stream of job progress and completions | N/A |
+| `/api/studio/jobs/{job_id}/cancel` | `POST` | Request cooperative cancellation of a queued or running job | `{}` |
+| `/api/studio/jobs/{job_id}/retry` | `POST` | Re-enqueue a failed, canceled, or finished job | `{}` |
 
 ### 5. Agent Prompt & Response Payloads (Code Block Formatting)
 
@@ -117,14 +121,14 @@ When interacting with `InterviewAgent` or `PreferenceAgent`, all prompts, respon
 {
   "user_id": "demo-user-42",
   "session_id": "session-ui-001",
-  "prompt": "My favorite programming language is Python and my job role is Principal Cloud Architect.\n\nHere is a snippet of my preferred Python agent code:\n```python\nfrom google.adk.agents import Agent\n\nagent = Agent(name=\"DemoAgent\", model=\"gemini-3.8-flash\")\n```"
+  "prompt": "My favorite programming language is Python and my job role is Principal Cloud Architect.\n\nHere is a snippet of my preferred Python agent code:\n```python\nfrom google.adk.agents import Agent\n\nagent = Agent(name=\"DemoAgent\", model=\"gemini-4-hydrogen\")\n```"
 }
 ```
 
 **Agent Response Payload (`AGENT_RESPONSE`):**
 ```json
 {
-  "response": "Hello Alex! I've recorded **Python** as your favorite programming language and **Principal Cloud Architect** as your job role.\n\nYour Python agent configuration snippet:\n```python\nfrom google.adk.agents import Agent\nagent = Agent(name=\"DemoAgent\", model=\"gemini-3.8-flash\")\n```\nWill be logged to BigQuery and crystallized into Spanner during REM synthesis.",
+  "response": "Hello Alex! I've recorded **Python** as your favorite programming language and **Principal Cloud Architect** as your job role.\n\nYour Python agent configuration snippet:\n```python\nfrom google.adk.agents import Agent\nagent = Agent(name=\"DemoAgent\", model=\"gemini-4-hydrogen\")\n```\nWill be logged to BigQuery and crystallized into Spanner during REM synthesis.",
   "user_id": "demo-user-42",
   "session_id": "session-ui-001",
   "agent_name": "InterviewAgent",
@@ -189,7 +193,7 @@ graph TD
         CloudRun1 -->|Telemetry / Trace| BQ[BigQuery: adk_agent_telemetry.agent_logs]
         CloudRun2 -->|Telemetry / Trace| BQ
         CloudRun2 -->|1. Fast-Path Vector Cache Lookup < 10ms| Spanner[(Cloud Spanner: UserPreferences)]
-        CloudRun2 -.->|2. LLM Fallback if Miss| Gemini[Vertex AI: Gemini 3.8 Flash]
+        CloudRun2 -.->|2. LLM Fallback if Miss| Gemini[Vertex AI: Gemini 4 Hydrogen]
     end
     
     subgraph "Analytics & Summarization Pipeline"
@@ -226,7 +230,7 @@ This project implements industry best practices for long-term LLM memory consoli
 
 ### 1. The REM Sleep Analogy for AI Agents (Two-Stage Memory Architecture)
 - **Waking State (Episodic / Short-Term Memory)**: During live conversation, all user interactions and agent responses stream into **Google BigQuery** (`adk_agent_telemetry.agent_logs`). This acts as raw episodic memory—fast to record, but noisy, fragmented, and redundant.
-- **REM Synthesis / Dream Harvest (Asynchronous Memory Consolidation)**: Rather than writing raw user inputs directly into a database, the `/api/harvest` endpoint acts as an offline "Dream Cycle". It passes the episodic session logs to **Vertex AI Gemini (`gemini-3.8-flash`)** with an explicit REM Memory Consolidation instruction.
+- **REM Synthesis / Dream Harvest (Asynchronous Memory Consolidation)**: Rather than writing raw user inputs directly into a database, the `/api/harvest` endpoint acts as an offline "Dream Cycle". It passes the episodic session logs to **Vertex AI Gemini (`gemini-4-neon`)** with an explicit REM Memory Consolidation instruction.
   - Removes conversational noise and resolves contradictions.
   - Keeps identity attributes (`name`) completely separate from occupational roles (`job_role`).
   - Crystallizes beliefs into complete, self-contained natural language semantic vectors/schemas (`CrystallizedBelief`).

@@ -269,6 +269,11 @@ def main():
         "Enterprise Memory Studio Security Policies (/api/studio/security/policies)",
     )
 
+    test_get(
+        f"{UI_SERVICE_URL}/api/studio/jobs",
+        "Enterprise Memory Studio Background & Inline Jobs (/api/studio/jobs)",
+    )
+
     test_post(
         f"{UI_SERVICE_URL}/api/rate/journeys",
         "Agentic Rater Platform — 5 Canonical Journeys (/api/rate/journeys)",

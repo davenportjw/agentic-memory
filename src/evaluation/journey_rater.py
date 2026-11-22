@@ -898,7 +898,7 @@ class MemoryJourneyAgentRater:
                 description="Inspect Memory Extractor configurations (GET /api/studio/extractors)",
                 method="GET",
                 endpoint="/api/studio/extractors",
-                expected_consequence="Returns extractors using gemini-3.8-flash with structured few_shot_examples",
+                expected_consequence="Returns extractors using gemini-4-hydrogen / gemini-4-neon with structured few_shot_examples",
             ),
             lambda data: (
                 isinstance(data, dict)

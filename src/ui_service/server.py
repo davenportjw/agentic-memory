@@ -1,6 +1,9 @@
 """FastAPI web backend for the Material Light UI Service."""
 
+import asyncio
 import os
+import queue
+import re
 import json
 import datetime
 import logging
@@ -18,6 +21,7 @@ from src.common.spanner_client import SpannerPreferenceClient
 from src.pipeline.bq_to_spanner_sync import BqToSpannerSynchronizer
 from src.studio.eval_engine import EvalEngine
 from src.studio.alpha_evolve import AlphaEvolveEngine, MemoryConfig
+from src.studio.job_runner import StudioJobRunner, JobCanceledError, JobProgressContext
 from src.interview_agent.server import adk_agent as interview_adk_agent
 from src.preference_agent.server import _fast_spanner_lookup, _multi_method_spanner_retrieval, format_multi_fact_spanner_response, adk_agent as preference_adk_agent
 import time
@@ -31,10 +35,11 @@ spanner_client = SpannerPreferenceClient()
 synchronizer = BqToSpannerSynchronizer(telemetry_sink=telemetry_sink, spanner_client=spanner_client)
 eval_engine = EvalEngine(spanner_client=spanner_client)
 alpha_evolve = AlphaEvolveEngine(spanner_client=spanner_client, eval_engine=eval_engine)
+job_runner = StudioJobRunner(spanner_client=spanner_client)
 
 import httpx
 from fastapi import Request, Response
-from fastapi.responses import RedirectResponse, JSONResponse, FileResponse
+from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, StreamingResponse
 from src.common.auth import (
     extract_iap_user_email,
     get_authenticated_user_email,
@@ -248,7 +253,12 @@ class MemoryExtractRequest(BaseModel):
 @api.get("/health")
 def health_check() -> Dict[str, str]:
     """Health readiness endpoint for Google Cloud Run."""
-    return {"status": "ok", "service": "ui_service", "model": config.model_name}
+    return {
+        "status": "ok",
+        "service": "ui_service",
+        "model": config.model_name,
+        "reasoning_model": config.reasoning_model_name,
+    }
 
 
 @api.post("/api/interview/query")
@@ -416,6 +426,19 @@ def get_telemetry_logs(session_id: str, limit: int = 500) -> Dict[str, Any]:
     return {"session_id": session_id, "count": len(logs), "logs": logs}
 
 
+@api.get("/api/harvest/prompt-template")
+def get_dream_harvest_prompt_template() -> Dict[str, Any]:
+    """Return the exact live REM synthesis prompt template and configured reasoning model."""
+    return {
+        "prompt_template": synchronizer.build_dream_prompt(
+            user_id="{user_id}",
+            session_id="{session_id}",
+            full_transcript="{full_transcript}",
+        ),
+        "model": config.reasoning_model_name,
+    }
+
+
 @api.post("/api/harvest")
 def run_dream_harvest(request: HarvestRequest) -> Dict[str, Any]:
     """Trigger a 'Dream Harvest': summarize BigQuery telemetry logs and store preferences in Google Cloud Spanner.
@@ -423,13 +446,37 @@ def run_dream_harvest(request: HarvestRequest) -> Dict[str, Any]:
     Supports both single-session intent capture and multi-session cross-session consolidation.
     """
     logger.info(f"[UI] Executing Dream Harvest for user={request.user_id}, session={request.session_id}, multi_session={request.multi_session}, type={request.session_type}")
-    sync_result = synchronizer.sync_to_spanner(
-        user_id=request.user_id,
-        session_id=request.session_id,
-        session_ids=request.session_ids,
-        multi_session=request.multi_session,
-        session_type=request.session_type,
-    )
+    with job_runner.track_inline_job(
+        "dream_compaction",
+        triggered_from="Chat",
+        params={
+            "user_id": request.user_id,
+            "session_id": request.session_id or "MULTI_SESSION_SYNTHESIS",
+            "multi_session": request.multi_session,
+            "session_type": request.session_type,
+        },
+        title="Dream compaction",
+    ) as ctx:
+        ctx.update_progress("Reading session telemetry", 30)
+        sync_result = synchronizer.sync_to_spanner(
+            user_id=request.user_id,
+            session_id=request.session_id,
+            session_ids=request.session_ids,
+            multi_session=request.multi_session,
+            session_type=request.session_type,
+        )
+        synced = int(sync_result.get("preferences_synced", 0))
+        ctx.complete(
+            result_summary=f"{synced} belief(s) consolidated",
+            metrics={"preferences_synced": synced, "procedural_guardrails": len(sync_result.get("procedural_guardrails", []))},
+            output_preview={
+                "session_id": sync_result.get("session_id", request.session_id or "MULTI_SESSION_SYNTHESIS"),
+                "intent": sync_result.get("intent", ""),
+                "summary": sync_result.get("summary", ""),
+                "preferences_synced": synced,
+            },
+            target_workspace="workspace-tree",
+        )
     return {
         "status": "success",
         "user_id": request.user_id,
@@ -452,10 +499,30 @@ def run_dream_harvest(request: HarvestRequest) -> Dict[str, Any]:
 def run_multi_session_dream_harvest(request: HarvestRequest) -> Dict[str, Any]:
     """Trigger an explicit multi-session cross-session Dream Harvest across user sessions."""
     logger.info(f"[UI] Executing Multi-Session Dream Harvest for user={request.user_id}")
-    sync_result = synchronizer.sync_multi_session_to_spanner(
-        user_id=request.user_id,
-        session_ids=request.session_ids,
-    )
+    with job_runner.track_inline_job(
+        "dream_compaction",
+        triggered_from="Chat",
+        params={"user_id": request.user_id, "multi_session": True, "session_ids": request.session_ids or []},
+        title="Dream compaction (multi-session)",
+    ) as ctx:
+        ctx.update_progress("Consolidating cross-session telemetry", 35)
+        sync_result = synchronizer.sync_multi_session_to_spanner(
+            user_id=request.user_id,
+            session_ids=request.session_ids,
+        )
+        synced = int(sync_result.get("preferences_synced", 0))
+        analyzed = sync_result.get("sessions_analyzed", [])
+        ctx.complete(
+            result_summary=f"{synced} belief(s) across {len(analyzed)} session(s)",
+            metrics={"preferences_synced": synced, "sessions_analyzed": len(analyzed)},
+            output_preview={
+                "intent": sync_result.get("intent", ""),
+                "summary": sync_result.get("summary", ""),
+                "sessions_analyzed": analyzed,
+                "preferences_synced": synced,
+            },
+            target_workspace="workspace-tree",
+        )
     return {
         "status": "success",
         "user_id": request.user_id,
@@ -497,19 +564,32 @@ def get_antigravity_session_turns(session_id: str) -> Dict[str, Any]:
 def ingest_antigravity_session(request: AntigravityIngestRequest) -> Dict[str, Any]:
     """Ingest Antigravity session turns into BigQuery telemetry table."""
     from src.common.antigravity_crawler import AntigravitySessionCrawler
-    crawler = AntigravitySessionCrawler()
-    turns = crawler.get_session_turns(request.session_id, limit=100)
-    logged = 0
-    for t in turns:
-        telemetry_sink.log_interaction(
-            user_id=request.user_id,
-            session_id=request.session_id,
-            agent_name="antigravity",
-            event_type=t.turn_type,
-            message=t.user_prompt or t.agent_thought or (f"{t.tool_name}({t.tool_args_json[:100]})" if t.tool_name else t.tool_output[:200]),
-            payload=t.to_dict(),
+    with job_runner.track_inline_job(
+        "session_ingest",
+        triggered_from="Sessions",
+        params={"user_id": request.user_id, "session_id": request.session_id, "mode": "antigravity"},
+        title="Session ingest",
+    ) as ctx:
+        ctx.update_progress("Reading session turns", 35)
+        crawler = AntigravitySessionCrawler()
+        turns = crawler.get_session_turns(request.session_id, limit=100)
+        logged = 0
+        for t in turns:
+            telemetry_sink.log_interaction(
+                user_id=request.user_id,
+                session_id=request.session_id,
+                agent_name="antigravity",
+                event_type=t.turn_type,
+                message=t.user_prompt or t.agent_thought or (f"{t.tool_name}({t.tool_args_json[:100]})" if t.tool_name else t.tool_output[:200]),
+                payload=t.to_dict(),
+            )
+            logged += 1
+        ctx.complete(
+            result_summary=f"{logged} turn(s) ingested",
+            metrics={"turns_ingested": logged},
+            output_preview={"session_id": request.session_id, "turns_ingested": logged},
+            target_workspace="workspace-sessions",
         )
-        logged += 1
     return {"status": "success", "session_id": request.session_id, "turns_ingested": logged}
 
 
@@ -523,159 +603,173 @@ def ingest_transcript_telemetry(request: TranscriptIngestRequest) -> Dict[str, A
     turns_to_log: List[Dict[str, Any]] = []
     detected_format = request.format
 
-    # 1. Attempt JSON / JSONL parsing
-    if detected_format in ("auto", "json", "jsonl"):
-        # Try single JSON array or dict first
-        if detected_format in ("auto", "json"):
-            try:
-                parsed = json.loads(content)
-                if isinstance(parsed, list):
-                    turns_to_log = parsed
-                    detected_format = "json"
-                elif isinstance(parsed, dict):
-                    for k in ("turns", "events", "steps", "trajectory", "interactions", "messages"):
-                        if k in parsed and isinstance(parsed[k], list):
-                            turns_to_log = parsed[k]
-                            detected_format = "json"
-                            break
-                    if not turns_to_log:
-                        turns_to_log = [parsed]
-                        detected_format = "json"
-            except Exception:
-                pass
-
-        # If not parsed, try JSONL (newline-delimited JSON)
-        if not turns_to_log:
-            lines = [line.strip() for line in content.splitlines() if line.strip()]
-            candidate_turns = []
-            is_jsonl = True
-            for line in lines:
+    with job_runner.track_inline_job(
+        "session_ingest",
+        triggered_from="Sessions",
+        params={"user_id": request.user_id, "session_id": request.session_id, "format": request.format},
+        title="Transcript ingest",
+    ) as ctx:
+        ctx.update_progress("Parsing transcript payload", 25)
+        # 1. Attempt JSON / JSONL parsing
+        if detected_format in ("auto", "json", "jsonl"):
+            # Try single JSON array or dict first
+            if detected_format in ("auto", "json"):
                 try:
-                    candidate_turns.append(json.loads(line))
+                    parsed = json.loads(content)
+                    if isinstance(parsed, list):
+                        turns_to_log = parsed
+                        detected_format = "json"
+                    elif isinstance(parsed, dict):
+                        for k in ("turns", "events", "steps", "trajectory", "interactions", "messages"):
+                            if k in parsed and isinstance(parsed[k], list):
+                                turns_to_log = parsed[k]
+                                detected_format = "json"
+                                break
+                        if not turns_to_log:
+                            turns_to_log = [parsed]
+                            detected_format = "json"
                 except Exception:
-                    is_jsonl = False
-                    break
-            if is_jsonl and candidate_turns:
-                turns_to_log = candidate_turns
-                detected_format = "jsonl"
+                    pass
 
-        # If caller specifically asked for json/jsonl and neither parsed, raise 400
-        if not turns_to_log and request.format in ("json", "jsonl"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid {request.format.upper()} formatted content. Please check syntax or select Auto-Detect.",
+            # If not parsed, try JSONL (newline-delimited JSON)
+            if not turns_to_log:
+                lines = [line.strip() for line in content.splitlines() if line.strip()]
+                candidate_turns = []
+                is_jsonl = True
+                for line in lines:
+                    try:
+                        candidate_turns.append(json.loads(line))
+                    except Exception:
+                        is_jsonl = False
+                        break
+                if is_jsonl and candidate_turns:
+                    turns_to_log = candidate_turns
+                    detected_format = "jsonl"
+
+            # If caller specifically asked for json/jsonl and neither parsed, raise 400
+            if not turns_to_log and request.format in ("json", "jsonl"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid {request.format.upper()} formatted content. Please check syntax or select Auto-Detect.",
+                )
+
+        # 2. Fallback to plaintext lines if auto or text
+        if not turns_to_log:
+            detected_format = "text"
+            lines = [line for line in content.splitlines() if line.strip()]
+            for idx, line in enumerate(lines):
+                clean_line = line.strip()
+                event_type = "USER_PROMPT" if clean_line.lower().startswith(("user:", "human:", "prompt:", "u:")) else "AGENT_RESPONSE"
+                msg = clean_line.split(":", 1)[1].strip() if ":" in clean_line and clean_line.lower().startswith(("user:", "human:", "agent:", "assistant:", "system:", "u:", "a:")) else clean_line
+                turns_to_log.append({
+                    "step_index": idx,
+                    "event_type": event_type,
+                    "message": msg,
+                })
+
+        # 3. Process and log turns to BigQuery
+        logged = 0
+        for idx, item in enumerate(turns_to_log):
+            if not isinstance(item, dict):
+                item = {"message": str(item)}
+
+            # Antigravity transcript step normalization:
+            # Steps use: type ("USER_INPUT", "PLANNER_RESPONSE", "GENERIC", "TOOL_RESULT"),
+            # source ("USER_EXPLICIT", "MODEL", "SYSTEM"), content, thinking, tool_calls
+            t_type = str(item.get("type") or "").upper()
+            source = str(item.get("source") or "").upper()
+            agent_name = (
+                item.get("agent_name")
+                or ("antigravity" if (source in ("MODEL", "USER_EXPLICIT") or "thinking" in item) else "byot-telemetry")
             )
 
-    # 2. Fallback to plaintext lines if auto or text
-    if not turns_to_log:
-        detected_format = "text"
-        lines = [line for line in content.splitlines() if line.strip()]
-        for idx, line in enumerate(lines):
-            clean_line = line.strip()
-            event_type = "USER_PROMPT" if clean_line.lower().startswith(("user:", "human:", "prompt:", "u:")) else "AGENT_RESPONSE"
-            msg = clean_line.split(":", 1)[1].strip() if ":" in clean_line and clean_line.lower().startswith(("user:", "human:", "agent:", "assistant:", "system:", "u:", "a:")) else clean_line
-            turns_to_log.append({
-                "step_index": idx,
-                "event_type": event_type,
-                "message": msg,
-            })
-
-    # 3. Process and log turns to BigQuery
-    logged = 0
-    for idx, item in enumerate(turns_to_log):
-        if not isinstance(item, dict):
-            item = {"message": str(item)}
-
-        # Antigravity transcript step normalization:
-        # Steps use: type ("USER_INPUT", "PLANNER_RESPONSE", "GENERIC", "TOOL_RESULT"),
-        # source ("USER_EXPLICIT", "MODEL", "SYSTEM"), content, thinking, tool_calls
-        t_type = str(item.get("type") or "").upper()
-        source = str(item.get("source") or "").upper()
-        agent_name = (
-            item.get("agent_name")
-            or ("antigravity" if (source in ("MODEL", "USER_EXPLICIT") or "thinking" in item) else "byot-telemetry")
-        )
-
-        if t_type == "USER_INPUT" or (source == "USER_EXPLICIT" and not item.get("event_type")):
-            msg = item.get("content") or item.get("user_prompt") or item.get("message") or ""
-            telemetry_sink.log_interaction(
-                user_id=request.user_id,
-                session_id=request.session_id,
-                agent_name=agent_name,
-                event_type="USER_PROMPT",
-                message=str(msg),
-                payload=item,
-            )
-            logged += 1
-        elif t_type == "PLANNER_RESPONSE":
-            thought_msg = item.get("content") or item.get("thinking") or item.get("message") or ""
-            tool_calls = item.get("tool_calls") or []
-            if thought_msg or not tool_calls:
+            if t_type == "USER_INPUT" or (source == "USER_EXPLICIT" and not item.get("event_type")):
+                msg = item.get("content") or item.get("user_prompt") or item.get("message") or ""
                 telemetry_sink.log_interaction(
                     user_id=request.user_id,
                     session_id=request.session_id,
                     agent_name=agent_name,
-                    event_type="AGENT_RESPONSE",
-                    message=str(thought_msg),
+                    event_type="USER_PROMPT",
+                    message=str(msg),
+                    payload=item,
+                )
+                logged += 1
+            elif t_type == "PLANNER_RESPONSE":
+                thought_msg = item.get("content") or item.get("thinking") or item.get("message") or ""
+                tool_calls = item.get("tool_calls") or []
+                if thought_msg or not tool_calls:
+                    telemetry_sink.log_interaction(
+                        user_id=request.user_id,
+                        session_id=request.session_id,
+                        agent_name=agent_name,
+                        event_type="AGENT_RESPONSE",
+                        message=str(thought_msg),
+                        payload=item,
+                    )
+                    logged += 1
+
+                for tc in tool_calls:
+                    tc_name = tc.get("name", "tool")
+                    tc_args = tc.get("args") if "args" in tc else tc.get("arguments", {})
+                    telemetry_sink.log_interaction(
+                        user_id=request.user_id,
+                        session_id=request.session_id,
+                        agent_name=agent_name,
+                        event_type="TOOL_CALL",
+                        message=f"{tc_name}({json.dumps(tc_args)})",
+                        payload={"tool_call": tc, "parent_step": item.get("step_index")},
+                    )
+                    logged += 1
+            elif t_type == "TOOL_RESULT":
+                res_msg = item.get("content") or item.get("tool_output") or item.get("message") or ""
+                telemetry_sink.log_interaction(
+                    user_id=request.user_id,
+                    session_id=request.session_id,
+                    agent_name=agent_name,
+                    event_type="TOOL_RESULT",
+                    message=str(res_msg),
+                    payload=item,
+                )
+                logged += 1
+            else:
+                # Standard formats and quick samples with event_type: USER_PROMPT, AGENT_RESPONSE, etc.
+                event_type = item.get("event_type") or item.get("role") or item.get("type") or "INTERACTION"
+                event_type_str = str(event_type).upper()
+                if event_type_str in ("USER", "HUMAN"):
+                    event_type_str = "USER_PROMPT"
+                elif event_type_str in ("ASSISTANT", "MODEL"):
+                    event_type_str = "AGENT_RESPONSE"
+
+                message = (
+                    item.get("message")
+                    or item.get("content")
+                    or item.get("user_prompt")
+                    or item.get("agent_thought")
+                    or item.get("thinking")
+                    or item.get("prompt")
+                    or ""
+                )
+                if not message and "tool_calls" in item:
+                    message = json.dumps(item["tool_calls"])
+                elif not message:
+                    message = json.dumps(item)
+
+                telemetry_sink.log_interaction(
+                    user_id=request.user_id,
+                    session_id=request.session_id,
+                    agent_name=agent_name,
+                    event_type=event_type_str,
+                    message=str(message),
                     payload=item,
                 )
                 logged += 1
 
-            for tc in tool_calls:
-                tc_name = tc.get("name", "tool")
-                tc_args = tc.get("args") if "args" in tc else tc.get("arguments", {})
-                telemetry_sink.log_interaction(
-                    user_id=request.user_id,
-                    session_id=request.session_id,
-                    agent_name=agent_name,
-                    event_type="TOOL_CALL",
-                    message=f"{tc_name}({json.dumps(tc_args)})",
-                    payload={"tool_call": tc, "parent_step": item.get("step_index")},
-                )
-                logged += 1
-        elif t_type == "TOOL_RESULT":
-            res_msg = item.get("content") or item.get("tool_output") or item.get("message") or ""
-            telemetry_sink.log_interaction(
-                user_id=request.user_id,
-                session_id=request.session_id,
-                agent_name=agent_name,
-                event_type="TOOL_RESULT",
-                message=str(res_msg),
-                payload=item,
-            )
-            logged += 1
-        else:
-            # Standard formats and quick samples with event_type: USER_PROMPT, AGENT_RESPONSE, etc.
-            event_type = item.get("event_type") or item.get("role") or item.get("type") or "INTERACTION"
-            event_type_str = str(event_type).upper()
-            if event_type_str in ("USER", "HUMAN"):
-                event_type_str = "USER_PROMPT"
-            elif event_type_str in ("ASSISTANT", "MODEL"):
-                event_type_str = "AGENT_RESPONSE"
-
-            message = (
-                item.get("message")
-                or item.get("content")
-                or item.get("user_prompt")
-                or item.get("agent_thought")
-                or item.get("thinking")
-                or item.get("prompt")
-                or ""
-            )
-            if not message and "tool_calls" in item:
-                message = json.dumps(item["tool_calls"])
-            elif not message:
-                message = json.dumps(item)
-
-            telemetry_sink.log_interaction(
-                user_id=request.user_id,
-                session_id=request.session_id,
-                agent_name=agent_name,
-                event_type=event_type_str,
-                message=str(message),
-                payload=item,
-            )
-            logged += 1
+        ctx.complete(
+            result_summary=f"{logged} turn(s) ingested ({detected_format})",
+            metrics={"turns_ingested": logged},
+            output_preview={"session_id": request.session_id, "format": detected_format, "turns_ingested": logged},
+            target_workspace="workspace-sessions",
+        )
 
     return {
         "status": "success",
@@ -989,9 +1083,16 @@ class StudioEvalRunRequest(BaseModel):
 
 
 class StudioEvolveRunRequest(BaseModel):
-    generations: int = Field(default=3, description="Number of evolutionary generations")
-    alpha_quality_weight: float = Field(default=0.65, description="Pareto quality weight alpha")
-    candidates_per_generation: int = Field(default=2, description="Candidate mutations evaluated per generation")
+    generations: int = Field(default=3, ge=1, le=10, description="Number of evolutionary generations")
+    alpha_quality_weight: float = Field(default=0.65, ge=0.0, le=1.0, description="Pareto quality weight alpha")
+    candidates_per_generation: int = Field(default=2, ge=1, le=6, description="Candidate mutations evaluated per generation")
+    auto_apply_min_gain: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        allow_inf_nan=False,
+        description="Optional minimum fitness gain vs baseline required to automatically promote the winning config",
+    )
 
 
 class StudioEvolvePromoteRequest(BaseModel):
@@ -1311,57 +1412,65 @@ def generate_studio_eval_cases(request: StudioEvalGenerateRequest) -> Dict[str, 
 @api.post("/api/studio/eval/run")
 def run_studio_evaluation_suite(request: StudioEvalRunRequest) -> Dict[str, Any]:
     """Execute the 7-metric + Matryoshka + Token Savings evaluation suite against the active or supplied MemoryConfig."""
-    target_cfg = request.config if request.config is not None else alpha_evolve.get_active_config()
-    scorecard = eval_engine.run_evaluation_suite(
-        config=target_cfg,
-        alpha_quality_weight=request.alpha_quality_weight,
-    )
-    mb = scorecard.get("metrics_breakdown") or {}
-    mat_comp = scorecard.get("matryoshka_comparison") or {}
-    slices_list: List[Dict[str, Any]] = []
-    for dim_key, dim_info in mat_comp.items():
-        if not isinstance(dim_info, dict):
-            continue
-        dim_num = int(dim_info.get("dimensions", 768))
-        slices_list.append({
-            "embedding_dimensions": dim_num,
-            "pareto_fitness": round(
-                float(scorecard.get("alpha_quality_weight", 0.65)) * float(dim_info.get("quality_score", 0.9))
-                + (1.0 - float(scorecard.get("alpha_quality_weight", 0.65))) * float(scorecard.get("token_efficiency_score", 0.85)),
-                4,
-            ),
+    with job_runner.track_inline_job(
+        "eval_benchmark",
+        triggered_from="Optimize",
+        params={"alpha_quality_weight": request.alpha_quality_weight},
+        title="Recall benchmark",
+    ) as ctx:
+        ctx.update_progress("Evaluating verification cases across Matryoshka slices", 35)
+        target_cfg = request.config if request.config is not None else alpha_evolve.get_active_config()
+        scorecard = eval_engine.run_evaluation_suite(
+            config=target_cfg,
+            alpha_quality_weight=request.alpha_quality_weight,
+        )
+        mb = scorecard.get("metrics_breakdown") or {}
+        mat_comp = scorecard.get("matryoshka_comparison") or {}
+        slices_list: List[Dict[str, Any]] = []
+        for dim_key, dim_info in mat_comp.items():
+            if not isinstance(dim_info, dict):
+                continue
+            dim_num = int(dim_info.get("dimensions", 768))
+            slices_list.append({
+                "embedding_dimensions": dim_num,
+                "pareto_fitness": round(
+                    float(scorecard.get("alpha_quality_weight", 0.65)) * float(dim_info.get("quality_score", 0.9))
+                    + (1.0 - float(scorecard.get("alpha_quality_weight", 0.65))) * float(scorecard.get("token_efficiency_score", 0.85)),
+                    4,
+                ),
+                "metrics": {
+                    "retrieval_accuracy": float(dim_info.get("recall_at_k", mb.get("recall_at_k", 1.0))),
+                    "conflict_resolution_precision": float(mb.get("contradiction_resolution_accuracy", 1.0)),
+                    "guardrail_compliance": float(mb.get("guardrail_compliance", 1.0)),
+                },
+            })
+        scorecard["scorecard"] = {
+            "pareto_fitness": scorecard.get("pareto_fitness", 0.0),
+            "quality_score": scorecard.get("quality_score", 0.0),
+            "token_efficiency_score": scorecard.get("token_efficiency_score", 0.0),
             "metrics": {
-                "retrieval_accuracy": float(dim_info.get("recall_at_k", mb.get("recall_at_k", 1.0))),
-                "conflict_resolution_precision": float(mb.get("contradiction_resolution_accuracy", 1.0)),
-                "guardrail_compliance": float(mb.get("guardrail_compliance", 1.0)),
+                "retrieval_accuracy": mb.get("recall_at_k", mb.get("fact_recall", 1.0)),
+                "conflict_resolution_precision": mb.get("contradiction_resolution_accuracy", 1.0),
+                "guardrail_compliance": mb.get("guardrail_compliance", 1.0),
+                "hallucination_rejection_rate": mb.get("hallucination_rejection_rate", 1.0),
+                "scope_conflict_resolution_accuracy": mb.get("scope_conflict_resolution_accuracy", 1.0),
+                "deduplication_efficiency": mb.get("deduplication_efficiency", 1.0),
+                "token_savings_ratio": mb.get("token_savings_ratio", 0.5),
             },
-        })
-    scorecard["scorecard"] = {
-        "pareto_fitness": scorecard.get("pareto_fitness", 0.0),
-        "quality_score": scorecard.get("quality_score", 0.0),
-        "token_efficiency_score": scorecard.get("token_efficiency_score", 0.0),
-        "metrics": {
-            "retrieval_accuracy": mb.get("recall_at_k", mb.get("fact_recall", 1.0)),
-            "conflict_resolution_precision": mb.get("contradiction_resolution_accuracy", 1.0),
-            "guardrail_compliance": mb.get("guardrail_compliance", 1.0),
-            "hallucination_rejection_rate": mb.get("hallucination_rejection_rate", 1.0),
-            "scope_conflict_resolution_accuracy": mb.get("scope_conflict_resolution_accuracy", 1.0),
-            "deduplication_efficiency": mb.get("deduplication_efficiency", 1.0),
-            "token_savings_ratio": mb.get("token_savings_ratio", 0.5),
-        },
-    }
-    scorecard["slice_comparison"] = {"slices": slices_list}
-    return scorecard
+        }
+        scorecard["slice_comparison"] = {"slices": slices_list}
+        pareto_val = float(scorecard.get("pareto_fitness", 0.0))
+        acc_pct = int(round(float(scorecard["scorecard"]["metrics"]["retrieval_accuracy"]) * 100))
+        ctx.complete(
+            result_summary=f"Score {pareto_val:.3f} · {acc_pct}% accuracy",
+            metrics={"pareto_fitness": round(pareto_val, 4), "retrieval_accuracy": acc_pct},
+            output_preview={"scorecard": scorecard["scorecard"], "slice_count": len(slices_list)},
+            target_workspace="workspace-eval",
+        )
+        return scorecard
 
 
-@api.post("/api/studio/evolve/run")
-def run_studio_alpha_evolve(request: StudioEvolveRunRequest) -> Dict[str, Any]:
-    """Run the AlphaEvolve evolutionary optimizer across MemoryConfig hyperparameters and MAP-Elites grid."""
-    result = alpha_evolve.run_evolution(
-        generations=request.generations,
-        alpha_quality_weight=request.alpha_quality_weight,
-        candidates_per_generation=request.candidates_per_generation,
-    )
+def _enrich_evolve_result(result: Dict[str, Any]) -> Dict[str, Any]:
     result["active_config"] = alpha_evolve.get_active_config().to_dict()
     archive_cells_dict = (result.get("archive") or {}).get("cells") or {}
     populated_cells_list = [
@@ -1374,6 +1483,115 @@ def run_studio_alpha_evolve(request: StudioEvolveRunRequest) -> Dict[str, Any]:
         "populated_cells": len(populated_cells_list),
     }
     return result
+
+
+@api.post("/api/studio/evolve/run")
+def run_studio_alpha_evolve(request: StudioEvolveRunRequest) -> Dict[str, Any]:
+    """Run the AlphaEvolve evolutionary optimizer across MemoryConfig hyperparameters and MAP-Elites grid."""
+    with job_runner.track_inline_job(
+        "alpha_evolve",
+        triggered_from="Optimize",
+        params={
+            "generations": request.generations,
+            "alpha_quality_weight": request.alpha_quality_weight,
+            "candidates_per_generation": request.candidates_per_generation,
+        },
+        title="Auto-tune recall",
+    ) as ctx:
+        ctx.update_progress(f"Running {request.generations} evolution generation(s)", 30)
+        result = alpha_evolve.run_evolution(
+            generations=request.generations,
+            alpha_quality_weight=request.alpha_quality_weight,
+            candidates_per_generation=request.candidates_per_generation,
+            auto_apply_min_gain=request.auto_apply_min_gain,
+        )
+        enriched = _enrich_evolve_result(result)
+        champ = enriched.get("champion") or {}
+        cfg = champ.get("config") or {}
+        best_fit = float(champ.get("pareto_fitness") or 0.0)
+        dim = int(cfg.get("embedding_dimensions") or 768)
+        ctx.complete(
+            result_summary=f"Score {best_fit:.3f} · {dim}d",
+            metrics={
+                "pareto_fitness": round(best_fit, 4),
+                "embedding_dimensions": dim,
+                "populated_cells": enriched.get("archive_summary", {}).get("populated_cells", 0),
+            },
+            output_preview={"champion": champ, "active_config": enriched.get("active_config")},
+            target_workspace="workspace-eval",
+        )
+        return enriched
+
+
+@api.post("/api/studio/evolve/stream")
+def stream_studio_alpha_evolve(request: StudioEvolveRunRequest) -> StreamingResponse:
+    """Stream real-time AlphaEvolve progress events over Server-Sent Events (SSE)."""
+
+    def event_stream():
+        try:
+            with job_runner.track_inline_job(
+                "alpha_evolve",
+                triggered_from="Optimize",
+                params={
+                    "generations": request.generations,
+                    "alpha_quality_weight": request.alpha_quality_weight,
+                    "candidates_per_generation": request.candidates_per_generation,
+                },
+                title="Auto-tune recall",
+                bind_ambient=False,
+            ) as ctx:
+                total_gens = max(1, int(request.generations))
+                total_cands = max(1, int(request.candidates_per_generation))
+                for event in alpha_evolve.iter_evolution(
+                    generations=request.generations,
+                    alpha_quality_weight=request.alpha_quality_weight,
+                    candidates_per_generation=request.candidates_per_generation,
+                    auto_apply_min_gain=request.auto_apply_min_gain,
+                ):
+                    ctx.check_canceled()
+                    ev_type = event.get("type")
+                    if ev_type in ("phase", "baseline", "candidate"):
+                        step = int(event.get("step") or 0)
+                        total_steps = max(1, int(event.get("total_steps") or (1 + total_gens * total_cands)))
+                        pct = min(95, max(10, int(round((step / total_steps) * 90))))
+                        msg = str(event.get("message") or f"Generation {event.get('generation', 1)}/{total_gens}")
+                        metrics_update: Optional[Dict[str, Any]] = None
+                        if ev_type in ("baseline", "candidate"):
+                            fit_src = event.get("champion") or event.get("entry") or {}
+                            if isinstance(fit_src, dict) and fit_src.get("pareto_fitness") is not None:
+                                metrics_update = {"pareto_fitness": round(float(fit_src["pareto_fitness"]), 4)}
+                        ctx.update_progress(
+                            msg,
+                            progress_pct=pct,
+                            metrics=metrics_update,
+                            force_persist=(ev_type == "candidate"),
+                        )
+                    elif ev_type == "complete" and isinstance(event.get("result"), dict):
+                        event["result"] = _enrich_evolve_result(event["result"])
+                        champ = event["result"].get("champion") or {}
+                        cfg = champ.get("config") or {}
+                        best_fit = float(champ.get("pareto_fitness") or 0.0)
+                        dim = int(cfg.get("embedding_dimensions") or 768)
+                        ctx.complete(
+                            result_summary=f"Score {best_fit:.3f} · {dim}d",
+                            metrics={"pareto_fitness": round(best_fit, 4), "embedding_dimensions": dim},
+                            output_preview={"champion": champ, "active_config": event["result"].get("active_config")},
+                            target_workspace="workspace-eval",
+                        )
+                    yield f"data: {json.dumps(event)}\n\n"
+        except Exception:
+            logger.exception("AlphaEvolve SSE stream failed")
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Evolution failed due to an internal error.'})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @api.get("/api/studio/evolve/archive")
@@ -1574,7 +1792,7 @@ _STUDIO_CATEGORIES: Dict[str, Dict[str, Any]] = {
         "cosine_threshold": 0.72,
         "min_cosine_similarity": 0.72,
         "color": "#1d4ed8",
-        "description": "Languages, frameworks, Gemini 3.8+ / Gemma 4 model versions, and SDK conventions",
+        "description": "Languages, frameworks, Gemini 4 (Hydrogen & Neon) / Gemma 4 model versions, and SDK conventions",
     },
     "workflow": {
         "id": "workflow",
@@ -1713,9 +1931,9 @@ def _extract_candidates_from_events(
             "keywords": "terraform, validate, fmt, iac, infrastructure",
         },
         {
-            "regex": re.compile(r"\b(gemini-3\.8|gemma-4|never\s+downgrade)", re.I),
+            "regex": re.compile(r"\b(gemini-4|gemini-3\.8|gemma-4|never\s+downgrade)", re.I),
             "memory_key": "approved_foundation_models",
-            "memory_value": "Use Gemini 3.8+ (e.g. gemini-3.8-flash) and Gemma 4 models across agent workflows; never downgrade to legacy models.",
+            "memory_value": "Use Gemini 4 (gemini-4-hydrogen for fast interactive loops, gemini-4-neon for deep synthesis and AlphaEvolve) and Gemma 4 models; never downgrade to legacy models.",
             "memory_type": "PREFERENCE",
             "category": "technical",
             "signal_type": "IMPLICIT_PREFERENCE",
@@ -2292,25 +2510,43 @@ def get_studio_sync_status(
 def push_studio_staged_memories_to_spanner(request: StudioSyncPushRequest) -> Dict[str, Any]:
     """Commit and sync all staged memories into Cloud Spanner with 768d embeddings and return receipt."""
     global _LAST_STUDIO_SYNC_RECEIPT
-    scopes_spec = [
-        ("ORG", request.org_id or "org:default"),
-        ("TEAM", request.team_id or "team:platform-eng"),
-        ("AGENT", request.agent_id or "agent:code-reviewer"),
-        ("USER", request.user_id or "user:developer"),
-    ]
-    receipt = spanner_client.sync_staged_memories(scopes_spec=scopes_spec)
-    _LAST_STUDIO_SYNC_RECEIPT = receipt
-    status_now = get_studio_sync_status(
-        user_id=request.user_id,
-        team_id=request.team_id,
-        agent_id=request.agent_id,
-        org_id=request.org_id,
-    )
+    with job_runner.track_inline_job(
+        "memory_transform",
+        triggered_from="Memories",
+        params={
+            "user_id": request.user_id or "user:developer",
+            "team_id": request.team_id or "team:platform-eng",
+            "agent_id": request.agent_id or "agent:code-reviewer",
+        },
+        title="Sync staged memories",
+    ) as ctx:
+        ctx.update_progress("Computing 768d embeddings and committing staged rules", 40)
+        scopes_spec = [
+            ("ORG", request.org_id or "org:default"),
+            ("TEAM", request.team_id or "team:platform-eng"),
+            ("AGENT", request.agent_id or "agent:code-reviewer"),
+            ("USER", request.user_id or "user:developer"),
+        ]
+        receipt = spanner_client.sync_staged_memories(scopes_spec=scopes_spec)
+        _LAST_STUDIO_SYNC_RECEIPT = receipt
+        status_now = get_studio_sync_status(
+            user_id=request.user_id,
+            team_id=request.team_id,
+            agent_id=request.agent_id,
+            org_id=request.org_id,
+        )
+        synced_count = max(int(receipt.get("synced_count", 0)), int(status_now["synced_count"]))
+        ctx.complete(
+            result_summary=f"{synced_count} rule(s) synced",
+            metrics={"synced_count": synced_count, "total_count": status_now["total_count"]},
+            output_preview={"receipt": receipt, "synced_count": synced_count},
+            target_workspace="workspace-tree",
+        )
     return {
         **receipt,
         "status": "SPANNER_SYNC_COMMITTED",
         "staged_count": status_now["staged_count"],
-        "synced_count": max(int(receipt.get("synced_count", 0)), int(status_now["synced_count"])),
+        "synced_count": synced_count,
         "total_count": status_now["total_count"],
     }
 
@@ -2321,43 +2557,56 @@ def extract_studio_trajectory_candidates(request: StudioTrajectoryExtractRequest
     sid = (request.session_id or "").strip() or "STUDIO_TRAJECTORY"
     events: List[Dict[str, Any]] = []
 
-    # 1. If raw_transcript is provided, parse it first
-    if request.raw_transcript and request.raw_transcript.strip():
-        raw = request.raw_transcript.strip()
-        for idx, line in enumerate(raw.splitlines()):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-                if isinstance(obj, dict):
-                    events.append(obj)
+    with job_runner.track_inline_job(
+        "memory_transform",
+        triggered_from="Sessions",
+        params={"user_id": request.user_id, "session_id": sid, "signal_filter": request.signal_filter},
+        title="Extract candidate memories",
+    ) as ctx:
+        ctx.update_progress("Scanning session turns for preferences and guardrails", 35)
+        # 1. If raw_transcript is provided, parse it first
+        if request.raw_transcript and request.raw_transcript.strip():
+            raw = request.raw_transcript.strip()
+            for idx, line in enumerate(raw.splitlines()):
+                line = line.strip()
+                if not line:
                     continue
-            except Exception:
-                pass
-            events.append({"step_index": idx, "event_type": "USER_PROMPT", "message": line})
-    else:
-        # 2. Query BigQuery / Lakehouse session logs
-        target_sid = sid if sid != "STUDIO_TRAJECTORY" else "ALL"
-        events = telemetry_sink.get_session_logs(session_id=target_sid, limit=200)
-        # 3. Also check Antigravity local crawler if session_id was specified and had no BQ logs
-        if not events and sid != "STUDIO_TRAJECTORY":
-            try:
-                from src.common.antigravity_crawler import AntigravitySessionCrawler
-                crawler = AntigravitySessionCrawler()
-                turns = crawler.get_session_turns(sid, limit=100)
-                events = [t.to_dict() for t in turns]
-            except Exception as e:
-                logger.warning(f"Antigravity crawler lookup failed for {sid}: {e}")
-        # 4. Fallback to ALL recent telemetry events if specific session was empty
-        if not events and target_sid != "ALL":
-            events = telemetry_sink.get_session_logs(session_id="ALL", limit=100)
+                try:
+                    obj = json.loads(line)
+                    if isinstance(obj, dict):
+                        events.append(obj)
+                        continue
+                except Exception:
+                    pass
+                events.append({"step_index": idx, "event_type": "USER_PROMPT", "message": line})
+        else:
+            # 2. Query BigQuery / Lakehouse session logs
+            target_sid = sid if sid != "STUDIO_TRAJECTORY" else "ALL"
+            events = telemetry_sink.get_session_logs(session_id=target_sid, limit=200)
+            # 3. Also check Antigravity local crawler if session_id was specified and had no BQ logs
+            if not events and sid != "STUDIO_TRAJECTORY":
+                try:
+                    from src.common.antigravity_crawler import AntigravitySessionCrawler
+                    crawler = AntigravitySessionCrawler()
+                    turns = crawler.get_session_turns(sid, limit=100)
+                    events = [t.to_dict() for t in turns]
+                except Exception as e:
+                    logger.warning(f"Antigravity crawler lookup failed for {sid}: {e}")
+            # 4. Fallback to ALL recent telemetry events if specific session was empty
+            if not events and target_sid != "ALL":
+                events = telemetry_sink.get_session_logs(session_id="ALL", limit=100)
 
-    candidates = _extract_candidates_from_events(
-        events=events,
-        session_id=sid,
-        signal_filter=request.signal_filter,
-    )
+        candidates = _extract_candidates_from_events(
+            events=events,
+            session_id=sid,
+            signal_filter=request.signal_filter,
+        )
+        ctx.complete(
+            result_summary=f"{len(candidates)} candidate(s) from {len(events)} turn(s)",
+            metrics={"events_analyzed": len(events), "candidate_count": len(candidates)},
+            output_preview={"session_id": sid, "candidate_count": len(candidates)},
+            target_workspace="workspace-tree",
+        )
     return {
         "status": "CANDIDATES_EXTRACTED",
         "session_id": sid,
@@ -2511,7 +2760,7 @@ def import_studio_memory_pack(request: StudioMemoryImportRequest) -> Dict[str, A
 
 
 # ==============================================================================
-# 10-Workspace Enterprise Memory Studio REST API (Spanner + BigQuery + Gemini 3.8)
+# 10-Workspace Enterprise Memory Studio REST API (Spanner + BigQuery + Gemini 4)
 # ==============================================================================
 
 
@@ -2775,7 +3024,18 @@ def _enrich_studio_session_dict(sess: Dict[str, Any]) -> Dict[str, Any]:
     return s
 
 
-def _build_studio_tree_payload() -> Dict[str, Any]:
+def _extract_memory_key_from_path(fp: str, fallback: str) -> str:
+    """Derive a clean snake_case memory key from a file path or fallback string."""
+    if "/" in fp:
+        return re.sub(r"\.(md|mem)$", "", fp.split("/")[-1])
+    return re.sub(r"\.(md|mem)$", "", fallback)
+
+
+def _build_studio_tree_payload(
+    team_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Build the unified progressive disclosure file tree + scope-grouped node tree + staged commits."""
     raw = spanner_client.get_memory_file_tree()
     files = raw.get("files", [])
@@ -2788,10 +3048,22 @@ def _build_studio_tree_payload() -> Dict[str, Any]:
         c = dict(sc)
         cid = str(c.get("commit_id") or c.get("staged_id") or c.get("id") or "")
         fp = str(c.get("file_path") or c.get("filePath") or "")
-        mk = str(c.get("memory_key") or (fp.split("/")[-1].replace(".md", "") if "/" in fp else cid))
-        after_v = str(c.get("after_value") or c.get("proposed_content") or c.get("proposedContent") or "")
-        before_v = c.get("before_value")
-        c_status = str(c.get("commit_status") or ("MODIFIED" if before_v else "NEW")).upper()
+        s_type_st = str(c.get("scope_type") or c.get("scope") or "USER").upper()
+        if s_type_st not in ("ORG", "TEAM", "AGENT", "USER"):
+            s_type_st = "USER"
+        mk = str(c.get("memory_key") or _extract_memory_key_from_path(fp, cid))
+        before_v = c.get("before_value") if c.get("before_value") is not None else c.get("previous_content")
+        action_raw = str(c.get("commit_status") or c.get("action") or "").upper()
+        raw_after = c.get("after_value") if c.get("after_value") is not None else (
+            c.get("proposed_content") if c.get("proposed_content") is not None else c.get("proposedContent")
+        )
+        after_v = str(raw_after) if raw_after is not None else ("(Remove rule)" if action_raw == "DELETE" else "")
+        if "CONFLICT" in action_raw:
+            c_status = "CONFLICT"
+        elif action_raw in ("MODIFIED", "UPDATE", "DELETE") or before_v:
+            c_status = "MODIFIED"
+        else:
+            c_status = "NEW"
         c["commit_id"] = cid
         c["staged_id"] = cid
         c["id"] = cid
@@ -2800,13 +3072,16 @@ def _build_studio_tree_payload() -> Dict[str, Any]:
         c["proposed_content"] = after_v
         c["before_value"] = before_v
         c["commit_status"] = c_status
-        c.setdefault("scope_type", "USER")
-        c.setdefault("scope_id", "user:developer")
+        c["scope_type"] = s_type_st
+        c.setdefault(
+            "scope_id",
+            "org:acme-org" if s_type_st == "ORG" else ("team:platform-ml" if s_type_st == "TEAM" else ("agent:code-reviewer-agent" if s_type_st == "AGENT" else "user:developer")),
+        )
         c.setdefault("category", "preferences")
         norm_staged.append(c)
         if fp:
             staged_ByPath[fp] = c
-        staged_ByPath[f"{c.get('scope_type')}::{mk}"] = c
+        staged_ByPath[f"{s_type_st}::{mk}"] = c
 
     grouped_tree: Dict[str, List[Dict[str, Any]]] = {"ORG": [], "TEAM": [], "AGENT": [], "USER": []}
     seen_keys: set = set()
@@ -2816,16 +3091,27 @@ def _build_studio_tree_payload() -> Dict[str, Any]:
         s_type = str(f.get("scope_type") or f.get("scope") or "USER").upper()
         if s_type not in grouped_tree:
             s_type = "USER"
-        s_id = str(f.get("scope_id") or ("org:default" if s_type == "ORG" else ("team:platform-eng" if s_type == "TEAM" else ("agent:code-reviewer" if s_type == "AGENT" else "user:developer"))))
+        s_id = str(f.get("scope_id") or ("org:acme-org" if s_type == "ORG" else ("team:platform-ml" if s_type == "TEAM" else ("agent:code-reviewer-agent" if s_type == "AGENT" else "user:developer"))))
         fp = str(f.get("file_path") or f.get("path") or "")
-        mk = str(f.get("memory_key") or (fp.split("/")[-1].replace(".md", "") if "/" in fp else (f.get("id") or "memory_rule")))
-        content_val = str(f.get("content") or f.get("memory_value") or "")
+        fallback_key = str(f.get("fileName") or f.get("id") or "memory_rule")
+        mk = str(f.get("memory_key") or _extract_memory_key_from_path(fp, fallback_key))
+        content_val = str(f.get("content") or f.get("memory_value") or f.get("currentContent") or "")
         matched_st = staged_ByPath.get(fp) or staged_ByPath.get(f"{s_type}::{mk}")
 
         if matched_st:
-            c_status = "MODIFIED"
+            is_new_add = matched_st.get("commit_status") == "NEW" or (
+                str(f.get("commitState") or "").upper() == "ADD" and not content_val
+            )
+            if is_new_add:
+                c_status = "NEW"
+                matched_st["commit_status"] = "NEW"
+                before_val = None
+            else:
+                c_status = matched_st.get("commit_status") or "MODIFIED"
+                if c_status == "NEW":
+                    c_status = "MODIFIED"
+                before_val = content_val
             st_id = matched_st["staged_id"]
-            before_val = content_val
             display_val = matched_st["after_value"]
         else:
             c_status = "SYNCED"
@@ -2840,20 +3126,18 @@ def _build_studio_tree_payload() -> Dict[str, Any]:
             "scope_id": s_id,
             "memory_key": mk,
             "memory_value": display_val,
-            "natural_language_belief": str(f.get("crystallized_belief") or f.get("title") or display_val.splitlines()[0] if display_val else mk),
+            "natural_language_belief": str(f.get("crystallized_belief") or f.get("title") or (display_val.splitlines()[0] if display_val else mk)),
             "category": str(f.get("category") or "preferences"),
             "usefulness_count": int(f.get("helpful_count") or f.get("helpfulCount") or f.get("usefulness_count") or 1),
             "commit_status": c_status,
             "staged_id": st_id,
             "before_value": before_val,
+            "source_session_id": str((matched_st.get("source_session_id") if matched_st else None) or f.get("source_session_id") or f.get("sessionId") or ""),
         }
         grouped_tree[s_type].append(node)
         seen_keys.add(f"{s_type}::{mk}")
 
     # Also include any NEW staged commits not yet in files
-    new_count = 0
-    mod_count = 0
-    conflict_count = 0
     for st in norm_staged:
         s_type = str(st.get("scope_type") or "USER").upper()
         if s_type not in grouped_tree:
@@ -2861,26 +3145,52 @@ def _build_studio_tree_payload() -> Dict[str, Any]:
         mk = st["memory_key"]
         k_sig = f"{s_type}::{mk}"
         if k_sig not in seen_keys:
-            new_count += 1
             st["commit_status"] = "NEW"
             grouped_tree[s_type].append({
                 "scope_type": s_type,
                 "scope_id": st.get("scope_id") or "user:developer",
                 "memory_key": mk,
                 "memory_value": st["after_value"],
-                "natural_language_belief": st.get("diff_summary") or st["after_value"],
+                "natural_language_belief": st.get("diff_summary") or st.get("summary") or st["after_value"],
                 "category": st.get("category") or "preferences",
                 "usefulness_count": 0,
                 "commit_status": "NEW",
                 "staged_id": st["staged_id"],
                 "before_value": None,
+                "source_session_id": str(st.get("source_session_id") or ""),
                 "file_path": st.get("file_path") or f"{s_type.lower()}/{st.get('category', 'preferences')}/{mk}.md",
             })
-        else:
-            if st.get("commit_status") == "CONFLICT":
-                conflict_count += 1
-            else:
-                mod_count += 1
+
+    # Optional active-context filtering (team_id, agent_id, user_id)
+    raw_user = (user_id or "").strip()
+    norm_user = raw_user if (not raw_user or ":" in raw_user) else f"user:{raw_user}"
+    ctx_filters = {
+        "TEAM": (team_id or "").strip(),
+        "AGENT": (agent_id or "").strip(),
+        "USER": norm_user,
+    }
+    if any(ctx_filters.values()):
+        for tier_key, target_scope_id in ctx_filters.items():
+            if target_scope_id:
+                grouped_tree[tier_key] = [
+                    n for n in grouped_tree[tier_key]
+                    if str(n.get("scope_id") or "") == target_scope_id
+                ]
+        norm_staged = [
+            st for st in norm_staged
+            if not ctx_filters.get(str(st.get("scope_type") or "").upper())
+            or str(st.get("scope_id") or "") == ctx_filters.get(str(st.get("scope_type") or "").upper())
+        ]
+        synced_total = sum(
+            1
+            for tier_nodes in grouped_tree.values()
+            for n in tier_nodes
+            if str(n.get("commit_status") or "SYNCED").upper() == "SYNCED"
+        )
+
+    new_count = sum(1 for st in norm_staged if st.get("commit_status") == "NEW")
+    conflict_count = sum(1 for st in norm_staged if st.get("commit_status") == "CONFLICT")
+    mod_count = sum(1 for st in norm_staged if st.get("commit_status") not in ("NEW", "CONFLICT"))
 
     summary = {
         **(raw.get("summary") or {}),
@@ -2904,12 +3214,23 @@ def _build_studio_tree_payload() -> Dict[str, Any]:
 
 def _enrich_studio_entity(ent: Dict[str, Any]) -> Dict[str, Any]:
     e = dict(ent)
-    eid = str(e.get("entity_id") or e.get("scope_id") or e.get("id") or "user:developer")
+    s_type = str(e.get("scope_type") or e.get("scopeType") or e.get("type") or "USER").upper()
+    eid = str(e.get("entity_id") or e.get("id") or e.get("scope_id") or "user:developer")
+    raw_scope_id = str(e.get("scope_id") or "").strip()
+    if ":" in raw_scope_id:
+        canonical_scope_id = raw_scope_id
+    elif ":" in eid:
+        canonical_scope_id = eid
+    elif e.get("slug"):
+        canonical_scope_id = f"{s_type.lower()}:{str(e['slug']).strip()}"
+    else:
+        canonical_scope_id = eid
+
     e["entity_id"] = eid
-    e["scope_id"] = eid
+    e["scope_id"] = canonical_scope_id
     e["id"] = eid
-    e["scope_type"] = str(e.get("scope_type") or e.get("scopeType") or "USER").upper()
-    e["display_name"] = str(e.get("display_name") or e.get("displayName") or e.get("name") or eid)
+    e["scope_type"] = s_type
+    e["display_name"] = str(e.get("display_name") or e.get("displayName") or e.get("name") or canonical_scope_id)
     e["parent_id"] = e.get("parent_id") or e.get("parent_scope_id") or e.get("parentId")
     e["parent_scope_id"] = e["parent_id"]
     e["owner"] = str(e.get("owner") or e.get("handle") or "@platform-eng")
@@ -2938,7 +3259,7 @@ def _enrich_studio_extractor(ext: Dict[str, Any]) -> Dict[str, Any]:
     xid = str(x.get("extractor_id") or x.get("id") or "ext-implicit-pref")
     x["extractor_id"] = xid
     x["id"] = xid
-    m_name = str(x.get("model_name") or x.get("model") or "gemini-3.8-flash")
+    m_name = str(x.get("model_name") or x.get("model") or config.model_name)
     x["model"] = m_name
     x["model_name"] = m_name
     t_cat = str(x.get("target_category") or x.get("targetCategory") or "technical")
@@ -3075,122 +3396,136 @@ def summarize_studio_session(
     session_id: str,
     request: Optional[StudioSessionSummarizeRequest] = None,
 ) -> Dict[str, Any]:
-    """Generate a live AI session summary via Vertex AI (gemini-3.8-flash) using ADC and persist to BigQuery."""
+    """Generate a live AI session summary via Vertex AI (gemini-4-hydrogen) using ADC and persist to BigQuery."""
     sess = telemetry_sink.get_ingested_session(session_id)
     if not sess:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 
-    raw_turns = sess.get("transcript") if isinstance(sess.get("transcript"), list) else (
-        sess.get("turns") if isinstance(sess.get("turns"), list) else []
-    )
-    turn_lines = [
-        f"[{str(t.get('role', 'user')).upper()}]: {t.get('text') or t.get('content', '')}"
-        for t in raw_turns if isinstance(t, dict)
-    ]
-    recalled_mems = sess.get("memories_injected") or (sess.get("aiSummary", {}) or {}).get("recalledMemories", [])
-    extracted_sigs = sess.get("memories_extracted") or sess.get("extractedSignals", [])
-    mems_injected = ", ".join(
-        (m.get("file_path") or m.get("path") or str(m)) if isinstance(m, dict) else str(m)
-        for m in recalled_mems
-    )
-    mems_extracted = ", ".join(
-        (m.get("file_path") or m.get("targetPath") or str(m)) if isinstance(m, dict) else str(m)
-        for m in extracted_sigs
-    )
-
-    prompt_text = (
-        "You are the Enterprise Memory Studio Session Summarizer.\n"
-        "Write a concise, high-signal 2-sentence engineering summary of the following agent session trajectory, "
-        "highlighting the developer's intent, tools/guardrails applied, and memories crystallized.\n\n"
-        f"Session ID: {session_id}\n"
-        f"Title: {sess.get('title', '')}\n"
-        f"Memories Injected: {mems_injected}\n"
-        f"Memories Extracted: {mems_extracted}\n"
-        "Trajectory Turns:\n" + "\n".join(turn_lines)
-    )
-
-    ai_summary = ""
-    model_used = "gemini-3.8-flash"
-    try:
-        from google import genai
-        client = genai.Client(vertexai=True, project=config.project_id, location="global")
-        response = client.models.generate_content(
-            model=model_used,
-            contents=prompt_text,
+    with job_runner.track_inline_job(
+        "memory_transform",
+        triggered_from="Sessions",
+        params={"session_id": session_id, "auto_stage_candidates": bool(request is None or request.auto_stage_candidates)},
+        title="Summarize & stage session",
+    ) as ctx:
+        ctx.update_progress("Summarizing session turns", 35)
+        raw_turns = sess.get("transcript") if isinstance(sess.get("transcript"), list) else (
+            sess.get("turns") if isinstance(sess.get("turns"), list) else []
         )
-        if response and getattr(response, "text", None):
-            ai_summary = response.text.strip()
-    except Exception as e:
-        logger.warning(f"Vertex AI global gemini-3.8-flash call failed ({e}); trying fallback model/location.")
+        turn_lines = [
+            f"[{str(t.get('role', 'user')).upper()}]: {t.get('text') or t.get('content', '')}"
+            for t in raw_turns if isinstance(t, dict)
+        ]
+        recalled_mems = sess.get("memories_injected") or (sess.get("aiSummary", {}) or {}).get("recalledMemories", [])
+        extracted_sigs = sess.get("memories_extracted") or sess.get("extractedSignals", [])
+        mems_injected = ", ".join(
+            (m.get("file_path") or m.get("path") or str(m)) if isinstance(m, dict) else str(m)
+            for m in recalled_mems
+        )
+        mems_extracted = ", ".join(
+            (m.get("file_path") or m.get("targetPath") or str(m)) if isinstance(m, dict) else str(m)
+            for m in extracted_sigs
+        )
+
+        prompt_text = (
+            "You are the Enterprise Memory Studio Session Summarizer.\n"
+            "Write a concise, high-signal 2-sentence engineering summary of the following agent session trajectory, "
+            "highlighting the developer's intent, tools/guardrails applied, and memories crystallized.\n\n"
+            f"Session ID: {session_id}\n"
+            f"Title: {sess.get('title', '')}\n"
+            f"Memories Injected: {mems_injected}\n"
+            f"Memories Extracted: {mems_extracted}\n"
+            "Trajectory Turns:\n" + "\n".join(turn_lines)
+        )
+
+        ai_summary = ""
+        model_used = config.model_name
         try:
             from google import genai
-            client = genai.Client(vertexai=True, project=config.project_id, location="us-central1")
+            client = genai.Client(vertexai=True, project=config.project_id, location="global")
             response = client.models.generate_content(
-                model="gemini-3.8-flash",
+                model=model_used,
                 contents=prompt_text,
             )
             if response and getattr(response, "text", None):
                 ai_summary = response.text.strip()
-        except Exception as inner_e:
-            logger.warning(f"Vertex AI fallback summarize failed ({inner_e}); synthesizing from real session turns.")
+        except Exception as e:
+            logger.warning(f"Vertex AI global {model_used} call failed ({e}); trying fallback location.")
+            try:
+                from google import genai
+                client = genai.Client(vertexai=True, project=config.project_id, location="us-central1")
+                response = client.models.generate_content(
+                    model=model_used,
+                    contents=prompt_text,
+                )
+                if response and getattr(response, "text", None):
+                    ai_summary = response.text.strip()
+            except Exception as inner_e:
+                logger.warning(f"Vertex AI fallback summarize failed ({inner_e}); synthesizing from real session turns.")
 
-    if not ai_summary:
-        first_user = next(
-            ((t.get("text") or t.get("content", "")) for t in raw_turns if isinstance(t, dict) and str(t.get("role", "")).upper() == "USER"),
-            sess.get("title", ""),
+        if not ai_summary:
+            first_user = next(
+                ((t.get("text") or t.get("content", "")) for t in raw_turns if isinstance(t, dict) and str(t.get("role", "")).upper() == "USER"),
+                sess.get("title", ""),
+            )
+            last_assistant = next(
+                ((t.get("text") or t.get("content", "")) for t in reversed(raw_turns) if isinstance(t, dict) and str(t.get("role", "")).upper() in ("ASSISTANT", "AGENT")),
+                "",
+            )
+            ai_summary = (
+                f"Session {session_id} ({sess.get('title', 'Engineering Session')}): Developer requested '{first_user[:120]}' "
+                f"with injected memories [{mems_injected or 'none'}]. "
+                f"Agent completed verification ('{last_assistant[:120]}') and crystallized [{mems_extracted or 'no new memories'}]."
+            )
+
+        existing_summary = sess.get("aiSummary") if isinstance(sess.get("aiSummary"), dict) else (
+            sess.get("ai_summary") if isinstance(sess.get("ai_summary"), dict) else {}
         )
-        last_assistant = next(
-            ((t.get("text") or t.get("content", "")) for t in reversed(raw_turns) if isinstance(t, dict) and str(t.get("role", "")).upper() in ("ASSISTANT", "AGENT")),
-            "",
+        summary_dict = {
+            **existing_summary,
+            "overview": ai_summary,
+            "model": model_used,
+        }
+        telemetry_sink.update_session_ai_summary(session_id, summary_dict)
+
+        # Optionally auto-stage extracted candidates from the session turns
+        staged_list: List[Dict[str, Any]] = []
+        if request is None or request.auto_stage_candidates:
+            ctx.update_progress("Extracting candidate memories", 75)
+            events = [
+                {
+                    "session_id": session_id,
+                    "event_type": "USER_PROMPT" if str(t.get("role", "")).upper() == "USER" else "AGENT_RESPONSE",
+                    "message": t.get("text") or t.get("content", ""),
+                }
+                for t in raw_turns if isinstance(t, dict)
+            ]
+            cands = _extract_candidates_from_events(events, session_id=session_id, signal_filter="ALL")
+            for c in cands[:2]:
+                mk = c.get("memory_key", "session_rule")
+                st_res = spanner_client.stage_memory_commit({
+                    "file_id": f"mem-user-{mk[:20]}",
+                    "file_path": f"user/{c.get('category', 'workflow')}/{mk}.md",
+                    "scope_type": c.get("suggested_scope", "USER"),
+                    "scope_id": "user:developer",
+                    "category": c.get("category", "workflow"),
+                    "proposed_content": c.get("memory_value", ""),
+                    "diff_summary": f"Auto-staged from {session_id} summary",
+                    "source_session_id": session_id,
+                    "extractor_id": "ext-session-summarizer",
+                    "confidence": float(c.get("confidence", 0.93)),
+                    "write_mode": "staged",
+                })
+                staged_list.append(st_res)
+
+        updated_sess = _enrich_studio_session_dict(telemetry_sink.get_ingested_session(session_id) or sess)
+        updated_sess["summary"] = ai_summary
+        updated_sess["status"] = "SUMMARIZED"
+        ctx.complete(
+            result_summary=f"Summarized · {len(staged_list)} proposal(s)",
+            metrics={"turns": len(raw_turns), "staged_proposals": len(staged_list)},
+            output_preview={"session_id": session_id, "summary_text": ai_summary, "staged_count": len(staged_list)},
+            target_workspace="workspace-tree" if staged_list else "workspace-sessions",
         )
-        ai_summary = (
-            f"Session {session_id} ({sess.get('title', 'Engineering Session')}): Developer requested '{first_user[:120]}' "
-            f"with injected memories [{mems_injected or 'none'}]. "
-            f"Agent completed verification ('{last_assistant[:120]}') and crystallized [{mems_extracted or 'no new memories'}]."
-        )
-
-    existing_summary = sess.get("aiSummary") if isinstance(sess.get("aiSummary"), dict) else (
-        sess.get("ai_summary") if isinstance(sess.get("ai_summary"), dict) else {}
-    )
-    summary_dict = {
-        **existing_summary,
-        "overview": ai_summary,
-        "model": model_used,
-    }
-    telemetry_sink.update_session_ai_summary(session_id, summary_dict)
-
-    # Optionally auto-stage extracted candidates from the session turns
-    staged_list: List[Dict[str, Any]] = []
-    if request is None or request.auto_stage_candidates:
-        events = [
-            {
-                "session_id": session_id,
-                "event_type": "USER_PROMPT" if str(t.get("role", "")).upper() == "USER" else "AGENT_RESPONSE",
-                "message": t.get("text") or t.get("content", ""),
-            }
-            for t in raw_turns if isinstance(t, dict)
-        ]
-        cands = _extract_candidates_from_events(events, session_id=session_id, signal_filter="ALL")
-        for c in cands[:2]:
-            mk = c.get("memory_key", "session_rule")
-            st_res = spanner_client.stage_memory_commit({
-                "file_id": f"mem-user-{mk[:20]}",
-                "file_path": f"user/{c.get('category', 'workflow')}/{mk}.md",
-                "scope_type": c.get("suggested_scope", "USER"),
-                "scope_id": "user:developer",
-                "category": c.get("category", "workflow"),
-                "proposed_content": c.get("memory_value", ""),
-                "diff_summary": f"Auto-staged from {session_id} summary",
-                "source_session_id": session_id,
-                "extractor_id": "ext-session-summarizer",
-                "confidence": float(c.get("confidence", 0.93)),
-                "write_mode": "staged",
-            })
-            staged_list.append(st_res)
-
-    updated_sess = _enrich_studio_session_dict(telemetry_sink.get_ingested_session(session_id) or sess)
-    updated_sess["summary"] = ai_summary
-    updated_sess["status"] = "SUMMARIZED"
     return {
         "status": "SUMMARIZED",
         "session_id": session_id,
@@ -3318,9 +3653,13 @@ def get_studio_memory_files() -> Dict[str, Any]:
 
 
 @api.get("/api/studio/tree")
-def get_studio_memory_tree_alias() -> Dict[str, Any]:
+def get_studio_memory_tree_alias(
+    team_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Return the scope-grouped memory tree, progressive disclosure files, and staged commit queue."""
-    return _build_studio_tree_payload()
+    return _build_studio_tree_payload(team_id=team_id, agent_id=agent_id, user_id=user_id)
 
 
 @api.post("/api/studio/files/stage")
@@ -3481,13 +3820,27 @@ def discard_studio_tree_body(request: StudioTreeDiscardRequest) -> Dict[str, Any
 @api.post("/api/studio/files/commit-all")
 def commit_all_studio_staged_files() -> Dict[str, Any]:
     """Commit all pending staged memory changes in Spanner and replicate to BigQuery."""
-    res = spanner_client.commit_all_staged_memories()
-    tree = _build_studio_tree_payload()
-    for f in tree.get("files", []):
-        telemetry_sink.replicate_memory_to_bq(f)
+    with job_runner.track_inline_job(
+        "memory_transform",
+        triggered_from="Memories",
+        params={"action": "commit_all"},
+        title="Commit staged memories",
+    ) as ctx:
+        ctx.update_progress("Committing staged rules and replicating traces", 40)
+        res = spanner_client.commit_all_staged_memories()
+        tree = _build_studio_tree_payload()
+        for f in tree.get("files", []):
+            telemetry_sink.replicate_memory_to_bq(f)
+        committed_n = int(res.get("committed_count", 0))
+        ctx.complete(
+            result_summary=f"{committed_n} rule(s) committed",
+            metrics={"committed_count": committed_n},
+            output_preview={"committed_count": committed_n},
+            target_workspace="workspace-tree",
+        )
     return {
         "status": "ALL_COMMITTED",
-        "committed_count": res.get("committed_count", 0),
+        "committed_count": committed_n,
         "committed": res.get("commits", []),
         "files": tree.get("files", []),
         "tree": tree.get("tree", {}),
@@ -3583,13 +3936,14 @@ def update_studio_file_usefulness(file_id: str, request: StudioFileUsefulnessReq
 
 
 @api.get("/api/studio/entities")
-def get_studio_entities(scope_type: Optional[str] = None) -> Dict[str, Any]:
+def get_studio_entities(request: Request, scope_type: Optional[str] = None) -> Dict[str, Any]:
     """Return registered scope entities (Users, Teams, Agents, Orgs) from Spanner."""
     entities = [_enrich_studio_entity(e) for e in spanner_client.list_scope_entities(scope_type=scope_type or "ALL")]
     return {
         "status": "OK",
         "entities": entities,
         "count": len(entities),
+        "authenticated_email": getattr(request.state, "user_email", None),
     }
 
 
@@ -3636,6 +3990,13 @@ def delete_studio_entity_by_scope(scope_type: str, scope_id: str) -> Dict[str, A
     if not deleted:
         composite = f"{scope_type.lower()}:{scope_id}"
         deleted = spanner_client.delete_scope_entity(composite)
+    if not deleted:
+        for raw_ent in spanner_client.list_scope_entities():
+            enriched = _enrich_studio_entity(raw_ent)
+            if enriched.get("scope_id") == scope_id and enriched.get("id"):
+                deleted = spanner_client.delete_scope_entity(enriched["id"])
+                if deleted:
+                    break
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Entity '{scope_id}' not found")
     return {
@@ -3822,64 +4183,77 @@ def run_studio_extractor(extractor_id: str, request: Optional[StudioExtractorRun
     if not ext:
         raise HTTPException(status_code=404, detail=f"Extractor '{extractor_id}' not found")
 
-    sess = telemetry_sink.get_ingested_session(target_sid)
-    events: List[Dict[str, Any]] = []
-    raw_turns = sess.get("transcript") if (sess and isinstance(sess.get("transcript"), list)) else (
-        sess.get("turns") if (sess and isinstance(sess.get("turns"), list)) else []
-    )
-    if raw_turns:
-        for t in raw_turns:
-            if isinstance(t, dict):
-                events.append({
-                    "session_id": target_sid,
-                    "event_type": "USER_PROMPT" if str(t.get("role", "")).upper() == "USER" else "AGENT_RESPONSE",
-                    "message": t.get("text") or t.get("content", ""),
-                })
-    else:
-        events = telemetry_sink.get_session_logs(session_id=target_sid, limit=100)
-
-    candidates = _extract_candidates_from_events(events, session_id=target_sid, signal_filter="ALL")
-    w_mode = (req.write_mode or ext.get("write_mode") or ext.get("writeMode") or "staged").lower()
-    cat_slug = ext.get("target_category") or ext.get("targetCategory") or "preferences"
-    scope_type = (ext.get("target_scope") or ext.get("targetScope") or "USER").upper()
-    scope_id = "org:default" if scope_type == "ORG" else ("team:platform-eng" if scope_type == "TEAM" else ("agent:code-reviewer" if scope_type == "AGENT" else "user:developer"))
-
-    staged_results: List[Dict[str, Any]] = []
-    for c in candidates[:3]:
-        m_key = c.get("memory_key", "extracted_rule")
-        f_path = f"{scope_type.lower()}/{cat_slug}/{m_key}.md"
-        md_content = (
-            f"# {m_key.replace('_', ' ').title()}\n\n"
-            f"- **Directive**: {c.get('memory_value', '')}\n"
-            f"- **Signal Type**: `{c.get('signal_type', 'IMPLICIT_PREFERENCE')}`\n"
-            f"- **Source Session**: `{target_sid}`\n"
-            f"- **Extractor**: `{extractor_id}` (`{ext.get('model', 'gemini-3.8-flash')}`)\n"
+    with job_runner.track_inline_job(
+        "memory_transform",
+        triggered_from="Settings",
+        params={"extractor_id": extractor_id, "session_id": target_sid},
+        title=f"Run extractor ({ext.get('name') or extractor_id})",
+    ) as ctx:
+        ctx.update_progress("Extracting candidates from trajectory", 35)
+        sess = telemetry_sink.get_ingested_session(target_sid)
+        events: List[Dict[str, Any]] = []
+        raw_turns = sess.get("transcript") if (sess and isinstance(sess.get("transcript"), list)) else (
+            sess.get("turns") if (sess and isinstance(sess.get("turns"), list)) else []
         )
-        st_res = spanner_client.stage_memory_commit({
-            "file_id": f"mem-{scope_type.lower()}-{m_key.replace('_', '-')[:24]}",
-            "file_path": f_path,
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-            "category": cat_slug,
-            "proposed_content": md_content,
-            "diff_summary": f"Extracted {m_key} from {target_sid} via {ext.get('name', extractor_id)}",
-            "source_session_id": target_sid,
-            "extractor_id": extractor_id,
-            "confidence": float(c.get("confidence", 0.94)),
-            "write_mode": w_mode,
-        })
-        staged_results.append(st_res)
+        if raw_turns:
+            for t in raw_turns:
+                if isinstance(t, dict):
+                    events.append({
+                        "session_id": target_sid,
+                        "event_type": "USER_PROMPT" if str(t.get("role", "")).upper() == "USER" else "AGENT_RESPONSE",
+                        "message": t.get("text") or t.get("content", ""),
+                    })
+        else:
+            events = telemetry_sink.get_session_logs(session_id=target_sid, limit=100)
 
-    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    resolved_ext_id = ext.get("extractor_id") or ext.get("id") or extractor_id
-    prev_count = int(ext.get("extracted_count") or ext.get("extractedCount") or 0)
-    updated_ext = _enrich_studio_extractor(spanner_client.upsert_extractor_job({
-        **ext,
-        "extractor_id": resolved_ext_id,
-        "extracted_count": prev_count + max(1, len(staged_results)),
-        "last_run_at": now_iso,
-    }))
-    tree = _build_studio_tree_payload()
+        candidates = _extract_candidates_from_events(events, session_id=target_sid, signal_filter="ALL")
+        w_mode = (req.write_mode or ext.get("write_mode") or ext.get("writeMode") or "staged").lower()
+        cat_slug = ext.get("target_category") or ext.get("targetCategory") or "preferences"
+        scope_type = (ext.get("target_scope") or ext.get("targetScope") or "USER").upper()
+        scope_id = "org:default" if scope_type == "ORG" else ("team:platform-eng" if scope_type == "TEAM" else ("agent:code-reviewer" if scope_type == "AGENT" else "user:developer"))
+
+        staged_results: List[Dict[str, Any]] = []
+        for c in candidates[:3]:
+            m_key = c.get("memory_key", "extracted_rule")
+            f_path = f"{scope_type.lower()}/{cat_slug}/{m_key}.md"
+            md_content = (
+                f"# {m_key.replace('_', ' ').title()}\n\n"
+                f"- **Directive**: {c.get('memory_value', '')}\n"
+                f"- **Signal Type**: `{c.get('signal_type', 'IMPLICIT_PREFERENCE')}`\n"
+                f"- **Source Session**: `{target_sid}`\n"
+                f"- **Extractor**: `{extractor_id}` (`{ext.get('model', config.model_name)}`)\n"
+            )
+            st_res = spanner_client.stage_memory_commit({
+                "file_id": f"mem-{scope_type.lower()}-{m_key.replace('_', '-')[:24]}",
+                "file_path": f_path,
+                "scope_type": scope_type,
+                "scope_id": scope_id,
+                "category": cat_slug,
+                "proposed_content": md_content,
+                "diff_summary": f"Extracted {m_key} from {target_sid} via {ext.get('name', extractor_id)}",
+                "source_session_id": target_sid,
+                "extractor_id": extractor_id,
+                "confidence": float(c.get("confidence", 0.94)),
+                "write_mode": w_mode,
+            })
+            staged_results.append(st_res)
+
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        resolved_ext_id = ext.get("extractor_id") or ext.get("id") or extractor_id
+        prev_count = int(ext.get("extracted_count") or ext.get("extractedCount") or 0)
+        updated_ext = _enrich_studio_extractor(spanner_client.upsert_extractor_job({
+            **ext,
+            "extractor_id": resolved_ext_id,
+            "extracted_count": prev_count + max(1, len(staged_results)),
+            "last_run_at": now_iso,
+        }))
+        tree = _build_studio_tree_payload()
+        ctx.complete(
+            result_summary=f"{len(staged_results)} proposal(s) staged",
+            metrics={"candidates_found": len(candidates), "staged_count": len(staged_results)},
+            output_preview={"extractor_id": resolved_ext_id, "session_id": target_sid, "staged_count": len(staged_results)},
+            target_workspace="workspace-tree",
+        )
     return {
         "status": "EXTRACTOR_RUN_COMPLETE",
         "extractor": updated_ext,
@@ -3895,7 +4269,7 @@ def run_studio_extractor(extractor_id: str, request: Optional[StudioExtractorRun
 @api.post("/api/studio/extractors/{extractor_id}/chat")
 @api.post("/api/studio/extractor/{extractor_id}/chat")
 def chat_tune_studio_extractor(extractor_id: str, request: StudioExtractorChatRequest) -> Dict[str, Any]:
-    """Translate a natural-language prompt tuning instruction into structured humanParams & systemPrompt via Gemini 3.8 Flash."""
+    """Translate a natural-language prompt tuning instruction into structured humanParams & systemPrompt via Gemini 4 Neon."""
     user_msg = (request.message or request.instruction or request.prompt or "").strip()
     if not user_msg:
         raise HTTPException(status_code=400, detail="message or instruction is required")
@@ -3912,7 +4286,7 @@ def chat_tune_studio_extractor(extractor_id: str, request: StudioExtractorChatRe
         current_params.update(request.humanParams or request.human_params or {})
 
     current_prompt = ext.get("system_prompt") or ext.get("systemPrompt") or ""
-    model_used = "gemini-3.8-flash"
+    model_used = config.reasoning_model_name
     llm_reply = ""
     updated_params = dict(current_params)
     updated_prompt = current_prompt
@@ -3951,7 +4325,7 @@ def chat_tune_studio_extractor(extractor_id: str, request: StudioExtractorChatRe
                 if parsed.get("reply"):
                     llm_reply = str(parsed["reply"])
     except Exception as e:
-        logger.warning(f"Gemini 3.8 Flash extractor chat tuning fallback triggered ({e})")
+        logger.warning(f"Gemini 4 Neon extractor chat tuning fallback triggered ({e})")
 
     if not llm_reply:
         lower_m = user_msg.lower()
@@ -4259,6 +4633,424 @@ def simulate_studio_security_access(request: StudioRbacSimulateRequest) -> Dict[
         "rationale": rationale_str,
         "scope_path": scope_chain,
         "target_scope_id": t_scope_id,
+    }
+
+
+# ============================================================================
+# Unified Background & Inline Jobs API (/api/studio/jobs*)
+# ============================================================================
+
+class StudioJobStartRequest(BaseModel):
+    job_type: str = Field(..., description="Job type: dream_compaction, alpha_evolve, eval_benchmark, session_ingest, memory_transform")
+    triggered_from: str = Field(default="Jobs", description="Originating UI tab or caller")
+    title: Optional[str] = Field(default=None, description="Optional custom display title")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Job parameters (scope IDs, generations, session_id, etc.)")
+
+
+def _job_worker_dream_compaction(params: Dict[str, Any], ctx: JobProgressContext) -> Dict[str, Any]:
+    """Run real Dream Harvest / NREM compaction + scoped observation consolidation."""
+    user_id = str(params.get("user_id") or get_default_dev_email(config.allowed_email_domains) or "developer@example.com")
+    session_id = params.get("session_id")
+    multi_session = bool(params.get("multi_session", True))
+    ctx.update_progress("Scanning session telemetry logs", 20)
+    if multi_session and not session_id:
+        sync_res = synchronizer.sync_multi_session_to_spanner(
+            user_id=user_id,
+            session_ids=params.get("session_ids"),
+        )
+    else:
+        sync_res = synchronizer.sync_to_spanner(
+            user_id=user_id,
+            session_id=session_id,
+            session_ids=params.get("session_ids"),
+            multi_session=multi_session,
+            session_type=str(params.get("session_type") or "chat"),
+        )
+    ctx.check_canceled()
+    ctx.update_progress("Consolidating scoped observation clusters", 75)
+
+    repo_id = str(params.get("repo_id") or params.get("team_id") or "project:workspace").replace("team:", "")
+    st, sid, _ = _v1_map_scope(str(params.get("scope_type") or "project"), repo_id)
+    records = spanner_client.get_scoped_memories(st, sid)
+    observations = [r for r in records if _v1_is_observation_record(r)]
+    clusters: Dict[str, Dict[str, Any]] = {}
+    for obs in observations:
+        text = str(obs.get("crystallized_belief") or obs.get("memory_value") or "").strip()
+        if not text:
+            continue
+        ckey = hashlib.sha256(text.lower().encode("utf-8")).hexdigest()[:12]
+        entry = clusters.setdefault(ckey, {"text": text, "sessions": set(), "symbols": set()})
+        sess = str(obs.get("source_session_id") or (obs.get("trigger_conditions") or {}).get("session_id") or "sess").strip()
+        entry["sessions"].add(sess)
+        for s in _v1_record_symbols(obs):
+            entry["symbols"].add(s)
+
+    promoted_keys: List[str] = []
+    min_sessions = max(1, int(params.get("min_sessions") or 2))
+    for ckey, info in clusters.items():
+        if len(info["sessions"]) < min_sessions:
+            continue
+        bkey = f"mem_{ckey}"
+        syms = sorted(info["symbols"])
+        spanner_client.upsert_scoped_memory(
+            scope_type=st,
+            scope_id=sid,
+            memory_key=bkey,
+            memory_value=info["text"],
+            memory_type="INVARIANT_GUARDRAIL",
+            category="consolidated",
+            confidence=0.95,
+            crystallized_belief=info["text"],
+            keywords=", ".join(syms) if syms else info["text"][:80],
+            source_session_id=sorted(info["sessions"])[0],
+            promoted_from_scope="/mem/project",
+            support_count=len(info["sessions"]),
+            trigger_conditions={"symbols": syms, "support_session_ids": sorted(info["sessions"])},
+        )
+        promoted_keys.append(bkey)
+
+    prefs_synced = int(sync_res.get("preferences_synced") or 0)
+    total_consolidated = prefs_synced + len(promoted_keys)
+    return {
+        "result_summary": f"{total_consolidated} belief(s) consolidated",
+        "metrics": {
+            "preferences_synced": prefs_synced,
+            "clusters_promoted": len(promoted_keys),
+            "observations_scanned": len(observations),
+        },
+        "output_preview": {
+            "user_id": user_id,
+            "intent": sync_res.get("intent", ""),
+            "summary": sync_res.get("summary", ""),
+            "preferences_synced": prefs_synced,
+            "promoted_keys": promoted_keys,
+        },
+        "target_workspace": "workspace-tree",
+    }
+
+
+def _job_worker_alpha_evolve(params: Dict[str, Any], ctx: JobProgressContext) -> Dict[str, Any]:
+    """Run AlphaEvolve MAP-Elites optimization with per-generation cancellation and progress updates."""
+    generations = max(1, min(10, int(params.get("generations") or 4)))
+    alpha_w = float(params.get("alpha_quality_weight") if params.get("alpha_quality_weight") is not None else 0.7)
+    candidates = max(1, min(6, int(params.get("candidates_per_generation") or 2)))
+    auto_apply = params.get("auto_apply_min_gain")
+
+    ctx.update_progress(f"Starting {generations} evolution generation(s)", 10)
+    final_result: Dict[str, Any] = {}
+    for event in alpha_evolve.iter_evolution(
+        generations=generations,
+        alpha_quality_weight=alpha_w,
+        candidates_per_generation=candidates,
+        auto_apply_min_gain=auto_apply,
+    ):
+        ctx.check_canceled()
+        ev_type = event.get("type")
+        if ev_type in ("phase", "baseline", "candidate"):
+            step = int(event.get("step") or 0)
+            total_steps = max(1, int(event.get("total_steps") or (1 + generations * candidates)))
+            pct = min(95, max(10, int(round((step / total_steps) * 90))))
+            msg = str(event.get("message") or f"Generation {event.get('generation', 1)}/{generations}")
+            metrics_update: Optional[Dict[str, Any]] = None
+            if ev_type in ("baseline", "candidate"):
+                fit_src = event.get("champion") or event.get("entry") or {}
+                if isinstance(fit_src, dict) and fit_src.get("pareto_fitness") is not None:
+                    metrics_update = {"pareto_fitness": round(float(fit_src["pareto_fitness"]), 4)}
+            ctx.update_progress(
+                msg,
+                progress_pct=pct,
+                metrics=metrics_update,
+                force_persist=(ev_type == "candidate"),
+            )
+        elif ev_type == "complete" and isinstance(event.get("result"), dict):
+            final_result = _enrich_evolve_result(event["result"])
+
+    champ = final_result.get("champion") or {}
+    cfg = champ.get("config") or {}
+    best_fit = float(champ.get("pareto_fitness") or 0.0)
+    dim = int(cfg.get("embedding_dimensions") or 768)
+    populated = int(final_result.get("archive_summary", {}).get("populated_cells") or 0)
+    return {
+        "result_summary": f"Score {best_fit:.3f} · {dim}d ({populated} cells)",
+        "metrics": {
+            "pareto_fitness": round(best_fit, 4),
+            "embedding_dimensions": dim,
+            "populated_cells": populated,
+            "generations": generations,
+        },
+        "output_preview": {
+            "champion": champ,
+            "active_config": final_result.get("active_config"),
+            "populated_cells": populated,
+        },
+        "target_workspace": "workspace-eval",
+    }
+
+
+def _job_worker_eval_benchmark(params: Dict[str, Any], ctx: JobProgressContext) -> Dict[str, Any]:
+    """Run the 7-metric + Matryoshka recall evaluation suite."""
+    alpha_w = float(params.get("alpha_quality_weight") if params.get("alpha_quality_weight") is not None else 0.65)
+    ctx.update_progress("Evaluating verification cases across 128d–768d slices", 30)
+    target_cfg = alpha_evolve.get_active_config()
+    scorecard = eval_engine.run_evaluation_suite(config=target_cfg, alpha_quality_weight=alpha_w)
+    ctx.check_canceled()
+    mb = scorecard.get("metrics_breakdown") or {}
+    pareto_val = float(scorecard.get("pareto_fitness") or 0.0)
+    acc_pct = int(round(float(mb.get("recall_at_k", mb.get("fact_recall", 1.0))) * 100))
+    guard_pct = int(round(float(mb.get("guardrail_compliance", 1.0)) * 100))
+    return {
+        "result_summary": f"Score {pareto_val:.3f} · {acc_pct}% accuracy · {guard_pct}% guardrails",
+        "metrics": {
+            "pareto_fitness": round(pareto_val, 4),
+            "retrieval_accuracy_pct": acc_pct,
+            "guardrail_compliance_pct": guard_pct,
+        },
+        "output_preview": {
+            "pareto_fitness": round(pareto_val, 4),
+            "quality_score": scorecard.get("quality_score", 0.0),
+            "token_efficiency_score": scorecard.get("token_efficiency_score", 0.0),
+            "metrics_breakdown": mb,
+        },
+        "target_workspace": "workspace-eval",
+    }
+
+
+def _job_worker_session_ingest(params: Dict[str, Any], ctx: JobProgressContext) -> Dict[str, Any]:
+    """Ingest real session turns from Antigravity brain storage or active telemetry feeds."""
+    from src.common.antigravity_crawler import AntigravitySessionCrawler
+
+    user_id = str(params.get("user_id") or get_default_dev_email(config.allowed_email_domains) or "developer@example.com")
+    target_sid = str(params.get("session_id") or "").strip()
+    ctx.update_progress("Scanning local session sources", 25)
+    crawler = AntigravitySessionCrawler()
+    sessions_to_ingest: List[str] = []
+    if target_sid:
+        sessions_to_ingest = [target_sid]
+    else:
+        discovered = crawler.list_sessions(limit=3)
+        sessions_to_ingest = [
+            str(s.get("session_id") or s.get("id") or "")
+            for s in discovered
+            if isinstance(s, dict) and (s.get("session_id") or s.get("id"))
+        ]
+
+    turns_logged = 0
+    sessions_processed = 0
+    total_sessions = max(1, len(sessions_to_ingest))
+    for idx, sid in enumerate(sessions_to_ingest):
+        ctx.check_canceled()
+        turns = crawler.get_session_turns(sid, limit=60)
+        for t in turns:
+            telemetry_sink.log_interaction(
+                user_id=user_id,
+                session_id=sid,
+                agent_name="antigravity",
+                event_type=t.turn_type,
+                message=t.user_prompt or t.agent_thought or (f"{t.tool_name}({t.tool_args_json[:100]})" if t.tool_name else t.tool_output[:200]),
+                payload=t.to_dict(),
+            )
+            turns_logged += 1
+        if turns:
+            sessions_processed += 1
+            spanner_client.record_ingest_event({
+                "service_id": "svc-antigravity-crawler",
+                "session_id": sid,
+                "summary": f"Ingested {len(turns)} turn(s) via background job",
+                "status": "INGESTED",
+                "write_mode": "staged",
+            })
+        pct = min(90, 30 + int(round(((idx + 1) / total_sessions) * 60)))
+        ctx.update_progress(f"Ingested {turns_logged} turn(s) across {sessions_processed} session(s)", pct)
+
+    if sessions_processed == 0:
+        existing_sessions = telemetry_sink.get_ingested_sessions(limit=20)
+        return {
+            "result_summary": f"0 new turns · {len(existing_sessions)} session(s) indexed",
+            "metrics": {"turns_ingested": 0, "sessions_indexed": len(existing_sessions)},
+            "output_preview": {"sessions_scanned": len(sessions_to_ingest), "sessions_indexed": len(existing_sessions)},
+            "target_workspace": "workspace-sessions",
+        }
+    return {
+        "result_summary": f"{turns_logged} turn(s) across {sessions_processed} session(s)",
+        "metrics": {"turns_ingested": turns_logged, "sessions_processed": sessions_processed},
+        "output_preview": {"session_ids": sessions_to_ingest[:sessions_processed], "turns_ingested": turns_logged},
+        "target_workspace": "workspace-sessions",
+    }
+
+
+def _job_worker_memory_transform(params: Dict[str, Any], ctx: JobProgressContext) -> Dict[str, Any]:
+    """Extract candidate rules from telemetry logs, stage proposals, and commit synced memories."""
+    sid = str(params.get("session_id") or "").strip() or "ALL"
+    user_id = str(params.get("user_id") or "user:developer")
+    ctx.update_progress("Extracting candidate memories from recent turns", 30)
+    events = telemetry_sink.get_session_logs(session_id=sid, limit=120)
+    if not events and sid != "ALL":
+        events = telemetry_sink.get_session_logs(session_id="ALL", limit=120)
+    candidates = _extract_candidates_from_events(events=events, session_id=sid, signal_filter="ALL")
+    ctx.check_canceled()
+
+    staged_count = 0
+    for c in candidates[:5]:
+        mk = c.get("memory_key", "extracted_rule")
+        scope_type = str(c.get("suggested_scope") or "USER").upper()
+        cat_slug = str(c.get("category") or "workflow")
+        spanner_client.stage_memory_commit({
+            "file_id": f"mem-{scope_type.lower()}-{mk.replace('_', '-')[:24]}",
+            "file_path": f"{scope_type.lower()}/{cat_slug}/{mk}.md",
+            "scope_type": scope_type,
+            "scope_id": user_id if scope_type == "USER" else "team:platform-eng",
+            "category": cat_slug,
+            "proposed_content": c.get("memory_value", ""),
+            "diff_summary": f"Background extract from {sid}",
+            "source_session_id": sid,
+            "extractor_id": "ext-background-transform",
+            "confidence": float(c.get("confidence", 0.92)),
+            "write_mode": "staged",
+        })
+        staged_count += 1
+
+    committed_count = 0
+    if bool(params.get("commit_staged", True)):
+        ctx.update_progress("Committing staged rules with 768d embeddings", 75)
+        ctx.check_canceled()
+        commit_res = spanner_client.commit_all_staged_memories()
+        committed_count = int(commit_res.get("committed_count") or 0)
+        tree = _build_studio_tree_payload()
+        for f in tree.get("files", []):
+            telemetry_sink.replicate_memory_to_bq(f)
+
+    return {
+        "result_summary": f"{staged_count} extracted · {committed_count} committed",
+        "metrics": {"events_scanned": len(events), "staged_count": staged_count, "committed_count": committed_count},
+        "output_preview": {"session_id": sid, "staged_count": staged_count, "committed_count": committed_count},
+        "target_workspace": "workspace-tree",
+    }
+
+
+job_runner.register_handler("dream_compaction", _job_worker_dream_compaction)
+job_runner.register_handler("alpha_evolve", _job_worker_alpha_evolve)
+job_runner.register_handler("eval_benchmark", _job_worker_eval_benchmark)
+job_runner.register_handler("session_ingest", _job_worker_session_ingest)
+job_runner.register_handler("memory_transform", _job_worker_memory_transform)
+
+
+@api.get("/api/studio/jobs")
+def list_studio_jobs(
+    category: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+) -> Dict[str, Any]:
+    """List background and inline pipeline jobs with active status counts."""
+    snap = job_runner.list_jobs(category=category, status=status, limit=limit)
+    return {
+        "status": "OK",
+        **snap,
+    }
+
+
+@api.post("/api/studio/jobs")
+def start_studio_job(request: StudioJobStartRequest) -> Dict[str, Any]:
+    """Enqueue an async background job (compaction, alpha_evolve, benchmark, ingest, or transform)."""
+    try:
+        job = job_runner.start_job(
+            job_type=request.job_type.strip(),
+            params=dict(request.params or {}),
+            triggered_from=request.triggered_from,
+            title=request.title,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    return {
+        "status": "STARTED",
+        "job": job,
+    }
+
+
+@api.get("/api/studio/jobs/stream")
+async def stream_studio_jobs(request: Request, once: bool = False) -> StreamingResponse:
+    """Stream real-time Studio job snapshots and live progress updates over SSE."""
+
+    async def event_stream():
+        loop = asyncio.get_running_loop()
+        sub = job_runner.subscribe_async(loop)
+        _, aq = sub
+        try:
+            snap = await run_in_threadpool(job_runner.get_snapshot_payload, None, None, 50)
+            yield f"data: {json.dumps({'type': 'snapshot', **snap})}\n\n"
+            if once:
+                return
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(aq.get(), timeout=12.0)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        except Exception:
+            logger.exception("Studio jobs SSE stream error")
+        finally:
+            job_runner.unsubscribe_async(sub)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@api.post("/api/studio/jobs/clear")
+def clear_finished_studio_jobs() -> Dict[str, Any]:
+    """Remove terminal (SUCCEEDED/FAILED/CANCELED) jobs while keeping running jobs."""
+    res = job_runner.clear_finished()
+    return {
+        "status": "CLEARED",
+        **res,
+    }
+
+
+@api.get("/api/studio/jobs/{job_id}")
+def get_studio_job_detail(job_id: str) -> Dict[str, Any]:
+    """Retrieve a single job record and its step-by-step execution timeline."""
+    job = job_runner.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return {
+        "status": "OK",
+        "job": job,
+    }
+
+
+@api.post("/api/studio/jobs/{job_id}/cancel")
+def cancel_studio_job(job_id: str) -> Dict[str, Any]:
+    """Request cooperative cancellation of a queued or running job."""
+    job = job_runner.cancel_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return {
+        "status": "CANCELED",
+        "job": job,
+    }
+
+
+@api.post("/api/studio/jobs/{job_id}/retry")
+def retry_studio_job(job_id: str) -> Dict[str, Any]:
+    """Re-enqueue a failed, canceled, or finished job using its original parameters."""
+    try:
+        new_job = job_runner.retry_job(job_id)
+    except RuntimeError as re_err:
+        raise HTTPException(status_code=409, detail=str(re_err))
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    if not new_job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return {
+        "status": "STARTED",
+        "job": new_job,
     }
 
 
@@ -4698,63 +5490,67 @@ async def v1_memory_reconcile_diff(request: Request) -> Dict[str, Any]:
     return {"ok": True, "old_to_new": old_to_new, "updated": updated}
 
 
-@api.post("/api/v1/memory/dream")
-async def v1_memory_dream(request: Request) -> Dict[str, Any]:
-    raw_bytes = await request.body()
-    body = json.loads(raw_bytes.decode("utf-8")) if raw_bytes else {}
-    scope_type_in = str(body.get("scope_type") or "project").strip().lower()
-    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"), body.get("scope_id"))
-    mode = str(body.get("mode") or "nrem").strip().lower()
-    min_sessions = max(1, int(body.get("min_sessions") or 2))
-
+def _run_v1_dream_compaction_sync(scope_type_in: str, repo_id: str, mode: str, min_sessions: int) -> Dict[str, Any]:
     st, sid, _ = _v1_map_scope(scope_type_in, repo_id)
-    records = await run_in_threadpool(spanner_client.get_scoped_memories, st, sid)
-    observations = [r for r in records if _v1_is_observation_record(r)]
+    with job_runner.track_inline_job(
+        "dream_compaction",
+        triggered_from="API",
+        params={"scope_type": scope_type_in, "repo_id": repo_id, "mode": mode, "min_sessions": min_sessions},
+        title="Dream compaction",
+    ) as ctx:
+        ctx.update_progress("Scanning scoped observations", 35)
+        records = spanner_client.get_scoped_memories(st, sid)
+        observations = [r for r in records if _v1_is_observation_record(r)]
 
-    clusters: Dict[str, Dict[str, Any]] = {}
-    for obs in observations:
-        text = str(obs.get("crystallized_belief") or obs.get("memory_value") or "").strip()
-        if not text:
-            continue
-        ckey = hashlib.sha256(text.lower().encode("utf-8")).hexdigest()[:12]
-        entry = clusters.setdefault(ckey, {"text": text, "sessions": set(), "symbols": set()})
-        sess = str(obs.get("source_session_id") or (obs.get("trigger_conditions") or {}).get("session_id") or "sess").strip()
-        entry["sessions"].add(sess)
-        for s in _v1_record_symbols(obs):
-            entry["symbols"].add(s)
+        clusters: Dict[str, Dict[str, Any]] = {}
+        for obs in observations:
+            text = str(obs.get("crystallized_belief") or obs.get("memory_value") or "").strip()
+            if not text:
+                continue
+            ckey = hashlib.sha256(text.lower().encode("utf-8")).hexdigest()[:12]
+            entry = clusters.setdefault(ckey, {"text": text, "sessions": set(), "symbols": set()})
+            sess = str(obs.get("source_session_id") or (obs.get("trigger_conditions") or {}).get("session_id") or "sess").strip()
+            entry["sessions"].add(sess)
+            for s in _v1_record_symbols(obs):
+                entry["symbols"].add(s)
 
-    promoted_keys: List[str] = []
-    for ckey, info in clusters.items():
-        if len(info["sessions"]) < min_sessions:
-            continue
-        bkey = f"mem_{ckey}"
-        syms = sorted(info["symbols"])
-        await run_in_threadpool(
-            spanner_client.upsert_scoped_memory,
-            scope_type=st,
-            scope_id=sid,
-            memory_key=bkey,
-            memory_value=info["text"],
-            memory_type="INVARIANT_GUARDRAIL",
-            category="consolidated",
-            confidence=0.95,
-            crystallized_belief=info["text"],
-            keywords=", ".join(syms) if syms else info["text"][:80],
-            source_session_id=sorted(info["sessions"])[0],
-            promoted_from_scope=f"/mem/{scope_type_in.lstrip('/mem/') or 'project'}",
-            support_count=len(info["sessions"]),
-            trigger_conditions={"symbols": syms, "support_session_ids": sorted(info["sessions"])},
+        promoted_keys: List[str] = []
+        for ckey, info in clusters.items():
+            if len(info["sessions"]) < min_sessions:
+                continue
+            bkey = f"mem_{ckey}"
+            syms = sorted(info["symbols"])
+            spanner_client.upsert_scoped_memory(
+                scope_type=st,
+                scope_id=sid,
+                memory_key=bkey,
+                memory_value=info["text"],
+                memory_type="INVARIANT_GUARDRAIL",
+                category="consolidated",
+                confidence=0.95,
+                crystallized_belief=info["text"],
+                keywords=", ".join(syms) if syms else info["text"][:80],
+                source_session_id=sorted(info["sessions"])[0],
+                promoted_from_scope=f"/mem/{scope_type_in.lstrip('/mem/') or 'project'}",
+                support_count=len(info["sessions"]),
+                trigger_conditions={"symbols": syms, "support_session_ids": sorted(info["sessions"])},
+            )
+            promoted_keys.append(bkey)
+
+        epoch_key = f"{st}:{sid}"
+        next_epoch = _v1_scope_epochs.get(epoch_key, 0) + (1 if promoted_keys else 0)
+        if next_epoch == 0:
+            next_epoch = 1
+        _v1_scope_epochs[epoch_key] = next_epoch
+        manifest_blob = json.dumps({"scope": epoch_key, "epoch": next_epoch, "promoted_keys": promoted_keys}, sort_keys=True)
+        blob_hash = hashlib.sha256(manifest_blob.encode("utf-8")).hexdigest()
+
+        ctx.complete(
+            result_summary=f"{len(promoted_keys)} rule(s) promoted ({len(observations)} scanned)",
+            metrics={"scanned_events": len(observations), "clusters_formed": len(clusters), "promoted": len(promoted_keys)},
+            output_preview={"scope_id": repo_id, "promoted_keys": promoted_keys, "belief_epoch": next_epoch},
+            target_workspace="workspace-tree",
         )
-        promoted_keys.append(bkey)
-
-    epoch_key = f"{st}:{sid}"
-    next_epoch = _v1_scope_epochs.get(epoch_key, 0) + (1 if promoted_keys else 0)
-    if next_epoch == 0:
-        next_epoch = 1
-    _v1_scope_epochs[epoch_key] = next_epoch
-    manifest_blob = json.dumps({"scope": epoch_key, "epoch": next_epoch, "promoted_keys": promoted_keys}, sort_keys=True)
-    blob_hash = hashlib.sha256(manifest_blob.encode("utf-8")).hexdigest()
-
     return {
         "scope_type": scope_type_in.replace("/mem/", "") or "project",
         "scope_id": repo_id,
@@ -4768,6 +5564,17 @@ async def v1_memory_dream(request: Request) -> Dict[str, Any]:
         "epoch_blob_hash": blob_hash,
         "spanner_synced": not getattr(spanner_client, "use_mock", False),
     }
+
+
+@api.post("/api/v1/memory/dream")
+async def v1_memory_dream(request: Request) -> Dict[str, Any]:
+    raw_bytes = await request.body()
+    body = json.loads(raw_bytes.decode("utf-8")) if raw_bytes else {}
+    scope_type_in = str(body.get("scope_type") or "project").strip().lower()
+    repo_id = _v1_norm_repo(body.get("repo_root"), body.get("repo"), body.get("scope_id"))
+    mode = str(body.get("mode") or "nrem").strip().lower()
+    min_sessions = max(1, int(body.get("min_sessions") or 2))
+    return await run_in_threadpool(_run_v1_dream_compaction_sync, scope_type_in, repo_id, mode, min_sessions)
 
 
 @api.api_route("/api/v1/memory/events", methods=["GET", "POST"])

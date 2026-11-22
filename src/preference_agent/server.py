@@ -290,7 +290,7 @@ def _reason_over_spanner_records(
     matched_records: List[Dict[str, Any]],
     latency_ms: float,
 ) -> str:
-    """Hybrid RAG Reasoner: Use gemini-3.8-flash to reason over Spanner records.
+    """Hybrid RAG Reasoner: Use gemini-4-hydrogen to reason over Spanner records.
 
     In offline / test mode (config.use_mock_clients=True), returns deterministic fast-path template response
     to guarantee sub-1000ms test latency and offline execution.

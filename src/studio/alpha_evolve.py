@@ -10,9 +10,10 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import threading
 import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from google import genai
 from google.genai import types
@@ -264,6 +265,7 @@ class AlphaEvolveEngine:
         if _GLOBAL_ARCHIVE is None:
             _GLOBAL_ARCHIVE = MAPElitesArchive()
         self.archive: MAPElitesArchive = _GLOBAL_ARCHIVE
+        self._evolution_lock = threading.Lock()
         if _GLOBAL_ACTIVE_CONFIG is None:
             _GLOBAL_ACTIVE_CONFIG = self._load_active_config_from_spanner() or MemoryConfig(
                 config_id="cfg-baseline-0",
@@ -340,7 +342,7 @@ class AlphaEvolveEngine:
         generation: int,
         variant_idx: int = 0,
     ) -> MemoryConfig:
-        """Propose an evolutionary child genome using Gemini 3.8 Flash (Vertex AI ADC) + diagnostic guidance."""
+        """Propose an evolutionary child genome using Gemini 4 Neon (Vertex AI ADC) + diagnostic guidance."""
         mutation_prompt = f"""
 You are AlphaEvolve, an evolutionary meta-optimizer for an Enterprise Agent Memory System backed by Google Cloud Spanner.
 Your objective is to mutate the Parent MemoryConfig genome (drawing crossover traits from the Inspiration genome if present)
@@ -434,7 +436,7 @@ Return a JSON object with the mutated genome parameters.
             try:
                 client = genai.Client(vertexai=True, project=self.config.project_id, location="global")
                 response = client.models.generate_content(
-                    model=self.config.model_name,
+                    model=self.config.reasoning_model_name,
                     contents=mutation_prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -455,13 +457,9 @@ Return a JSON object with the mutated genome parameters.
                     ):
                         if k in llm_data and llm_data[k] is not None:
                             preset[k] = llm_data[k]
-                    # Ensure later generations explore ULTRA_COMPACT ATOMIC_KV + FAST_VEC if not yet explored
-                    if generation >= 2 and variant_idx == 0:
-                        preset["injection_format"] = "ATOMIC_KV"
-                        if int(preset.get("embedding_dimensions", 768)) > 256:
-                            preset["embedding_dimensions"] = 128
             except Exception as e:
                 logger.warning(f"Gemini AlphaEvolve mutation call fell back to evolutionary schedule ({e})")
+                preset["mutation_rationale"] = f"[Schedule prior fallback: {e}] {preset['mutation_rationale']}"
 
         child = MemoryConfig(
             config_id=f"cfg-gen{generation}-{uuid.uuid4().hex[:6]}",
@@ -480,19 +478,20 @@ Return a JSON object with the mutated genome parameters.
         )
         return child
 
-    def run_evolution(
+    def iter_evolution(
         self,
         generations: int = 3,
         alpha_quality_weight: float = 0.65,
         eval_cases: Optional[List[EvalCase]] = None,
         candidates_per_generation: int = 2,
-    ) -> Dict[str, Any]:
-        """Execute an AlphaEvolve optimization run across `generations` generations.
+        auto_apply_min_gain: Optional[float] = None,
+    ) -> Iterator[Dict[str, Any]]:
+        """Stream real-time AlphaEvolve optimization events across `generations` generations.
 
-        1. Evaluates the Generation 0 baseline configuration (`FULL_BELIEF`, `768d`).
-        2. Iteratively samples Parent + Inspiration from the MAP-Elites archive, mutates via Gemini 3.8 Flash,
-           evaluates on the Multi-Objective EvalEngine, and updates the MAP-Elites grid.
-        3. Identifies the overall Pareto Champion configuration.
+        Yields structured progress dictionaries (`start`, `phase`, `baseline`, `candidate`, `complete`)
+        at every real mutation and evaluation step. If `auto_apply_min_gain` is set and the final
+        champion beats baseline fitness by at least that threshold, the champion is automatically
+        promoted to the active runtime configuration.
         """
         if eval_cases is None:
             all_cases = self.eval_engine.list_eval_cases()
@@ -502,6 +501,22 @@ Return a JSON object with the mutated genome parameters.
                 eval_cases = None  # Let run_evaluation_suite use its bounded 8-case representative subset
             else:
                 eval_cases = all_cases
+
+        total_gens = max(1, int(generations))
+        cands_per_gen = max(1, int(candidates_per_generation))
+        total_steps = 1 + (total_gens * cands_per_gen)
+        completed_steps = 0
+
+        yield {
+            "type": "start",
+            "step": 0,
+            "total_steps": total_steps,
+            "generations": total_gens,
+            "candidates_per_generation": cands_per_gen,
+            "alpha_quality_weight": float(alpha_quality_weight),
+            "auto_apply_min_gain": float(auto_apply_min_gain) if auto_apply_min_gain is not None else None,
+            "message": f"Starting evolution ({total_gens} gens · {cands_per_gen} candidates/gen)…",
+        }
 
         # Generation 0: Baseline uncompressed configuration (FULL_BELIEF, 768d)
         baseline_cfg = MemoryConfig(
@@ -517,12 +532,36 @@ Return a JSON object with the mutated genome parameters.
             injection_format="FULL_BELIEF",
             mutation_rationale="Generation 0 uncompressed baseline (768d FULL_BELIEF)",
         )
+        yield {
+            "type": "phase",
+            "step": completed_steps,
+            "total_steps": total_steps,
+            "generation": 0,
+            "candidate": 0,
+            "phase": "baseline",
+            "config": baseline_cfg.to_dict(),
+            "message": "Evaluating baseline (768d · Full Belief)…",
+        }
         base_eval = self.eval_engine.run_evaluation_suite(
             config=baseline_cfg,
             eval_cases=eval_cases,
             alpha_quality_weight=alpha_quality_weight,
         )
         gen0_entry = self.archive.insert(baseline_cfg, base_eval)
+        run_entries: List[Dict[str, Any]] = [gen0_entry]
+        completed_steps += 1
+        baseline_serialized = MAPElitesArchive._serialize_entry(gen0_entry)
+        baseline_fitness = float(gen0_entry["pareto_fitness"])
+        baseline_tokens = float(gen0_entry["avg_tokens_used"])
+
+        yield {
+            "type": "baseline",
+            "step": completed_steps,
+            "total_steps": total_steps,
+            "generation": 0,
+            "entry": baseline_serialized,
+            "message": f"Baseline scored {baseline_fitness:.3f} ({baseline_tokens:.0f} avg tokens)",
+        }
 
         generation_summaries: List[Dict[str, Any]] = [
             {
@@ -538,13 +577,24 @@ Return a JSON object with the mutated genome parameters.
             }
         ]
 
-        total_gens = max(1, int(generations))
-        cands_per_gen = max(1, int(candidates_per_generation))
-
         for gen in range(1, total_gens + 1):
             gen_entries: List[Dict[str, Any]] = []
             for v_idx in range(cands_per_gen):
-                parent_cfg, inspiration_cfg, failed_diags = self.archive.sample_parent_and_inspiration()
+                cand_num = v_idx + 1
+                with self._evolution_lock:
+                    parent_cfg, inspiration_cfg, failed_diags = self.archive.sample_parent_and_inspiration()
+                yield {
+                    "type": "phase",
+                    "step": completed_steps,
+                    "total_steps": total_steps,
+                    "generation": gen,
+                    "candidate": cand_num,
+                    "candidates_in_gen": cands_per_gen,
+                    "phase": "mutating",
+                    "parent_id": parent_cfg.config_id,
+                    "inspiration_id": inspiration_cfg.config_id if inspiration_cfg else None,
+                    "message": f"Gen {gen}/{total_gens} · Candidate {cand_num}/{cands_per_gen} · Mutating settings…",
+                }
                 mutant_cfg = self.propose_mutation(
                     parent=parent_cfg,
                     inspiration=inspiration_cfg,
@@ -552,13 +602,63 @@ Return a JSON object with the mutated genome parameters.
                     generation=gen,
                     variant_idx=v_idx,
                 )
+                yield {
+                    "type": "phase",
+                    "step": completed_steps,
+                    "total_steps": total_steps,
+                    "generation": gen,
+                    "candidate": cand_num,
+                    "candidates_in_gen": cands_per_gen,
+                    "phase": "evaluating",
+                    "config": mutant_cfg.to_dict(),
+                    "message": (
+                        f"Gen {gen}/{total_gens} · Candidate {cand_num}/{cands_per_gen} · "
+                        f"Scoring {mutant_cfg.embedding_dimensions}d {mutant_cfg.injection_format}…"
+                    ),
+                }
                 mutant_eval = self.eval_engine.run_evaluation_suite(
                     config=mutant_cfg,
                     eval_cases=eval_cases,
                     alpha_quality_weight=alpha_quality_weight,
                 )
-                inserted = self.archive.insert(mutant_cfg, mutant_eval)
+                with self._evolution_lock:
+                    inserted = self.archive.insert(mutant_cfg, mutant_eval)
                 gen_entries.append(inserted)
+                run_entries.append(inserted)
+                completed_steps += 1
+
+                best_run_entry = max(
+                    enumerate(run_entries),
+                    key=lambda pair: (float(pair[1]["pareto_fitness"]), pair[0]),
+                )[1]
+                current_champion = MAPElitesArchive._serialize_entry(best_run_entry)
+                champ_fit = float(current_champion["pareto_fitness"])
+                champ_toks = float(current_champion["avg_tokens_used"])
+                cur_gain = round(champ_fit - baseline_fitness, 4)
+                cur_tok_pct = (
+                    round((1.0 - (champ_toks / max(1.0, baseline_tokens))) * 100.0, 1)
+                    if baseline_tokens > 0
+                    else 0.0
+                )
+                inserted_serialized = MAPElitesArchive._serialize_entry(inserted)
+                yield {
+                    "type": "candidate",
+                    "step": completed_steps,
+                    "total_steps": total_steps,
+                    "generation": gen,
+                    "candidate": cand_num,
+                    "candidates_in_gen": cands_per_gen,
+                    "entry": inserted_serialized,
+                    "is_new_elite": bool(inserted.get("is_new_elite", False)),
+                    "champion": current_champion,
+                    "fitness_improvement": cur_gain,
+                    "token_reduction_pct": cur_tok_pct,
+                    "message": (
+                        f"Gen {gen}/{total_gens} · Candidate {cand_num}/{cands_per_gen} · "
+                        f"{'New elite' if inserted.get('is_new_elite') else 'Evaluated'} "
+                        f"({inserted_serialized['pareto_fitness']:.3f})"
+                    ),
+                }
 
             best_in_gen = max(gen_entries, key=lambda e: float(e["pareto_fitness"]))
             generation_summaries.append({
@@ -575,27 +675,92 @@ Return a JSON object with the mutated genome parameters.
                 "mutation_rationale": best_in_gen["config"]["mutation_rationale"],
             })
 
-        champion = self.archive.get_champion()
-        baseline_fitness = float(gen0_entry["pareto_fitness"])
-        champion_fitness = float(champion["pareto_fitness"]) if champion else baseline_fitness
+        best_run_entry = max(
+            enumerate(run_entries),
+            key=lambda pair: (float(pair[1]["pareto_fitness"]), pair[0]),
+        )[1]
+        champion = MAPElitesArchive._serialize_entry(best_run_entry)
+        champion_fitness = float(champion["pareto_fitness"])
         fitness_gain = round(champion_fitness - baseline_fitness, 4)
 
-        baseline_tokens = float(gen0_entry["avg_tokens_used"])
-        champion_tokens = float(champion["avg_tokens_used"]) if champion else baseline_tokens
+        champion_tokens = float(champion["avg_tokens_used"])
         token_reduction_pct = (
             round((1.0 - (champion_tokens / max(1.0, baseline_tokens))) * 100.0, 1)
             if baseline_tokens > 0
             else 0.0
         )
 
-        return {
+        auto_applied = False
+        auto_apply_reason: Optional[str] = None
+        if auto_apply_min_gain is not None and champion and champion.get("config"):
+            threshold = float(auto_apply_min_gain)
+            champ_id = champion["config"].get("config_id")
+            beat_baseline = champ_id != baseline_cfg.config_id and fitness_gain > 0.0
+            if beat_baseline and fitness_gain >= threshold:
+                with self._evolution_lock:
+                    self.promote_to_active_config(MemoryConfig.from_dict(champion["config"]))
+                auto_applied = True
+                auto_apply_reason = (
+                    f"Auto-applied winner ({fitness_gain:+.4f} >= {threshold:+.4f} threshold)"
+                )
+            elif not beat_baseline:
+                auto_apply_reason = (
+                    f"Held for review (no candidate beat baseline; {fitness_gain:+.4f})"
+                )
+            else:
+                auto_apply_reason = (
+                    f"Held for review ({fitness_gain:+.4f} < {threshold:+.4f} threshold)"
+                )
+
+        final_result = {
             "status": "EVOLUTION_COMPLETE",
             "generations_run": total_gens,
             "alpha_quality_weight": alpha_quality_weight,
-            "baseline": MAPElitesArchive._serialize_entry(gen0_entry),
+            "baseline": baseline_serialized,
             "champion": champion,
             "fitness_improvement": fitness_gain,
             "token_reduction_pct": token_reduction_pct,
             "generation_trajectory": generation_summaries,
             "archive": self.archive.to_dict(),
+            "auto_applied": auto_applied,
+            "auto_apply_min_gain": float(auto_apply_min_gain) if auto_apply_min_gain is not None else None,
+            "auto_apply_reason": auto_apply_reason,
+            "active_config": self.get_active_config().to_dict(),
         }
+
+        yield {
+            "type": "complete",
+            "step": total_steps,
+            "total_steps": total_steps,
+            "result": final_result,
+            "message": auto_apply_reason or f"Evolution complete ({fitness_gain:+.4f} score gain)",
+        }
+
+    def run_evolution(
+        self,
+        generations: int = 3,
+        alpha_quality_weight: float = 0.65,
+        eval_cases: Optional[List[EvalCase]] = None,
+        candidates_per_generation: int = 2,
+        auto_apply_min_gain: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Execute an AlphaEvolve optimization run across `generations` generations.
+
+        1. Evaluates the Generation 0 baseline configuration (`FULL_BELIEF`, `768d`).
+        2. Iteratively samples Parent + Inspiration from the MAP-Elites archive, mutates via Gemini 4 Neon,
+           evaluates on the Multi-Objective EvalEngine, and updates the MAP-Elites grid.
+        3. Identifies the overall Pareto Champion configuration (and optionally auto-promotes it
+           if `auto_apply_min_gain` is met).
+        """
+        final_result: Optional[Dict[str, Any]] = None
+        for event in self.iter_evolution(
+            generations=generations,
+            alpha_quality_weight=alpha_quality_weight,
+            eval_cases=eval_cases,
+            candidates_per_generation=candidates_per_generation,
+            auto_apply_min_gain=auto_apply_min_gain,
+        ):
+            if event.get("type") == "complete":
+                final_result = event["result"]
+        assert final_result is not None
+        return final_result

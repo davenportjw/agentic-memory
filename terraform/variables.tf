@@ -11,9 +11,15 @@ variable "region" {
 }
 
 variable "model_name" {
-  description = "The Gemini model name to use across ADK agents and BigQuery AI summarization."
+  description = "The fast Gemini 4 model name for interactive ADK agents and session summarization."
   type        = string
-  default     = "gemini-3.8-flash"
+  default     = "gemini-4-hydrogen"
+}
+
+variable "reasoning_model_name" {
+  description = "The frontier Gemini 4 reasoning model name for offline REM synthesis, AlphaEvolve, and adversarial evals."
+  type        = string
+  default     = "gemini-4-neon"
 }
 
 variable "bq_dataset_id" {

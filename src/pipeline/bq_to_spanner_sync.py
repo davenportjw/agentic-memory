@@ -176,6 +176,55 @@ class BqToSpannerSynchronizer:
             "details": details,
         }
 
+    @staticmethod
+    def build_dream_prompt(user_id: str, session_id: str, full_transcript: str) -> str:
+        """Build the exact REM synthesis prompt used for single-session belief extraction."""
+        return f"""
+You are an AI REM Memory Synthesizer ("Dream Engine") performing offline memory consolidation over waking conversation logs for user '{user_id}' in session '{session_id}'.
+Your goal is to crystallize short-term episodic interactions into clean, accurate, high-confidence long-term semantic beliefs and capture user intent.
+
+Analyze the conversation transcript below:
+{full_transcript}
+
+Rules:
+1. Extract the user's primary "session_intent": what is the user's underlying goal, motivation, or project focus in this session? (e.g., "The user is establishing their technical identity as a Principal Cloud Architect to explore Python and infrastructure tools.").
+2. Extract the "intent_category": choose one of "onboarding", "exploratory", "architecture_design", "troubleshooting", "profile", "guardrail", or "general".
+3. Provide an "intent_confidence" float score between 0.0 and 1.0.
+4. Extract every distinct preference, technical skill, job role, favorite language, preferred tool, identity attribute, OR operational guardrail / procedural invariant (e.g., negative constraints like 'never use docker', 'always run terraform fmt', 'prefer uv for testing', physical/procedural rules).
+5. NEVER confuse or merge the user's name with their job role. For example, if the transcript mentions "My name is Alex, my favorite programming language is Python, and my job role is Principal Cloud Architect", extract:
+   - preference_key: "name", preference_value: "Alex", category: "profile"
+   - preference_key: "favorite_language", preference_value: "Python", category: "technical"
+   - preference_key: "job_role", preference_value: "Principal Cloud Architect", category: "role"
+6. For each preference record, provide:
+   - "preference_key": canonical snake_case key (e.g., "favorite_language", "job_role", "name", "preferred_tools", "work_style", "guardrail_docker", "guardrail_terraform").
+   - "preference_value": concise exact value (e.g., "Python", "Principal Cloud Architect", "Alex", "Use Apple Container; prune dangling images").
+   - "category": "profile", "technical", "role", "infrastructure", "preference", "guardrail", or "procedural".
+   - "confidence": float between 0.0 and 1.0.
+   - "crystallized_belief": A complete natural language semantic belief statement (e.g., "The user Alex works as a Principal Cloud Architect specializing in cloud infrastructure." or "The user's favorite programming language is Python." or "Always run terraform validate and terraform fmt when modifying infrastructure.").
+   - "keywords": A comma-separated list of semantic search keywords and synonyms (e.g., "python, language, programming, code, coding", or "architect, principal, cloud, role, job, title, career", or "guardrail, docker, container, rules, policy").
+7. Also provide a 2-sentence overall profile summary.
+
+Return a valid JSON object matching this schema:
+{{
+  "user_id": "{user_id}",
+  "session_id": "{session_id}",
+  "summary": "Overall profile summary text...",
+  "session_intent": "The user's primary intent in this session...",
+  "intent_category": "profile",
+  "intent_confidence": 0.95,
+  "preferences": [
+    {{
+      "preference_key": "favorite_language",
+      "preference_value": "Python",
+      "category": "technical",
+      "confidence": 0.98,
+      "crystallized_belief": "The user's favorite programming language is Python.",
+      "keywords": "python, language, programming, code, coding"
+    }}
+  ]
+}}
+""".strip()
+
     def summarize_session_logs(
         self,
         session_id: Optional[str] = None,
@@ -240,56 +289,12 @@ class BqToSpannerSynchronizer:
         ]
         nrem_analysis = self._nrem_analyze_traces(trace_logs)
 
-        dream_prompt = f"""
-You are an AI REM Memory Synthesizer ("Dream Engine") performing offline memory consolidation over waking conversation logs for user '{user_id}' in session '{session_id}'.
-Your goal is to crystallize short-term episodic interactions into clean, accurate, high-confidence long-term semantic beliefs and capture user intent.
-
-Analyze the conversation transcript below:
-{full_transcript}
-
-Rules:
-1. Extract the user's primary "session_intent": what is the user's underlying goal, motivation, or project focus in this session? (e.g., "The user is establishing their technical identity as a Principal Cloud Architect to explore Python and infrastructure tools.").
-2. Extract the "intent_category": choose one of "onboarding", "exploratory", "architecture_design", "troubleshooting", "profile", "guardrail", or "general".
-3. Provide an "intent_confidence" float score between 0.0 and 1.0.
-4. Extract every distinct preference, technical skill, job role, favorite language, preferred tool, identity attribute, OR operational guardrail / procedural invariant (e.g., negative constraints like 'never use docker', 'always run terraform fmt', 'prefer uv for testing', physical/procedural rules).
-5. NEVER confuse or merge the user's name with their job role. For example, if the transcript mentions "My name is Alex, my favorite programming language is Python, and my job role is Principal Cloud Architect", extract:
-   - preference_key: "name", preference_value: "Alex", category: "profile"
-   - preference_key: "favorite_language", preference_value: "Python", category: "technical"
-   - preference_key: "job_role", preference_value: "Principal Cloud Architect", category: "role"
-6. For each preference record, provide:
-   - "preference_key": canonical snake_case key (e.g., "favorite_language", "job_role", "name", "preferred_tools", "work_style", "guardrail_docker", "guardrail_terraform").
-   - "preference_value": concise exact value (e.g., "Python", "Principal Cloud Architect", "Alex", "Use Apple Container; prune dangling images").
-   - "category": "profile", "technical", "role", "infrastructure", "preference", "guardrail", or "procedural".
-   - "confidence": float between 0.0 and 1.0.
-   - "crystallized_belief": A complete natural language semantic belief statement (e.g., "The user Alex works as a Principal Cloud Architect specializing in cloud infrastructure." or "The user's favorite programming language is Python." or "Always run terraform validate and terraform fmt when modifying infrastructure.").
-   - "keywords": A comma-separated list of semantic search keywords and synonyms (e.g., "python, language, programming, code, coding", or "architect, principal, cloud, role, job, title, career", or "guardrail, docker, container, rules, policy").
-7. Also provide a 2-sentence overall profile summary.
-
-Return a valid JSON object matching this schema:
-{{
-  "user_id": "{user_id}",
-  "session_id": "{session_id}",
-  "summary": "Overall profile summary text...",
-  "session_intent": "The user's primary intent in this session...",
-  "intent_category": "profile",
-  "intent_confidence": 0.95,
-  "preferences": [
-    {{
-      "preference_key": "favorite_language",
-      "preference_value": "Python",
-      "category": "technical",
-      "confidence": 0.98,
-      "crystallized_belief": "The user's favorite programming language is Python.",
-      "keywords": "python, language, programming, code, coding"
-    }}
-  ]
-}}
-"""
+        dream_prompt = self.build_dream_prompt(user_id=user_id, session_id=session_id, full_transcript=full_transcript)
 
         try:
             client = genai.Client(vertexai=True, project=self.config.project_id, location="global")
             response = client.models.generate_content(
-                model=self.config.model_name,
+                model=self.config.reasoning_model_name,
                 contents=dream_prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -403,7 +408,7 @@ Return a valid JSON object matching this schema:
         try:
             client = genai.Client(vertexai=True, project=self.config.project_id, location="global")
             response = client.models.generate_content(
-                model=self.config.model_name,
+                model=self.config.reasoning_model_name,
                 contents=multi_session_dream_prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",

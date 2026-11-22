@@ -146,6 +146,10 @@ resource "google_cloud_run_v2_service" "preference_agent" {
         value = var.model_name
       }
       env {
+        name  = "REASONING_MODEL_NAME"
+        value = var.reasoning_model_name
+      }
+      env {
         name  = "BQ_DATASET_ID"
         value = var.bq_dataset_id
       }
@@ -231,12 +235,21 @@ resource "google_cloud_run_v2_service" "ui_service" {
   project  = var.project_id
 
   template {
-    service_account = google_service_account.ui_sa.email
+    service_account  = google_service_account.ui_sa.email
+    session_affinity = true
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 1
+    }
 
     containers {
       image = var.container_image
       ports {
         container_port = 8080
+      }
+      resources {
+        cpu_idle = false
       }
       env {
         name  = "SERVICE_MODULE"
@@ -261,6 +274,10 @@ resource "google_cloud_run_v2_service" "ui_service" {
       env {
         name  = "MODEL_NAME"
         value = var.model_name
+      }
+      env {
+        name  = "REASONING_MODEL_NAME"
+        value = var.reasoning_model_name
       }
       env {
         name  = "BQ_DATASET_ID"

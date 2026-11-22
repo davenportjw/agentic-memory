@@ -445,7 +445,7 @@ class EvalEngine:
         seed_cases_or_topic: Any = "Enterprise Cloud Architecture & Python Tooling",
         count: int = 4,
     ) -> List[EvalCase]:
-        """Use Gemini 3.8 Flash via Vertex AI ADC to synthesize multi-turn adversarial evaluation cases.
+        """Use Gemini 4 Neon via Vertex AI ADC to synthesize multi-turn adversarial evaluation cases.
 
         Covers the 4 core archetypes:
         1. CONTRADICTION_UPDATE
@@ -481,7 +481,7 @@ Return a JSON object with a "cases" array where each item has:
             if not self.use_mock:
                 client = genai.Client(vertexai=True, project=self.config.project_id, location="global")
                 response = client.models.generate_content(
-                    model=self.config.model_name,
+                    model=self.config.reasoning_model_name,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",

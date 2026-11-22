@@ -3,12 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>Electric Sheep • Chat &amp; Recall</title>
+  <script>
+    try { if (localStorage.getItem("sheep-theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (_) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="style.css?v=2.5">
+  <link rel="stylesheet" href="style.css?v=3.9">
   <script type="module">
     if (!("popover" in HTMLElement.prototype)) {
       import("https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover.min.js");
@@ -32,9 +36,12 @@
           <span class="brand-name">Electric Sheep</span>
         </div>
         <nav class="app-nav" aria-label="Main Navigation">
-          <a href="index.html" class="nav-pill app-nav-link active"><span>Chat</span></a>
-          <a href="studio.html" class="nav-pill app-nav-link"><span>Memory</span></a>
-          <a href="how-it-works.html" class="nav-pill app-nav-link"><span>Guide</span></a>
+          <a href="index.html" class="nav-pill app-nav-link active" aria-current="page"><span>Chat</span></a>
+          <a href="studio.html#sessions" class="nav-pill app-nav-link"><span>Sessions</span></a>
+          <a href="studio.html" class="nav-pill app-nav-link"><span>Memories</span></a>
+          <a href="studio.html#optimize" class="nav-pill app-nav-link"><span>Optimize</span></a>
+          <a href="studio.html#jobs" class="nav-pill app-nav-link"><span>Jobs</span></a>
+          <a href="studio.html#settings" class="nav-pill app-nav-link"><span>Settings</span></a>
         </nav>
       </div>
 
@@ -52,21 +59,16 @@
               <input type="text" id="sessionIdInput" value="" placeholder="Auto session" class="input-inline">
             </div>
             <div class="view-menu-divider"></div>
+            <a href="how-it-works.html" class="view-menu-item">Architecture guide</a>
             <button type="button" class="view-menu-item" data-toggle-theme>Dark theme</button>
             <button type="button" id="githubPopoutBtn" class="view-menu-item">GitHub</button>
-            <div class="info-tooltip-container">
-              <button type="button" id="sessionInfoBtn" class="view-menu-item" aria-describedby="sessionInfoTooltip">Session info</button>
-              <div id="sessionInfoTooltip" class="info-tooltip" role="tooltip">
-                <div class="info-tooltip-body">
-                  <div class="info-tooltip-item">
-                    <p><strong>User:</strong> Scopes saved rules across sessions.</p>
-                  </div>
-                  <div class="info-tooltip-item">
-                    <p><strong>Session:</strong> Scopes active chat turns.</p>
-                  </div>
-                </div>
+            <details class="view-menu-disclosure">
+              <summary id="sessionInfoBtn" class="view-menu-item">Session info</summary>
+              <div id="sessionInfoTooltip" class="view-menu-note">
+                <p><strong>User:</strong> Scopes saved rules across sessions.</p>
+                <p><strong>Session:</strong> Scopes active chat turns and extraction.</p>
               </div>
-            </div>
+            </details>
             <div class="view-menu-divider"></div>
             <a href="/logout" class="signout-btn">Sign out</a>
           </div>
@@ -140,6 +142,7 @@
               <button type="button" id="tabByotBtn" class="tab-btn" role="tab" aria-selected="false">Upload Transcript</button>
             </div>
           </div>
+          <p class="stage-guide-note">Load a local session, chat live with the Interview Agent, or paste a transcript to feed raw turns into the activity log.</p>
 
           <div id="antigravitySection" class="tab-content active">
             <div class="toolbar-row">
@@ -152,12 +155,12 @@
               <div class="btn-group">
                 <button type="button" id="loadSessionTurnsBtn" class="btn btn-secondary btn-sm">Load turns</button>
                 <button type="button" id="ingestSessionBqBtn" class="btn btn-secondary btn-sm">Save log</button>
-                <button type="button" id="dreamSessionDirectBtn" class="btn btn-secondary btn-sm">Extract</button>
+                <button type="button" id="dreamSessionDirectBtn" class="btn btn-secondary btn-sm" title="Jump to Stage 3 and extract rules from this session">Extract now →</button>
               </div>
             </div>
 
             <div class="quiet-tnum-summary" id="sessionMetaStrip">
-              Turns: <span id="metaTurnCount">--</span> · Tools: <span id="metaTools">--</span> · <span id="metaStatus">Ready</span>
+              Turns: <span id="metaTurnCount">--</span> · Tools: <span id="metaTools">--</span> · <span id="metaStatus">Ready</span> · Chat: <code data-live-model="chat">gemini-4-hydrogen</code>
             </div>
 
             <div class="turns-stream-box" id="turnsStreamBox">
@@ -239,6 +242,7 @@
               <button type="button" id="refreshLogsBtn" class="btn btn-secondary btn-sm">Refresh</button>
             </div>
           </div>
+          <p class="stage-guide-note">Inspect raw prompts, replies, and tool events recorded during sessions before rule extraction.</p>
 
           <div class="filter-strip session-filter-strip">
             <span class="filter-label">Scope</span>
@@ -270,7 +274,7 @@
             </div>
           </div>
 
-          <div class="table-wrapper">
+          <div class="table-wrapper activity-table-wrapper">
             <table class="data-table">
               <thead>
                 <tr>
@@ -285,6 +289,13 @@
               </tbody>
             </table>
           </div>
+          <div id="activityTableFooter" class="activity-table-footer" style="display: none;">
+            <span id="activityCountStatus" class="quiet-tnum-status">0 events</span>
+            <div class="btn-group">
+              <button type="button" id="activityShowMoreBtn" class="btn btn-secondary btn-sm" style="display: none;">Show more</button>
+              <button type="button" id="activityCollapseBtn" class="btn btn-secondary btn-sm" style="display: none;">Show less</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -298,10 +309,12 @@
               <button type="button" id="multiHarvestBtn" class="btn btn-secondary btn-sm">Extract all</button>
             </div>
           </div>
+          <p class="stage-guide-note">Run offline REM synthesis with Gemini 4 Neon to distill recorded turns into verified rules, working goals, and procedural guardrails.</p>
 
           <div class="quiet-tnum-summary" style="margin-bottom: 12px;">
             <span id="dreamScopeBadge">Active Session (<code id="dreamScopeSessionVal">—</code>)</span> ·
             <span id="dreamScopeUserBadge">User: <code id="dreamScopeUserVal">—</code></span> ·
+            <span>Synthesis: <code data-live-model="reasoning">gemini-4-neon</code></span> ·
             <span id="dreamScopeHelp">Ready</span>
           </div>
 
@@ -378,7 +391,11 @@
             <summary>Prompt template</summary>
             <div class="code-arch-content">
               <div id="dreamPromptInspect" class="code-snippet-box">
-                <pre><code id="dreamPromptCode">--</code></pre>
+                <div class="code-header">
+                  <span>REM Synthesis Prompt Template (updates with live prompt after Extract)</span>
+                  <span class="code-badge" id="dreamPromptModelBadge">reasoning</span>
+                </div>
+                <pre><code id="dreamPromptCode">Loading live prompt template...</code></pre>
               </div>
             </div>
           </details>
@@ -396,6 +413,7 @@
               <button type="button" id="refreshSpannerBtn" class="btn btn-secondary btn-sm">Refresh</button>
             </div>
           </div>
+          <p class="stage-guide-note">Review extracted rules, guardrails, and session summaries persisted for instant recall, or open <a href="studio.html">Memory</a> to manage ORG/TEAM/AGENT scopes and benchmarks.</p>
 
           <div class="filter-strip">
             <span class="filter-label">Category</span>
@@ -452,11 +470,13 @@
         <div class="card">
           <div class="card-header">
             <h2 id="stage-title-5">Recall</h2>
-            <span id="mcpUserScopeBadge" class="quiet-tnum-status">User: <code id="mcpUserScopeVal">—</code></span>
+            <span id="mcpUserScopeBadge" class="quiet-tnum-status">User: <code id="mcpUserScopeVal">—</code> · Fallback: <code data-live-model="chat">gemini-4-hydrogen</code></span>
           </div>
+          <p class="stage-guide-note">Query saved preferences via sub-10ms cache lookup or invoke memory tools directly.</p>
 
           <div class="sub-panel">
-            <h3 class="sub-heading">Memory Search</h3>
+            <h3 class="sub-heading">Fast Recall Test</h3>
+            <p class="stage-guide-note">Tests sub-10ms preference lookup against your saved rules (distinct from Stage 1's Interview Agent).</p>
             <div id="preferenceChatBox" class="chat-box" style="height: 180px;">
               <div class="msg agent-msg">
                 <div class="msg-sender">PreferenceAgent</div>
@@ -524,6 +544,6 @@
     </div>
   </dialog>
 
-  <script src="app.js?v=2.5"></script>
+  <script src="app.js?v=3.0"></script>
 </body>
 </html>

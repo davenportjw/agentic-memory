@@ -18,7 +18,8 @@ _default_project = (
     or "test-gcp-project"
 )
 os.environ["GOOGLE_CLOUD_PROJECT"] = _default_project
-os.environ["MODEL_NAME"] = os.environ.get("MODEL_NAME", "gemini-3.8-flash")
+os.environ["MODEL_NAME"] = os.environ.get("MODEL_NAME", "gemini-4-hydrogen")
+os.environ["REASONING_MODEL_NAME"] = os.environ.get("REASONING_MODEL_NAME", "gemini-4-neon")
 os.environ["ALLOWED_EMAIL_DOMAINS"] = os.environ.get("ALLOWED_EMAIL_DOMAINS", "example.com,user@example.com")
 os.environ["FIREBASE_API_KEY"] = os.environ.get("FIREBASE_API_KEY", "your_firebase_api_key_here")
 os.environ["UI_SERVICE_URL"] = "http://localhost:8080"
@@ -109,7 +110,8 @@ except Exception:
 @pytest.fixture(autouse=True)
 def set_test_env(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", os.environ.get("GOOGLE_CLOUD_PROJECT", _default_project))
-    monkeypatch.setenv("MODEL_NAME", os.environ.get("MODEL_NAME", "gemini-3.8-flash"))
+    monkeypatch.setenv("MODEL_NAME", os.environ.get("MODEL_NAME", "gemini-4-hydrogen"))
+    monkeypatch.setenv("REASONING_MODEL_NAME", os.environ.get("REASONING_MODEL_NAME", "gemini-4-neon"))
     monkeypatch.setenv("ALLOWED_EMAIL_DOMAINS", os.environ.get("ALLOWED_EMAIL_DOMAINS", "example.com,user@example.com"))
     monkeypatch.setenv("FIREBASE_API_KEY", os.environ.get("FIREBASE_API_KEY", "your_firebase_api_key_here"))
     monkeypatch.setenv("UI_SERVICE_URL", "http://localhost:8080")

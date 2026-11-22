@@ -24,18 +24,38 @@ const studioState = {
   championCandidate: null,
   inspectedConfigCandidate: null,
   quickEditedMemory: null,
+  authenticatedEmail: "",
   sessionId: `studio-sess-${Date.now().toString(36)}`,
 };
+
+function getActiveContextFilters() {
+  const rawUser = (document.getElementById("userIdInput")?.value || "").trim();
+  return {
+    team_id: (document.getElementById("teamIdInput")?.value || "").trim(),
+    agent_id: (document.getElementById("agentIdInput")?.value || "").trim(),
+    user_id: rawUser ? (rawUser.includes(":") ? rawUser : `user:${rawUser}`) : "",
+  };
+}
+
+function getDefaultEntityScopeId(scopeType, fallbackId) {
+  const targetType = String(scopeType || "USER").toUpperCase();
+  const entities = Array.isArray(wsState?.entities) ? wsState.entities : [];
+  const match = entities.find((e) => String(e.scope_type || "").toUpperCase() === targetType);
+  return (match && match.scope_id) || fallbackId;
+}
 
 function resolveStudioUserScope() {
   const userEl = document.getElementById("userIdInput");
   const typed = userEl && userEl.value.trim();
-  if (typed) return typed;
+  if (typed) return typed.includes(":") ? typed : `user:${typed}`;
+  if (studioState.authenticatedEmail) {
+    return `user:${studioState.authenticatedEmail}`;
+  }
   try {
     const stored = sessionStorage.getItem("electric_sheep_user_email");
     if (stored && stored.trim()) return `user:${stored.trim()}`;
   } catch (_) {}
-  return "user:current";
+  return getDefaultEntityScopeId("USER", "user:developer");
 }
 
 function getScopeIds() {
@@ -43,9 +63,9 @@ function getScopeIds() {
   const agentEl = document.getElementById("agentIdInput");
   return {
     user_id: resolveStudioUserScope(),
-    team_id: (teamEl && teamEl.value.trim()) || "team:current",
-    agent_id: (agentEl && agentEl.value.trim()) || "agent:assistant",
-    org_id: "org:workspace",
+    team_id: (teamEl && teamEl.value.trim()) || getDefaultEntityScopeId("TEAM", "team:platform-ml"),
+    agent_id: (agentEl && agentEl.value.trim()) || getDefaultEntityScopeId("AGENT", "agent:code-reviewer-agent"),
+    org_id: getDefaultEntityScopeId("ORG", "org:acme-org"),
   };
 }
 
@@ -88,10 +108,11 @@ const STUDIO_MODE_DESCS = {
 };
 
 const WORKSPACE_TITLES = {
-  "workspace-sessions": "Session Logs & Attribution",
-  "workspace-tree": "Memory Tree & Staged Commits",
-  "workspace-playground": "Multi-Scope Playground",
-  "workspace-eval": "Memory Quality & Token Cost Benchmark",
+  "workspace-sessions": "Sessions",
+  "workspace-tree": "Memories",
+  "workspace-playground": "Context Trace",
+  "workspace-eval": "Optimize",
+  "workspace-jobs": "Jobs",
   "workspace-entities": "Entities & Scope Hierarchy",
   "workspace-categories": "Memory Categories & Retention",
   "workspace-ingest": "Data Ingest & Live Telemetry",
@@ -105,10 +126,11 @@ const WORKSPACE_DESCS = {
   "workspace-tree": "Explore the 4-tier memory hierarchy and review staged commits before saving",
   "workspace-playground": "Test live prompts, inspect retrieved memories, and compare token formats",
   "workspace-eval": "Benchmark memory quality vs. token cost and auto-tune retrieval settings",
+  "workspace-jobs": "Monitor, start, cancel, and inspect background compaction, auto-tune, ingest, and transform jobs",
   "workspace-entities": "Manage Organization, Team, Agent, and User scope entities",
   "workspace-categories": "Define topic categories and default similarity thresholds",
   "workspace-ingest": "Configure activity log and session transcript ingestion connectors",
-  "workspace-extractors": "Customize AI memory extraction rules with the Gemini 3.8 Co-Designer",
+  "workspace-extractors": "Customize AI memory extraction rules with the Gemini 4 Neon Co-Designer",
   "workspace-backend": "Inspect store sync health and rollback agent memory mutations",
   "workspace-security": "Configure access rules and check scope-level read/write permissions",
 };
@@ -122,6 +144,7 @@ const WORKSPACE_TO_STAGE_MAP = {
   "workspace-extractors": "stage-2-scopes",
   "workspace-playground": "stage-3-eval",
   "workspace-eval": "stage-3-eval",
+  "workspace-jobs": "stage-4-evolve",
   "workspace-backend": "stage-4-evolve",
   "workspace-security": "stage-4-evolve",
 };
@@ -129,6 +152,11 @@ const WORKSPACE_TO_STAGE_MAP = {
 function closeAllToolbarDropdowns() {
   document.querySelectorAll("details.toolbar-dropdown[open]").forEach((d) => {
     d.removeAttribute("open");
+  });
+  document.querySelectorAll("[popover]:popover-open").forEach((pop) => {
+    try {
+      if (typeof pop.hidePopover === "function") pop.hidePopover();
+    } catch (_) {}
   });
 }
 
@@ -143,6 +171,10 @@ function switchStudioMode(targetStageId) {
   document.querySelectorAll(".studio-workspace-nav-btn").forEach((btn) => {
     btn.classList.remove("active");
     btn.setAttribute("aria-selected", "false");
+  });
+  document.querySelectorAll(".studio-lifecycle-step").forEach((btn) => {
+    btn.classList.remove("active");
+    btn.removeAttribute("aria-current");
   });
   document.querySelectorAll(".studio-stage-panel").forEach((panel) => {
     const isTarget = panel.id === targetStageId;
@@ -208,11 +240,26 @@ function switchInspectorTab(tabName) {
   const isGuide = tabName === "guide";
   const isSettings = tabName === "settings" || (!isDetail && !isCommits && !isJson && !isGuide);
 
-  if (detailBtn) detailBtn.classList.toggle("active", isDetail);
-  if (commitsBtn) commitsBtn.classList.toggle("active", isCommits);
-  if (settingsBtn) settingsBtn.classList.toggle("active", isSettings);
-  if (jsonBtn) jsonBtn.classList.toggle("active", isJson);
-  if (guideBtn) guideBtn.classList.toggle("active", isGuide);
+  if (detailBtn) {
+    detailBtn.classList.toggle("active", isDetail);
+    detailBtn.setAttribute("aria-selected", isDetail ? "true" : "false");
+  }
+  if (commitsBtn) {
+    commitsBtn.classList.toggle("active", isCommits);
+    commitsBtn.setAttribute("aria-selected", isCommits ? "true" : "false");
+  }
+  if (settingsBtn) {
+    settingsBtn.classList.toggle("active", isSettings);
+    settingsBtn.setAttribute("aria-selected", isSettings ? "true" : "false");
+  }
+  if (jsonBtn) {
+    jsonBtn.classList.toggle("active", isJson);
+    jsonBtn.setAttribute("aria-selected", isJson ? "true" : "false");
+  }
+  if (guideBtn) {
+    guideBtn.classList.toggle("active", isGuide);
+    guideBtn.setAttribute("aria-selected", isGuide ? "true" : "false");
+  }
 
   if (detailPane) detailPane.classList.toggle("hidden", !isDetail);
   if (commitsPane) commitsPane.classList.toggle("hidden", !isCommits);
@@ -873,12 +920,6 @@ function applyScopesPayload(data) {
   setCount("countScopeAgent", counts.AGENT || 0);
   setCount("countScopeUser", counts.USER || 0);
 
-  setCount("leftCountScopeAll", total);
-  setCount("leftCountScopeOrg", counts.ORG || 0);
-  setCount("leftCountScopeTeam", counts.TEAM || 0);
-  setCount("leftCountScopeAgent", counts.AGENT || 0);
-  setCount("leftCountScopeUser", counts.USER || 0);
-
   const railBadge = document.getElementById("railTotalMemoriesBadge");
   if (railBadge) railBadge.textContent = `${total} Active`;
 
@@ -1064,16 +1105,18 @@ function renderLeftMemoryTree() {
   const filter = studioState.activeScopeFilter || "ALL";
   const searchQuery = (studioState.leftTreeSearchQuery || "").toLowerCase().trim();
   const tiers = filter === "ALL" ? ["ORG", "TEAM", "AGENT", "USER"] : [filter];
+  const treeSource = (wsState.treePayload && wsState.treePayload.tree) ? wsState.treePayload.tree : studioState.scopesData;
   const matched = [];
 
   for (const tier of tiers) {
-    const mems = studioState.scopesData[tier] || [];
+    const mems = treeSource[tier] || [];
     for (const m of mems) {
       const nodeObj = { ...m, scope_type: m.scope_type || tier };
       if (searchQuery) {
         const hay = [
           nodeObj.memory_key,
           nodeObj.memory_value,
+          nodeObj.natural_language_belief,
           nodeObj.category,
           nodeObj.memory_type,
           Array.isArray(nodeObj.keywords) ? nodeObj.keywords.join(" ") : "",
@@ -1089,7 +1132,9 @@ function renderLeftMemoryTree() {
   }
 
   if (matched.length === 0) {
-    treeEl.innerHTML = `<div class="empty-state-compact" style="font-size:0.72rem; padding:0.45rem;">No memories in ${escapeHtml(filter)} scope. Click <strong>Add Memory</strong> or open <strong>📖 Interactive Guide</strong> to load sample memories.</div>`;
+    const scopeLabels = { ALL: "All", ORG: "Organization", TEAM: "Team", AGENT: "Agent", USER: "Personal" };
+    const scopeLabel = scopeLabels[filter.toUpperCase()] || "this";
+    treeEl.innerHTML = `<div class="empty-state-compact" style="font-size:0.72rem; padding:0.45rem;">No memories in ${escapeHtml(scopeLabel)} scope. Click <strong>Add note</strong> to create one.</div>`;
     return;
   }
 
@@ -1191,25 +1236,26 @@ async function handleLeftQuickSaveMemory() {
     return;
   }
 
-  await upsertMemoryRecord({
-    scope_type: scopeType,
-    scope_id: scopeId,
-    memory_key: memoryKey,
-    memory_value: memoryValue,
-    memory_type: scopeType === "ORG" ? "INVARIANT_GUARDRAIL" : "PREFERENCE",
-    category,
-    crystallized_belief: `${memoryKey}: ${memoryValue}`,
-    keywords,
-    confidence,
-    source_session_count: 1,
-    sync_immediately: true,
-    trigger_conditions: {
-      match_mode: scopeType === "ORG" ? "ALWAYS_PINNED" : "HYBRID_COSINE_AND_KEYWORD",
-      min_cosine_similarity: 0.72,
-      required_keywords: keywords.slice(0, 5),
-      auto_inject_scopes: [scopeType],
-    },
-  });
+  try {
+    const res = await fetch("/api/studio/tree/stage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scope_type: scopeType,
+        scope_id: scopeId,
+        memory_key: memoryKey,
+        after_value: memoryValue,
+        category,
+        natural_language_belief: `${memoryKey}: ${memoryValue}`,
+        confidence,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    showStatusBanner(`Staged '${memoryKey}' into Memory Tree (${scopeType}). Review and commit in Memory Tree.`);
+    await loadWsMemoryTree();
+  } catch (err) {
+    showStatusBanner(`Stage memory failed: ${err.message}`, true);
+  }
 }
 
 async function handleLeftQuickPromote() {
@@ -1554,9 +1600,10 @@ async function handlePromoteMemory(payload) {
     const data = await res.json();
     const pm = data.promoted_memory || {};
     showStatusBanner(
-      `✓ Promoted '${pm.memory_key}' from ${payload.source_scope_type} → ${payload.target_scope_type}:${payload.target_scope_id} (Support count: ${pm.support_count}).`
+      `Promoted '${pm.memory_key}' from ${payload.source_scope_type} → ${payload.target_scope_type}:${payload.target_scope_id} (Support count: ${pm.support_count}).`
     );
     await refreshScopesExplorer();
+    await loadWsMemoryTree();
   } catch (err) {
     showStatusBanner(`Memory promotion error: ${err.message}`, true);
   }
@@ -1612,6 +1659,7 @@ async function refreshEvalCases() {
     const data = await res.json();
     studioState.evalCases = data.cases || [];
     renderEvalCasesList(studioState.evalCases, null);
+    renderWsEvalCasesTable(studioState.evalCases, studioState.lastScorecard?.diagnostics || null);
   } catch (err) {
     console.error("Failed to load eval cases:", err);
   }
@@ -1638,6 +1686,7 @@ async function handleGenerateAdversarialCases() {
     const data = await res.json();
     studioState.evalCases = data.cases || data.generated_cases || [];
     renderEvalCasesList(studioState.evalCases, null);
+    renderWsEvalCasesTable(studioState.evalCases, studioState.lastScorecard?.diagnostics || null);
     showStatusBanner(
       `✓ Added ${data.generated_count} edge-case test prompts on '${data.topic}' (Total active test cases: ${data.count}).`
     );
@@ -1830,6 +1879,40 @@ function renderEvalCasesList(cases, diagnostics) {
 // STAGE 4: AlphaEvolve Self-Optimizing Memory Architecture (MAP-Elites)
 // ============================================================================
 
+function renderWsEvolveArchiveGrid(cells, activeConfig) {
+  const cfg = activeConfig || {};
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && val) el.textContent = val;
+  };
+  if (cfg.config_id) {
+    setText("wsEvalChampionVal", cfg.config_id);
+    setText("wsEvalChampionSub", `${cfg.embedding_dimensions || 768}d • ${cfg.injection_format || "COMPACT_BULLET"}`);
+  }
+  const gridEl = document.getElementById("wsEvalMapElitesGrid");
+  if (!gridEl || !Array.isArray(cells) || !cells.length) return;
+  gridEl.innerHTML = `<div class="studio-designer-grid">${cells
+    .map(
+      (c, idx) => `
+      <div class="studio-audit-card ws-clickable-row" data-cell-niche="${escapeHtml(c.niche || "")}" data-cell-idx="${idx}">
+        <div class="font-mono text-xs font-semibold">${escapeHtml(c.niche || "")}</div>
+        <div class="text-sm font-semibold mt-2">Score: ${Number(c.pareto_fitness || 0).toFixed(3)}</div>
+        <div class="text-xs text-secondary">${escapeHtml(c.config?.injection_format || "")} • τ=${escapeHtml(String(c.config?.retrieval_cosine_threshold || 0.65))}</div>
+      </div>
+    `
+    )
+    .join("")}</div>`;
+  gridEl.querySelectorAll("[data-cell-idx]").forEach((card) => {
+    card.addEventListener("click", async () => {
+      const idx = Number(card.getAttribute("data-cell-idx"));
+      const cell = cells[idx];
+      if (cell?.config) {
+        await handlePromoteConfig(cell.config);
+      }
+    });
+  });
+}
+
 async function refreshEvolveArchive() {
   try {
     const res = await fetch("/api/studio/evolve/archive");
@@ -1841,6 +1924,10 @@ async function refreshEvolveArchive() {
     if (data.archive) {
       studioState.evolveArchive = data.archive;
       renderMapElitesGrid(data.archive);
+    }
+    const cells = data.archive_summary?.cells || [];
+    if (cells.length) {
+      renderWsEvolveArchiveGrid(cells, data.active_config);
     }
   } catch (err) {
     console.error("Failed to fetch AlphaEvolve archive:", err);
@@ -1895,7 +1982,7 @@ async function handleRunAlphaEvolve() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Auto-Tune Retrieval Settings";
+      btn.textContent = "Auto-tune";
     }
   }
 }
@@ -2319,11 +2406,11 @@ function renderCategoryTaxonomyStrip() {
 
 async function handleCategoryCreatorSubmit(evt) {
   if (evt) evt.preventDefault();
-  const catId = document.getElementById("newCategoryIdInput")?.value.trim() || "";
-  const label = document.getElementById("newCategoryLabelInput")?.value.trim() || catId;
-  const defaultScope = document.getElementById("newCategoryScopeSelect")?.value || "TEAM";
-  const minCosine = Number(document.getElementById("newCategoryCosineInput")?.value || 0.75);
-  const description = document.getElementById("newCategoryDescInput")?.value.trim() || "";
+  const catId = document.getElementById("newCatIdInput")?.value.trim() || "";
+  const label = document.getElementById("newCatLabelInput")?.value.trim() || catId;
+  const defaultScope = document.getElementById("newCatDefaultScopeSelect")?.value || "TEAM";
+  const minCosine = Number(document.getElementById("newCatCosineThresholdInput")?.value || 0.75);
+  const description = document.getElementById("newCatDescInput")?.value.trim() || "";
 
   if (!catId) {
     showStatusBanner("Category ID is required.", true);
@@ -2691,10 +2778,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // 2. Topbar Info Tooltip Popover
+  // 2. Topbar Info Disclosure (native <details>/<summary> inside #viewMenuPopover needs no JS toggle)
   const infoBtn = document.getElementById("sessionInfoBtn");
   const infoTooltip = document.getElementById("sessionInfoTooltip");
-  if (infoBtn && infoTooltip) {
+  if (infoBtn && infoTooltip && infoBtn.tagName !== "SUMMARY") {
     infoBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       infoTooltip.classList.toggle("hidden");
@@ -2746,7 +2833,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       btn.textContent = isDark ? "Light theme" : "Dark theme";
     });
   };
-  applySavedTheme(localStorage.getItem("sheep-theme") || "light");
+  let initialTheme = localStorage.getItem("sheep-theme") || "light";
+  try {
+    const queryTheme = new URLSearchParams(window.location.search).get("theme");
+    if (queryTheme === "dark" || queryTheme === "light") initialTheme = queryTheme;
+  } catch (_) {}
+  applySavedTheme(initialTheme);
   document.querySelectorAll("[data-toggle-theme]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
@@ -2864,19 +2956,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   const syncAlphaWeightValue = (rawVal) => {
-    const v = Number(rawVal).toFixed(2);
+    const num = Number(rawVal);
+    const v = num.toFixed(2);
     const evalAlpha = document.getElementById("evalAlphaSlider");
     const evalAlphaText = document.getElementById("evalAlphaVal");
     const evolveAlpha = document.getElementById("evolveAlphaSlider");
     const evolveAlphaText = document.getElementById("evolveAlphaVal");
     const settingAlpha = document.getElementById("settingAlphaSlider");
     const settingAlphaText = document.getElementById("settingAlphaVal");
+    const optimizeAlpha = document.getElementById("optimizeAlphaSlider");
+    const optimizeAlphaText = document.getElementById("optimizeAlphaVal");
     if (evalAlpha) evalAlpha.value = v;
     if (evalAlphaText) evalAlphaText.textContent = v;
     if (evolveAlpha) evolveAlpha.value = v;
     if (evolveAlphaText) evolveAlphaText.textContent = v;
     if (settingAlpha) settingAlpha.value = v;
     if (settingAlphaText) settingAlphaText.textContent = v;
+    if (optimizeAlpha) optimizeAlpha.value = v;
+    if (optimizeAlphaText) optimizeAlphaText.textContent = `${Math.round(num * 100)}% Quality`;
   };
 
   const evalAlphaSliderEl = document.getElementById("evalAlphaSlider");
@@ -2897,6 +2994,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       syncAlphaWeightValue(settingAlphaSlider.value);
     });
   }
+  const optimizeAlphaSlider = document.getElementById("optimizeAlphaSlider");
+  if (optimizeAlphaSlider) {
+    optimizeAlphaSlider.addEventListener("input", () => {
+      syncAlphaWeightValue(optimizeAlphaSlider.value);
+    });
+  }
 
   document.getElementById("applyRunSettingsBtn")?.addEventListener("click", async () => {
     const activePill = document.querySelector("#settingDimButtonGroup .seg-pill.active");
@@ -2914,27 +3017,84 @@ document.addEventListener("DOMContentLoaded", async () => {
     await handlePromoteConfig(customGenome);
   });
 
-  // 4B. Left Rail Scope Pills, File/Data Tree Explorer & Live Memory Quick Editor
+  function shortenContextName(text, maxLen = 18) {
+    const clean = String(text || "").trim();
+    if (!clean) return "";
+    const head = clean.split("—")[0].split("(")[0].trim();
+    return head.length > maxLen ? `${head.slice(0, maxLen - 1)}…` : head;
+  }
+
+  function updateSignedInUserReadout() {
+    const readoutEl = document.getElementById("activeSignedInUserBadge");
+    if (!readoutEl) return;
+    const override = (document.getElementById("userIdInput")?.value || "").trim();
+    let stored = "";
+    try {
+      stored = sessionStorage.getItem("electric_sheep_user_email") || "";
+    } catch (_) {}
+    readoutEl.textContent = override || studioState.authenticatedEmail || stored || "Signed-in user";
+  }
+
+  function updateTopScopeTriggerLabel() {
+    const labelEl = document.getElementById("topScopeTriggerLabel");
+    if (!labelEl) return;
+    const teamEl = document.getElementById("teamIdInput");
+    const agentEl = document.getElementById("agentIdInput");
+    const userVal = (document.getElementById("userIdInput")?.value || "").trim();
+    const parts = [];
+    if (teamEl && teamEl.value.trim()) {
+      const optLabel = teamEl.selectedOptions?.[0]?.textContent || teamEl.value.trim();
+      parts.push(shortenContextName(optLabel));
+    }
+    if (agentEl && agentEl.value.trim()) {
+      const optLabel = agentEl.selectedOptions?.[0]?.textContent || agentEl.value.trim();
+      parts.push(shortenContextName(optLabel));
+    }
+    if (userVal) {
+      parts.push(shortenContextName(userVal));
+    }
+    labelEl.textContent = parts.length ? `Context · ${parts.join(" / ")}` : "Context";
+  }
+
+  // 4B. Top-Bar Active Context Picker & Scope Tier Filter
   ["userIdInput", "teamIdInput", "agentIdInput"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", async () => {
+      updateSignedInUserReadout();
+      updateTopScopeTriggerLabel();
+      await loadWsMemoryTree();
       await refreshScopesExplorer();
       await loadSyncStatus();
     });
   });
 
+  document.getElementById("contextManageScopesBtn")?.addEventListener("click", async () => {
+    closeAllToolbarDropdowns();
+    if (window.history && typeof window.history.replaceState === "function") {
+      window.history.replaceState(null, "", "#settings");
+    }
+    await switchWorkspace("workspace-entities");
+  });
+
   function syncScopeFilterPillsAndTabs(nextScopeFilter) {
     studioState.activeScopeFilter = nextScopeFilter || "ALL";
-    document.querySelectorAll(".left-scope-pill").forEach((pill) => {
-      pill.classList.toggle("active", pill.getAttribute("data-scope-filter") === studioState.activeScopeFilter);
+    document.querySelectorAll("#leftScopePillsContainer .left-scope-pill[data-scope-filter]").forEach((pill) => {
+      const isMatch = pill.getAttribute("data-scope-filter") === studioState.activeScopeFilter;
+      pill.classList.toggle("active", isMatch);
+      pill.setAttribute("aria-pressed", isMatch ? "true" : "false");
     });
     document.querySelectorAll(".scope-tab").forEach((tab) => {
       tab.classList.toggle("active", tab.getAttribute("data-scope-filter") === studioState.activeScopeFilter);
     });
+    updateTopScopeTriggerLabel();
+    renderWsMemoryTree();
     renderScopeMemoryCards();
     renderLeftMemoryTree();
+    if (wsState.memoriesViewMode === "graph") {
+      renderWsMemoriesGraph();
+    }
   }
 
-  document.querySelectorAll(".left-scope-pill").forEach((pill) => {
+  document.querySelectorAll("#leftScopePillsContainer .left-scope-pill[data-scope-filter]").forEach((pill) => {
     pill.addEventListener("click", () => {
       syncScopeFilterPillsAndTabs(pill.getAttribute("data-scope-filter") || "ALL");
     });
@@ -3269,7 +3429,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     closeAllToolbarDropdowns();
     switchStudioMode("stage-2-scopes");
     document.getElementById("categoryCreatorDrawer")?.classList.remove("hidden");
-    document.getElementById("newCategoryIdInput")?.focus();
+    document.getElementById("newCatIdInput")?.focus();
   };
   document.getElementById("openCategoryCreatorCmdBtn")?.addEventListener("click", handleToolbarOpenCategoryCreator);
   document.getElementById("cmdOpenCategoryCreatorBtn")?.addEventListener("click", handleToolbarOpenCategoryCreator);
@@ -3337,11 +3497,38 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // ==========================================================================
-  // 10-WORKSPACE NAVIGATION & MASTER-DETAIL EVENT LISTENERS
+  // TOP-BAR LIFECYCLE TABS & CONTEXT-ADAPTIVE WORKSPACE NAVIGATION
   // ==========================================================================
+  document.querySelectorAll(".studio-top-tab").forEach((link) => {
+    link.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const wsId = link.getAttribute("data-workspace") || "workspace-tree";
+      const topTab = link.getAttribute("data-top-tab") || "memories";
+      const targetHash = topTab === "memories" ? "" : `#${topTab}`;
+      if (window.location.hash !== targetHash) {
+        history.replaceState(null, "", targetHash || window.location.pathname);
+      }
+      await switchWorkspace(wsId);
+    });
+  });
+
   document.querySelectorAll(".studio-workspace-nav-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const wsId = btn.getAttribute("data-workspace") || "workspace-sessions";
+      await switchWorkspace(wsId);
+    });
+  });
+
+  document.querySelectorAll(".studio-lifecycle-step").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const wsId = btn.getAttribute("data-lifecycle-ws") || "workspace-sessions";
+      await switchWorkspace(wsId);
+    });
+  });
+
+  document.querySelectorAll("[data-guide-workspace]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const wsId = btn.getAttribute("data-guide-workspace") || "workspace-sessions";
       await switchWorkspace(wsId);
     });
   });
@@ -3355,12 +3542,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("wsSessionSearchInput")?.addEventListener("input", renderWsSessionsTable);
   document.getElementById("wsSessionScopeSelect")?.addEventListener("change", renderWsSessionsTable);
 
-  // Workspace 2: Memory Tree & Top Pending Staged Commits Bar
+  // Workspace 2: Memories (Tree | Graph Switcher + Proposals)
+  document.getElementById("wsMemoriesViewTreeBtn")?.addEventListener("click", () => setMemoriesViewMode("tree"));
+  document.getElementById("wsMemoriesViewGraphBtn")?.addEventListener("click", () => setMemoriesViewMode("graph"));
   document.getElementById("wsTreeRefreshBtn")?.addEventListener("click", loadWsMemoryTree);
-  document.getElementById("wsTreeSearchInput")?.addEventListener("input", renderWsMemoryTree);
-  document.getElementById("wsTreeStatusFilter")?.addEventListener("change", renderWsMemoryTree);
+  document.getElementById("wsTreeSearchInput")?.addEventListener("input", () => {
+    renderWsMemoryTree();
+    if (wsState.memoriesViewMode === "graph") renderWsMemoriesGraph();
+  });
+  document.getElementById("wsTreeStatusFilter")?.addEventListener("change", () => {
+    renderWsMemoryTree();
+    if (wsState.memoriesViewMode === "graph") renderWsMemoriesGraph();
+  });
   document.getElementById("wsTreeOpenStageModalBtn")?.addEventListener("click", () => {
-    document.getElementById("wsTreeStageFormCard")?.classList.toggle("hidden");
+    const card = document.getElementById("wsTreeStageFormCard");
+    if (!card) return;
+    card.classList.toggle("hidden");
+    if (!card.classList.contains("hidden")) {
+      const scopeSelect = document.getElementById("wsTreeStageScopeType");
+      if (scopeSelect) {
+        scopeSelect.value =
+          studioState.activeScopeFilter && studioState.activeScopeFilter !== "ALL"
+            ? studioState.activeScopeFilter
+            : "USER";
+      }
+    }
   });
   document.getElementById("wsTreeCloseStageFormBtn")?.addEventListener("click", () => {
     document.getElementById("wsTreeStageFormCard")?.classList.add("hidden");
@@ -3378,13 +3584,76 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("wsPgDimSelect")?.addEventListener("change", loadWsPlaygroundContext);
   document.getElementById("wsPgFormatSelect")?.addEventListener("change", loadWsPlaygroundContext);
 
-  // Workspace 4: Eval & AlphaEvolve
+  // Workspace 4: Optimize (Test Cases & AlphaEvolve Auto-Tune)
+  function setOptimizeSubTab(tabName) {
+    const active = tabName === "autotune" ? "autotune" : "tests";
+    document.querySelectorAll("[data-optimize-tab]").forEach((btn) => {
+      const isTarget = btn.getAttribute("data-optimize-tab") === active;
+      btn.classList.toggle("active", isTarget);
+      btn.setAttribute("aria-selected", isTarget ? "true" : "false");
+    });
+    document.getElementById("optimizePanelTests")?.classList.toggle("hidden", active !== "tests");
+    document.getElementById("optimizePanelAutotune")?.classList.toggle("hidden", active !== "autotune");
+  }
+
+  document.querySelectorAll("[data-optimize-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setOptimizeSubTab(btn.getAttribute("data-optimize-tab") || "tests");
+    });
+  });
+
+  document.getElementById("openRetrievalSettingsBtn")?.addEventListener("click", () => {
+    document.getElementById("studioInspectorDrawer")?.classList.remove("collapsed");
+    switchInspectorTab("settings");
+  });
+
   document.getElementById("wsEvalSynthesizeAdvBtn")?.addEventListener("click", async () => {
+    setOptimizeSubTab("tests");
     await handleGenerateAdversarialCases();
     await handleWsEvalRunSuite();
   });
-  document.getElementById("wsEvalRunSuiteBtn")?.addEventListener("click", handleWsEvalRunSuite);
-  document.getElementById("wsEvalRunAlphaEvolveBtn")?.addEventListener("click", handleWsEvalRunAlphaEvolve);
+  document.getElementById("wsEvalRunSuiteBtn")?.addEventListener("click", async () => {
+    setOptimizeSubTab("tests");
+    await handleWsEvalRunSuite();
+  });
+  document.getElementById("wsEvalRunAlphaEvolveBtn")?.addEventListener("click", async () => {
+    setOptimizeSubTab("autotune");
+    await handleWsEvalRunAlphaEvolve();
+  });
+  document.getElementById("wsOptimizeRunAlphaEvolveBtn")?.addEventListener("click", async () => {
+    setOptimizeSubTab("autotune");
+    await handleWsEvalRunAlphaEvolve();
+  });
+
+  // Workspace: Jobs Queue & Controls
+  document.querySelectorAll("[data-run-job]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const jobType = btn.getAttribute("data-run-job");
+      closeAllToolbarDropdowns();
+      if (jobType) {
+        await startStudioJob(jobType, "Jobs");
+      }
+    });
+  });
+  document.getElementById("wsJobsClearBtn")?.addEventListener("click", clearFinishedStudioJobs);
+  document.querySelectorAll("#wsJobsCategoryPills [data-job-category]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const cat = btn.getAttribute("data-job-category") || "ALL";
+      wsState.jobsFilterCategory = cat;
+      document.querySelectorAll("#wsJobsCategoryPills [data-job-category]").forEach((p) => {
+        p.classList.toggle("active", p === btn);
+      });
+      renderWsJobsTable();
+    });
+  });
+  document.getElementById("wsJobsStatusSelect")?.addEventListener("change", (e) => {
+    wsState.jobsFilterStatus = e.target.value || "ALL";
+    renderWsJobsTable();
+  });
+  document.getElementById("wsJobsSearchInput")?.addEventListener("input", (e) => {
+    wsState.jobsSearchQuery = (e.target.value || "").trim().toLowerCase();
+    renderWsJobsTable();
+  });
 
   // Workspace 5: Entities & Scope Hierarchy
   document.getElementById("wsRefreshEntitiesBtn")?.addEventListener("click", loadWsEntities);
@@ -3398,7 +3667,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("wsRefreshIngestServicesBtn")?.addEventListener("click", loadWsIngestServices);
   document.getElementById("wsSaveIngestServiceBtn")?.addEventListener("click", handleWsSaveIngestService);
 
-  // Workspace 8: Memory Extractors & Gemini 3.8 Co-Designer Chat
+  // Workspace 8: Memory Extractors & Gemini 4 Neon Co-Designer Chat
   document.getElementById("wsRefreshExtractorsBtn")?.addEventListener("click", loadWsExtractors);
   document.getElementById("wsSaveExtractorBtn")?.addEventListener("click", handleWsSaveExtractor);
   document.getElementById("wsExtractorChatForm")?.addEventListener("submit", handleWsExtractorChatSubmit);
@@ -3422,7 +3691,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("wsSaveRbacPolicyBtn")?.addEventListener("click", handleWsSaveRbacPolicy);
   document.getElementById("wsRbacSimRunBtn")?.addEventListener("click", handleWsRbacSimulate);
 
-  // 10. Initial data hydration across both 10-workspace & 4-stage views
+  // 10. Initial data hydration across workspaces (resolve deep-link hash or land on Memories)
+  function resolveWorkspaceFromHash() {
+    const hash = (window.location.hash || "").replace(/^#/, "").toLowerCase();
+    if (hash === "sessions") return "workspace-sessions";
+    if (hash === "optimize" || hash === "benchmarks" || hash === "eval") return "workspace-eval";
+    if (hash === "jobs") return "workspace-jobs";
+    if (hash === "settings" || hash === "admin") return "workspace-entities";
+    return "workspace-tree";
+  }
+
+  window.addEventListener("hashchange", async () => {
+    await switchWorkspace(resolveWorkspaceFromHash());
+  });
+
+  await loadWsEntities();
   await loadWsSessions();
   await loadWsMemoryTree();
   await loadIngestConfig();
@@ -3433,16 +3716,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   await refreshEvalCases();
   await refreshEvolveArchive();
   await loadSyncStatus();
+  await loadWsJobs();
+  connectStudioJobsStream();
+  updateSignedInUserReadout();
+  updateTopScopeTriggerLabel();
+  await switchWorkspace(resolveWorkspaceFromHash());
 });
 
 // ============================================================================
-// PHASE 3: 10-WORKSPACE MASTER-DETAIL CONTROLLER & LIVE API INTEGRATIONS
+// PHASE 3: WORKSPACE MASTER-DETAIL CONTROLLER & LIVE API INTEGRATIONS
 // ============================================================================
 
 const wsState = {
-  activeWorkspace: "workspace-sessions",
+  activeWorkspace: "workspace-tree",
+  memoriesViewMode: "tree",
   sessions: [],
   selectedSessionId: null,
+  selectedMemoryKey: null,
   treePayload: null,
   entities: [],
   categories: [],
@@ -3451,6 +3741,15 @@ const wsState = {
   activeExtractorId: "extractor:crystalline-default",
   backendStatus: null,
   securityPolicies: [],
+  jobs: [],
+  jobsActiveCount: 0,
+  jobsCounts: {},
+  jobsFilterCategory: "ALL",
+  jobsFilterStatus: "ALL",
+  jobsSearchQuery: "",
+  selectedJobId: null,
+  jobsEventSource: null,
+  jobsTickTimer: null,
 };
 
 async function switchWorkspace(workspaceId) {
@@ -3477,12 +3776,71 @@ async function switchWorkspace(workspaceId) {
     ws.classList.toggle("hidden", !isTarget);
   });
 
-  // Update Left Rail 10-workspace active button state
+  // Update Left Rail workspace active button state
   document.querySelectorAll(".studio-workspace-nav-btn").forEach((btn) => {
     const isTarget = btn.getAttribute("data-workspace") === workspaceId;
     btn.classList.toggle("active", isTarget);
     btn.setAttribute("aria-selected", isTarget ? "true" : "false");
   });
+
+  // Sync top Lifecycle Breadcrumb Strip active state
+  document.querySelectorAll(".studio-lifecycle-step").forEach((btn) => {
+    const isTarget = btn.getAttribute("data-lifecycle-ws") === workspaceId;
+    btn.classList.toggle("active", isTarget);
+    if (isTarget) {
+      btn.setAttribute("aria-current", "step");
+    } else {
+      btn.removeAttribute("aria-current");
+    }
+  });
+
+  // Sync Top-Bar Lifecycle Tabs & Context-Specific Left Pane (Memories | Sessions | Optimize | Settings)
+  const adminWorkspaces = new Set([
+    "workspace-entities",
+    "workspace-categories",
+    "workspace-ingest",
+    "workspace-extractors",
+    "workspace-backend",
+    "workspace-security",
+  ]);
+  let activeTopTab = "memories";
+  if (workspaceId === "workspace-sessions") activeTopTab = "sessions";
+  else if (workspaceId === "workspace-eval" || workspaceId === "workspace-playground") activeTopTab = "optimize";
+  else if (workspaceId === "workspace-jobs") activeTopTab = "jobs";
+  else if (adminWorkspaces.has(workspaceId)) activeTopTab = "settings";
+
+  const bodyLayoutEl = document.getElementById("appBodyLayout");
+  if (bodyLayoutEl) {
+    bodyLayoutEl.setAttribute("data-active-tab", activeTopTab);
+  }
+
+  document.querySelectorAll(".studio-top-tab").forEach((link) => {
+    const isTarget = link.getAttribute("data-top-tab") === activeTopTab;
+    link.classList.toggle("active", isTarget);
+    if (isTarget) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+
+  const railContextTitles = {
+    memories: "Explorer",
+    sessions: "Log Sources",
+    settings: "Settings",
+  };
+  const railTitleEl = document.getElementById("leftRailContextTitle");
+  if (railTitleEl && railContextTitles[activeTopTab]) {
+    railTitleEl.textContent = railContextTitles[activeTopTab];
+  }
+  document.querySelectorAll("[data-rail-context]").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.getAttribute("data-rail-context") !== activeTopTab);
+  });
+
+  const adminDetails = document.getElementById("studioAdminNavSection");
+  if (adminDetails && adminWorkspaces.has(workspaceId)) {
+    adminDetails.open = true;
+  }
 
   // Map workspace to its corresponding contextual Quick Actions group
   const mappedStage = WORKSPACE_TO_STAGE_MAP[workspaceId] || "stage-1-sandbox";
@@ -3534,6 +3892,8 @@ async function switchWorkspace(workspaceId) {
   } else if (workspaceId === "workspace-eval") {
     await refreshEvalCases();
     await refreshEvolveArchive();
+  } else if (workspaceId === "workspace-jobs") {
+    await loadWsJobs();
   } else if (workspaceId === "workspace-entities") {
     await loadWsEntities();
   } else if (workspaceId === "workspace-categories") {
@@ -3560,9 +3920,22 @@ function updateContextDetailPane(title, subtitle, bodyHtml, statusLabel = "LIVE"
   if (subEl) subEl.textContent = subtitle || "";
   if (bodyEl) bodyEl.innerHTML = bodyHtml || "";
   if (statusEl) statusEl.textContent = statusLabel;
-  if (rawPayload) {
-    const jsonPre = document.getElementById("inspectorContent");
-    if (jsonPre) jsonPre.textContent = JSON.stringify(rawPayload, null, 2);
+  if (rawPayload && typeof rawPayload === "object") {
+    const recordEl = document.getElementById("inspectorContent");
+    if (recordEl) {
+      const entries = Object.entries(rawPayload).filter(([, v]) => v !== undefined && v !== null && v !== "");
+      recordEl.innerHTML = entries
+        .slice(0, 18)
+        .map(([k, v]) => {
+          const valStr = Array.isArray(v)
+            ? `${v.length} items`
+            : typeof v === "object"
+              ? `${Object.keys(v).length} fields`
+              : String(v).slice(0, 160);
+          return `<div class="engine-kv-row"><span class="engine-kv-label">${escapeHtml(k)}</span><strong class="mono">${escapeHtml(valStr)}</strong></div>`;
+        })
+        .join("");
+    }
   }
   switchInspectorTab("detail");
 }
@@ -3689,58 +4062,224 @@ function renderWsSessionsTable() {
   });
 }
 
-function inspectWsSession(sessionObj) {
-  wsState.selectedSessionId = sessionObj.session_id;
+function getInitialPromptForSession(sessionObj) {
+  if (!sessionObj) return "";
   const turns = Array.isArray(sessionObj.turns) ? sessionObj.turns : [];
+  const firstUser = turns.find((t) => String(t.role || "").toLowerCase() === "user" && (t.content || t.user_prompt));
+  if (firstUser) return String(firstUser.content || firstUser.user_prompt || "").trim();
+  if (turns.length && (turns[0].content || turns[0].user_prompt)) {
+    return String(turns[0].content || turns[0].user_prompt || "").trim();
+  }
+  return String(sessionObj.title || sessionObj.summary || "").trim();
+}
+
+function getLinkedSessionsForMemory(memoryKey, sourceSessionId = "") {
+  const mk = String(memoryKey || "").trim();
+  const seen = new Map();
+  const addLink = (sid, relation, sessionObj = null) => {
+    const cleanId = String(sid || "").trim();
+    if (!cleanId) return;
+    if (!seen.has(cleanId)) {
+      const found = sessionObj || (wsState.sessions || []).find((s) => s.session_id === cleanId) || null;
+      seen.set(cleanId, {
+        session_id: cleanId,
+        relation,
+        title: found?.title || cleanId,
+        initial_prompt: getInitialPromptForSession(found),
+        sessionObj: found,
+      });
+    } else if (relation === "proposed") {
+      seen.get(cleanId).relation = "proposed";
+    }
+  };
+
+  if (sourceSessionId) addLink(sourceSessionId, "proposed");
+
+  const staged = Array.isArray(wsState.treePayload?.staged_commits) ? wsState.treePayload.staged_commits : [];
+  staged.forEach((sc) => {
+    if (String(sc.memory_key || "") === mk && sc.source_session_id) {
+      addLink(sc.source_session_id, "proposed");
+    }
+  });
+
+  (wsState.sessions || []).forEach((s) => {
+    const ext = Array.isArray(s.extracted_memories) ? s.extracted_memories : [];
+    const trig = Array.isArray(s.triggered_memories) ? s.triggered_memories : [];
+    if (ext.includes(mk)) addLink(s.session_id, "proposed", s);
+    else if (trig.includes(mk)) addLink(s.session_id, "triggered", s);
+  });
+
+  return Array.from(seen.values());
+}
+
+function findMemoryNodeByKey(memoryKey) {
+  const tree = wsState.treePayload?.tree || {};
+  for (const tier of ["ORG", "TEAM", "AGENT", "USER"]) {
+    const found = (tree[tier] || []).find((n) => n.memory_key === memoryKey);
+    if (found) return found;
+  }
+  return null;
+}
+
+function renderSessionLogCenter(sessionObj) {
+  const titleEl = document.getElementById("wsSessionLogTitle");
+  const metaEl = document.getElementById("wsSessionLogMeta");
+  const bodyEl = document.getElementById("wsSessionLogBody");
+  const chatBtn = document.getElementById("wsSessionOpenInChatBtn");
+  const extractBtn = document.getElementById("wsSessionLogExtractBtn");
+  if (!bodyEl || !sessionObj) return;
+
+  const turns = Array.isArray(sessionObj.turns) ? sessionObj.turns : [];
+  const trig = Array.isArray(sessionObj.triggered_memories) ? sessionObj.triggered_memories : [];
+
+  if (titleEl) titleEl.textContent = sessionObj.title || sessionObj.session_id;
+  if (metaEl) metaEl.textContent = `${sessionObj.session_id} · ${turns.length} turns`;
+
+  if (chatBtn) {
+    chatBtn.href = `index.html?session_id=${encodeURIComponent(sessionObj.session_id)}`;
+    chatBtn.classList.remove("hidden");
+  }
+  if (extractBtn) {
+    extractBtn.classList.remove("hidden");
+    extractBtn.onclick = () => handleWsSummarizeSession(sessionObj.session_id, extractBtn);
+  }
+
+  const trigBar = trig.length
+    ? `<div class="ws-session-log-recalled mb-8">
+         <span class="text-xs text-muted">Recalled memories:</span>
+         ${trig
+           .map(
+             (k) =>
+               `<button type="button" class="chip ws-jump-memory-chip" data-memory-key="${escapeHtml(k)}">${escapeHtml(k)}</button>`
+           )
+           .join("")}
+       </div>`
+    : "";
+
+  const turnsHtml = turns.length
+    ? turns
+        .map(
+          (t, idx) => `
+          <div class="ws-session-turn-row ws-session-turn-${escapeHtml(String(t.role || "user").toLowerCase())}">
+            <div class="ws-session-turn-role font-mono text-xs">${escapeHtml(String(t.role || "user").toUpperCase())} · #${idx + 1}</div>
+            <div class="ws-session-turn-content text-xs">${escapeHtml(t.content || "")}</div>
+          </div>
+        `
+        )
+        .join("")
+    : `<div class="text-xs text-muted">No turns recorded in this session yet.</div>`;
+
+  bodyEl.innerHTML = `${trigBar}<div class="ws-session-turns-stack">${turnsHtml}</div>`;
+
+  bodyEl.querySelectorAll(".ws-jump-memory-chip").forEach((chip) => {
+    chip.addEventListener("click", async () => {
+      const mk = chip.getAttribute("data-memory-key");
+      await switchWorkspace("workspace-tree");
+      const node = findMemoryNodeByKey(mk);
+      if (node) inspectWsMemoryNode(node);
+    });
+  });
+}
+
+function inspectWsSession(sessionObj, opts = {}) {
+  wsState.selectedSessionId = sessionObj.session_id;
+  if (!opts.skipCenterLog) {
+    renderSessionLogCenter(sessionObj);
+  }
+
   const trig = Array.isArray(sessionObj.triggered_memories) ? sessionObj.triggered_memories : [];
   const usefulSet = new Set(Array.isArray(sessionObj.useful_memories) ? sessionObj.useful_memories : []);
   const extracted = Array.isArray(sessionObj.extracted_memories) ? sessionObj.extracted_memories : [];
+  const stagedAll = Array.isArray(wsState.treePayload?.staged_commits) ? wsState.treePayload.staged_commits : [];
+  const sessionProposals = stagedAll.filter((sc) => sc.source_session_id === sessionObj.session_id);
+  const initialPrompt = getInitialPromptForSession(sessionObj);
+  const chatHref = `index.html?session_id=${encodeURIComponent(sessionObj.session_id)}`;
+
+  const proposalsHtml = sessionProposals.length
+    ? sessionProposals
+        .map(
+          (p) => `
+          <div class="inspector-linked-card">
+            <div class="inspector-linked-card-top">
+              <span class="commit-status-pill ${String(p.commit_status || "NEW") === "CONFLICT" ? "commit-pill-conflict" : String(p.commit_status || "NEW") === "MODIFIED" ? "commit-pill-modified" : "commit-pill-new"}">${escapeHtml(p.commit_status || "NEW")}</span>
+              <button type="button" class="inline-flow-link font-mono text-xs ws-inspector-open-memory" data-memory-key="${escapeHtml(p.memory_key)}">${escapeHtml(p.memory_key)}</button>
+            </div>
+            <div class="text-xs text-secondary mt-2">${escapeHtml(p.after_value || p.proposed_content || "")}</div>
+            <div class="guide-btn-grid mt-4">
+              <button type="button" class="btn btn-secondary btn-xs ws-inspector-commit-staged" data-staged-id="${escapeHtml(p.staged_id || p.commit_id)}">Approve</button>
+              <button type="button" class="btn btn-danger-outline btn-xs ws-inspector-discard-staged" data-staged-id="${escapeHtml(p.staged_id || p.commit_id)}">Dismiss</button>
+            </div>
+          </div>
+        `
+        )
+        .join("")
+    : extracted.length
+      ? `<div class="inspector-link-list">
+           ${extracted
+             .map(
+               (k) =>
+                 `<button type="button" class="inspector-link-row ws-inspector-open-memory" data-memory-key="${escapeHtml(k)}">
+                    <span class="font-mono text-xs">${escapeHtml(k)}</span>
+                    <span class="text-xs text-muted">Open in Memories →</span>
+                  </button>`
+             )
+             .join("")}
+         </div>`
+      : `<div class="text-xs text-muted">No proposals extracted from this session yet.</div>`;
 
   const checklistHtml = trig.length
     ? trig
         .map(
           (key) => `
-        <label class="studio-checkbox-label mt-4">
-          <input type="checkbox" class="ws-session-useful-checkbox" value="${escapeHtml(key)}" ${usefulSet.has(key) ? "checked" : ""}>
-          <span class="font-mono text-xs">${escapeHtml(key)}</span>
-          <span class="badge badge-teal">Triggered</span>
-        </label>
+        <div class="inspector-useful-row mt-4">
+          <label class="studio-checkbox-label">
+            <input type="checkbox" class="ws-session-useful-checkbox" value="${escapeHtml(key)}" ${usefulSet.has(key) ? "checked" : ""}>
+            <span class="font-mono text-xs">${escapeHtml(key)}</span>
+          </label>
+          <button type="button" class="inline-flow-link text-xs ws-inspector-open-memory" data-memory-key="${escapeHtml(key)}">Inspect</button>
+        </div>
       `
         )
         .join("")
     : `<div class="text-xs text-muted">No memories triggered in this session.</div>`;
 
-  const turnsHtml = turns
-    .map(
-      (t) => `
-      <div class="studio-mini-turn">
-        <strong class="font-mono text-xs">${escapeHtml(String(t.role || "user").toUpperCase())}:</strong>
-        <span class="text-xs">${escapeHtml(t.content || "")}</span>
-      </div>
-    `
-    )
-    .join("");
-
   const html = `
     <div class="mb-8">
-      <div class="text-xs font-semibold">Episodic Summary</div>
-      <p class="text-xs text-secondary mt-2">${escapeHtml(sessionObj.summary || "Not yet summarized.")}</p>
+      <div class="text-xs font-semibold">Proposals from this Session (${sessionProposals.length || extracted.length})</div>
+      <div class="mt-4">${proposalsHtml}</div>
+      <div class="guide-btn-grid mt-8">
+        <button type="button" id="inspectorExtractSessionBtn" class="btn btn-secondary btn-xs" data-session-id="${escapeHtml(sessionObj.session_id)}">
+          Extract
+        </button>
+        <button type="button" id="inspectorOpenTreeFromSessionBtn" class="btn btn-secondary btn-xs">
+          View tree
+        </button>
+      </div>
     </div>
     <div class="mb-8">
-      <div class="text-xs font-semibold">Memory Feedback</div>
-      <p class="text-xs text-muted">Mark which triggered memories helped this session:</p>
+      <div class="text-xs font-semibold">Memories Used (${trig.length})</div>
       <div id="inspectorSessionUsefulList" class="mt-4">${checklistHtml}</div>
-      <button type="button" id="inspectorSaveUsefulnessBtn" class="btn btn-secondary btn-xs w-full mt-8" data-session-id="${escapeHtml(sessionObj.session_id)}">
-        Save feedback
-      </button>
+      ${
+        trig.length
+          ? `<button type="button" id="inspectorSaveUsefulnessBtn" class="btn btn-secondary btn-xs w-full mt-8" data-session-id="${escapeHtml(sessionObj.session_id)}">Save feedback</button>`
+          : ""
+      }
     </div>
     <div class="mb-8">
-      <div class="text-xs font-semibold">Extracted Candidate Keys (${extracted.length})</div>
-      <div class="text-xs font-mono text-secondary mt-2">${extracted.length ? escapeHtml(extracted.join(", ")) : "None yet"}</div>
+      <div class="text-xs font-semibold">Test &amp; Benchmark</div>
+      <div class="guide-btn-grid mt-4">
+        <a href="${chatHref}" class="btn btn-secondary btn-xs text-center">Open in Chat</a>
+        <button type="button" id="inspectorAddSessionToBenchmarkBtn" class="btn btn-secondary btn-xs">Add eval</button>
+      </div>
+      ${
+        opts.fromGraph
+          ? `<button type="button" id="inspectorJumpToSessionsBtn" class="btn btn-secondary btn-xs w-full mt-4">View log</button>`
+          : ""
+      }
     </div>
-    <div>
-      <div class="text-xs font-semibold mb-4">Session Transcript (${turns.length} turns)</div>
-      <div class="studio-mini-turns-box">${turnsHtml}</div>
+    <div class="mb-8">
+      <div class="text-xs font-semibold">Summary</div>
+      <p class="text-xs text-secondary mt-2">${escapeHtml(sessionObj.summary || "Not yet summarized.")}</p>
     </div>
   `;
 
@@ -3755,6 +4294,81 @@ function inspectWsSession(sessionObj) {
   document.getElementById("inspectorSaveUsefulnessBtn")?.addEventListener("click", async () => {
     const checkedKeys = Array.from(document.querySelectorAll(".ws-session-useful-checkbox:checked")).map((cb) => cb.value);
     await handleWsSaveSessionUsefulness(sessionObj.session_id, trig, checkedKeys);
+  });
+
+  document.getElementById("inspectorExtractSessionBtn")?.addEventListener("click", async (evt) => {
+    await handleWsSummarizeSession(sessionObj.session_id, evt.currentTarget);
+  });
+
+  document.getElementById("inspectorOpenTreeFromSessionBtn")?.addEventListener("click", async () => {
+    await switchWorkspace("workspace-tree");
+  });
+
+  document.getElementById("inspectorJumpToSessionsBtn")?.addEventListener("click", async () => {
+    await switchWorkspace("workspace-sessions");
+    inspectWsSession(sessionObj);
+  });
+
+  document.getElementById("inspectorAddSessionToBenchmarkBtn")?.addEventListener("click", async (evt) => {
+    const btn = evt.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+    try {
+      const ids = getScopeIds();
+      const res = await fetch("/api/studio/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionObj.session_id,
+          user_id: sessionObj.user_id || ids.user_id,
+          team_id: ids.team_id,
+          agent_id: ids.agent_id,
+          prompt: initialPrompt || sessionObj.title || sessionObj.session_id,
+          agent_response: sessionObj.summary || "Session trajectory baseline",
+          retrieved_memories: trig,
+          rating: "POSITIVE",
+          expected_fact: trig.join(", ") || sessionObj.summary || "",
+          notes: `Added from session ${sessionObj.session_id}`,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await refreshEvalCases();
+      showStatusBanner(`✓ Added "${sessionObj.title || sessionObj.session_id}" to Benchmarks.`);
+    } catch (err) {
+      showStatusBanner(`Could not add benchmark case: ${err.message}`, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Add to Benchmarks";
+    }
+  });
+
+  document.querySelectorAll(".ws-inspector-open-memory").forEach((el) => {
+    el.addEventListener("click", async () => {
+      const mk = el.getAttribute("data-memory-key");
+      await switchWorkspace("workspace-tree");
+      const node = findMemoryNodeByKey(mk);
+      if (node) inspectWsMemoryNode(node);
+    });
+  });
+
+  document.querySelectorAll(".ws-inspector-commit-staged").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const sid = btn.getAttribute("data-staged-id");
+      if (sid) {
+        await handleWsTreeCommitSingle(sid);
+        inspectWsSession(sessionObj);
+      }
+    });
+  });
+
+  document.querySelectorAll(".ws-inspector-discard-staged").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const sid = btn.getAttribute("data-staged-id");
+      if (sid) {
+        await handleWsTreeDiscard(sid, false);
+        inspectWsSession(sessionObj);
+      }
+    });
   });
 }
 
@@ -3772,7 +4386,7 @@ async function handleWsSummarizeSession(sessionId, btnEl = null) {
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     const data = await res.json();
     showStatusBanner(
-      `✓ Summarized session ${sessionId} with Gemini 3.8 Flash & staged ${(data.staged_commits || []).length} candidate memories in Memory Tree.`
+      `✓ Summarized session ${sessionId} with Gemini 4 Hydrogen & staged ${(data.staged_commits || []).length} candidate memories in Memory Tree.`
     );
     await loadWsSessions();
     await loadWsMemoryTree();
@@ -3810,17 +4424,716 @@ async function handleWsSaveSessionUsefulness(sessionId, triggeredMemories, usefu
 // WORKSPACE 2: Memory Tree & Top Pending Staged Commits Bar
 // ----------------------------------------------------------------------------
 async function loadWsMemoryTree() {
-  const ids = getScopeIds();
+  const filters = getActiveContextFilters();
   try {
-    const qs = new URLSearchParams(ids).toString();
-    const res = await fetch(`/api/studio/tree?${qs}`);
+    const params = new URLSearchParams();
+    if (filters.team_id) params.set("team_id", filters.team_id);
+    if (filters.agent_id) params.set("agent_id", filters.agent_id);
+    if (filters.user_id) params.set("user_id", filters.user_id);
+    const qs = params.toString();
+    const res = await fetch(qs ? `/api/studio/tree?${qs}` : "/api/studio/tree");
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     const data = await res.json();
     wsState.treePayload = data;
     renderWsMemoryTree();
     renderInspectorStagedCommits();
+    if (wsState.memoriesViewMode === "graph") {
+      renderWsMemoriesGraph();
+    }
   } catch (err) {
     showStatusBanner(`Failed to load Memory Tree: ${err.message}`, true);
+  }
+}
+
+function setMemoriesViewMode(mode) {
+  wsState.memoriesViewMode = mode === "graph" ? "graph" : "tree";
+  const isGraph = wsState.memoriesViewMode === "graph";
+
+  const treeBtn = document.getElementById("wsMemoriesViewTreeBtn");
+  const graphBtn = document.getElementById("wsMemoriesViewGraphBtn");
+  const treeEl = document.getElementById("wsTreeHierarchyContainer");
+  const proposalsEl = document.getElementById("wsTreeProposalsSection");
+  const graphEl = document.getElementById("wsTreeGraphContainer");
+
+  if (treeBtn) {
+    treeBtn.classList.toggle("active", !isGraph);
+    treeBtn.setAttribute("aria-pressed", String(!isGraph));
+  }
+  if (graphBtn) {
+    graphBtn.classList.toggle("active", isGraph);
+    graphBtn.setAttribute("aria-pressed", String(isGraph));
+  }
+  if (treeEl) treeEl.classList.toggle("hidden", isGraph);
+  if (proposalsEl) {
+    const hasProposals = proposalsEl.dataset.hasProposals === "true";
+    proposalsEl.classList.toggle("hidden", isGraph || !hasProposals);
+  }
+  if (graphEl) graphEl.classList.toggle("hidden", !isGraph);
+
+  if (isGraph) {
+    renderWsMemoriesGraph();
+  }
+}
+
+async function runInspectorQuickTrace(promptText, resultEl) {
+  if (!resultEl) return;
+  const cleanPrompt = String(promptText || "").trim();
+  if (!cleanPrompt) {
+    resultEl.innerHTML = `<div class="text-xs text-muted">Enter a prompt to trace recall.</div>`;
+    return;
+  }
+  resultEl.innerHTML = `<div class="text-xs text-muted">Tracing recall...</div>`;
+  try {
+    const ids = getScopeIds();
+    const res = await fetch("/api/studio/playground/turn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: cleanPrompt,
+        user_id: ids.user_id,
+        team_id: ids.team_id,
+        agent_id: ids.agent_id,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const resolved = Array.isArray(data.resolved_memories) ? data.resolved_memories : [];
+    const conflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
+    const savings = data.token_savings_pct ?? 0;
+
+    const matchedHtml = resolved.length
+      ? resolved
+          .map(
+            (m) => `
+            <div class="inspector-trace-row">
+              <span class="badge badge-slate">${escapeHtml(String(m.scope_type || "USER").toUpperCase())}</span>
+              <code class="font-mono text-xs">${escapeHtml(m.memory_key || "")}</code>
+            </div>
+          `
+          )
+          .join("")
+      : `<div class="text-xs text-muted">No memories matched this prompt.</div>`;
+
+    const conflictHtml = conflicts.length
+      ? `<div class="text-xs text-secondary mt-4">Overrides: ${conflicts.map((c) => escapeHtml(c.memory_key || c.key || "conflict")).join(", ")}</div>`
+      : "";
+
+    resultEl.innerHTML = `
+      <div class="inspector-trace-meta text-xs text-muted mb-4">${resolved.length} recalled · ${conflicts.length} overrides · ${escapeHtml(String(savings))}% token savings</div>
+      <div class="inspector-trace-list">${matchedHtml}</div>
+      ${conflictHtml}
+    `;
+  } catch (err) {
+    resultEl.innerHTML = `<div class="text-xs text-muted">Trace failed: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function inspectWsMemoryNode(nodeObj) {
+  if (!nodeObj) return;
+  wsState.selectedMemoryKey = nodeObj.memory_key;
+  const status = String(nodeObj.commit_status || "SYNCED").toUpperCase();
+  const isStaged = status !== "SYNCED" && Boolean(nodeObj.staged_id);
+  const scopeType = String(nodeObj.scope_type || "USER").toUpperCase();
+  const nextScopeMap = { USER: "TEAM", AGENT: "TEAM", TEAM: "ORG" };
+  const nextScope = nextScopeMap[scopeType] || "";
+  const linkedSessions = getLinkedSessionsForMemory(nodeObj.memory_key, nodeObj.source_session_id || "");
+  const defaultPrompt =
+    (linkedSessions.find((s) => s.initial_prompt)?.initial_prompt) ||
+    `How should we handle ${String(nodeObj.memory_key || "").replace(/_/g, " ")}?`;
+
+  const diffHtml =
+    status === "MODIFIED" || status === "CONFLICT"
+      ? `<div class="tree-node-diff font-mono text-xs mt-4">
+           <span class="diff-before">Before: ${escapeHtml(nodeObj.before_value || "—")}</span> →
+           <span class="diff-after">After: ${escapeHtml(nodeObj.memory_value || nodeObj.after_value || "")}</span>
+         </div>`
+      : "";
+
+  const actionsHtml = isStaged
+    ? `<div class="guide-btn-grid mt-8">
+         <button type="button" id="inspectorApproveNodeBtn" class="btn btn-secondary btn-xs">Approve</button>
+         <button type="button" id="inspectorDismissNodeBtn" class="btn btn-danger-outline btn-xs">Dismiss</button>
+       </div>`
+    : `<div class="guide-btn-grid mt-8">
+         ${nextScope ? `<button type="button" id="inspectorPromoteNodeBtn" class="btn btn-secondary btn-xs">Promote → ${escapeHtml(nextScope)}</button>` : ""}
+         <button type="button" id="inspectorDeleteNodeBtn" class="btn btn-danger-outline btn-xs">Delete</button>
+       </div>`;
+
+  const sessionsHtml = linkedSessions.length
+    ? `<div class="inspector-link-list mt-4">
+         ${linkedSessions
+           .map(
+             (ls) => `
+             <div class="inspector-linked-card">
+               <div class="inspector-linked-card-top">
+                 <button type="button" class="inline-flow-link font-mono text-xs ws-inspector-jump-session" data-session-id="${escapeHtml(ls.session_id)}">${escapeHtml(ls.session_id)}</button>
+                 <span class="badge ${ls.relation === "proposed" ? "badge-indigo" : "badge-teal"}">${escapeHtml(ls.relation === "proposed" ? "Proposed" : "Recalled")}</span>
+               </div>
+               <div class="text-xs text-secondary mt-2">${escapeHtml(ls.initial_prompt || ls.title)}</div>
+               <div class="mt-4">
+                 <a href="index.html?session_id=${encodeURIComponent(ls.session_id)}" class="inline-flow-link text-xs">Open in Chat →</a>
+               </div>
+             </div>
+           `
+           )
+           .join("")}
+       </div>`
+    : `<div class="text-xs text-muted mt-4">No source sessions linked yet.</div>`;
+
+  const html = `
+    <div class="mb-8">
+      <div class="text-xs font-semibold">Rule Statement</div>
+      <div class="text-xs text-primary mt-2"><strong>Value:</strong> ${escapeHtml(nodeObj.memory_value || nodeObj.after_value || "")}</div>
+      <div class="text-xs text-secondary mt-2">${escapeHtml(nodeObj.natural_language_belief || nodeObj.diff_summary || "")}</div>
+      ${diffHtml}
+      ${actionsHtml}
+    </div>
+    <div class="mb-8">
+      <div class="text-xs font-semibold">Source Sessions (${linkedSessions.length})</div>
+      ${sessionsHtml}
+    </div>
+    <div class="mb-8">
+      <div class="text-xs font-semibold">Quick Trace</div>
+      <form id="inspectorQuickTraceForm" class="inspector-trace-form mt-4">
+        <input type="text" id="inspectorQuickTraceInput" class="studio-input studio-input-sm w-full" value="${escapeHtml(defaultPrompt)}" placeholder="Test prompt against live memories...">
+        <button type="submit" class="btn btn-secondary btn-xs mt-4 w-full">Trace recall</button>
+      </form>
+      <div id="inspectorQuickTraceResult" class="inspector-trace-box mt-4">
+        <div class="text-xs text-muted">Run a trace on the source prompt to verify recall and scope precedence.</div>
+      </div>
+    </div>
+  `;
+
+  updateContextDetailPane(
+    nodeObj.memory_key || "Memory",
+    `${scopeType} · ${nodeObj.category || "technical"} · ${nodeObj.scope_id || ""}`,
+    html,
+    isStaged ? status : "LIVE",
+    nodeObj
+  );
+
+  document.getElementById("inspectorApproveNodeBtn")?.addEventListener("click", async () => {
+    if (nodeObj.staged_id) await handleWsTreeCommitSingle(nodeObj.staged_id);
+  });
+  document.getElementById("inspectorDismissNodeBtn")?.addEventListener("click", async () => {
+    if (nodeObj.staged_id) await handleWsTreeDiscard(nodeObj.staged_id, false);
+  });
+  document.getElementById("inspectorPromoteNodeBtn")?.addEventListener("click", async () => {
+    const ids = getScopeIds();
+    const targetId = nextScope === "ORG" ? ids.org_id : ids.team_id;
+    await handlePromoteMemory({
+      source_scope_type: scopeType,
+      source_scope_id: nodeObj.scope_id || ids.user_id,
+      target_scope_type: nextScope,
+      target_scope_id: targetId,
+      memory_key: nodeObj.memory_key,
+    });
+  });
+  document.getElementById("inspectorDeleteNodeBtn")?.addEventListener("click", async () => {
+    await handleWsTreeDeleteNode(scopeType, nodeObj.scope_id || getScopeIds().user_id, nodeObj.memory_key);
+  });
+
+  document.querySelectorAll(".ws-inspector-jump-session").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const sid = btn.getAttribute("data-session-id");
+      await switchWorkspace("workspace-sessions");
+      const found = (wsState.sessions || []).find((s) => s.session_id === sid);
+      if (found) inspectWsSession(found);
+    });
+  });
+
+  document.getElementById("inspectorQuickTraceForm")?.addEventListener("submit", async (evt) => {
+    evt.preventDefault();
+    const promptVal = document.getElementById("inspectorQuickTraceInput")?.value || "";
+    const resultEl = document.getElementById("inspectorQuickTraceResult");
+    await runInspectorQuickTrace(promptVal, resultEl);
+  });
+}
+
+let wsMemoryGraphController = null;
+let wsGraphEvolveAbortController = null;
+
+async function startGraphAlphaEvolveStream(opts) {
+  if (!wsMemoryGraphController) return;
+  if (wsGraphEvolveAbortController) {
+    try {
+      wsGraphEvolveAbortController.abort();
+    } catch (_) {}
+  }
+  const abortCtrl = new AbortController();
+  wsGraphEvolveAbortController = abortCtrl;
+
+  const payload = {
+    generations: Number(opts?.generations || 3),
+    candidates_per_generation: Number(opts?.candidates_per_generation || 2),
+    alpha_quality_weight: Number(opts?.alpha_quality_weight ?? 0.65),
+    auto_apply_min_gain:
+      opts?.auto_apply_min_gain !== null && opts?.auto_apply_min_gain !== undefined
+        ? Number(opts.auto_apply_min_gain)
+        : null,
+  };
+
+  wsMemoryGraphController.updateEvolutionProgress({
+    type: "start",
+    step: 0,
+    total_steps: 1 + payload.generations * payload.candidates_per_generation,
+    message: `Starting evolution (${payload.generations} gens · ${payload.candidates_per_generation} candidates/gen)…`,
+  });
+
+  try {
+    const res = await fetch("/api/studio/evolve/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: abortCtrl.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    }
+    if (!res.body || typeof res.body.getReader !== "function") {
+      throw new Error("Streaming response unavailable in this browser.");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let receivedTerminal = false;
+
+    const processFrame = (frame) => {
+      const dataLines = frame
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim());
+      if (!dataLines.length) return;
+      let evt;
+      try {
+        evt = JSON.parse(dataLines.join("\n"));
+      } catch (_) {
+        return;
+      }
+      if (wsGraphEvolveAbortController !== abortCtrl) return;
+      wsMemoryGraphController.updateEvolutionProgress(evt);
+      if (evt.type === "complete" && evt.result) {
+        receivedTerminal = true;
+        if (typeof renderAlphaEvolveResults === "function") {
+          renderAlphaEvolveResults(evt.result);
+        }
+        if (evt.result.auto_applied && evt.result.active_config) {
+          updateActiveConfigSidebar(evt.result.active_config);
+          showStatusBanner(`✓ ${evt.result.auto_apply_reason || "Winning retrieval settings applied."}`);
+        } else if (evt.result.auto_apply_reason) {
+          showStatusBanner(evt.result.auto_apply_reason);
+        } else {
+          showStatusBanner("✓ Evolution complete. Review and apply winner from the graph bar.");
+        }
+      } else if (evt.type === "error") {
+        receivedTerminal = true;
+        showStatusBanner(`Evolution failed: ${evt.message || "Unknown error"}`, true);
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        buffer += decoder.decode();
+        if (buffer.trim()) {
+          for (const frame of buffer.split("\n\n")) {
+            processFrame(frame);
+          }
+        }
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() || "";
+      for (const frame of frames) {
+        processFrame(frame);
+      }
+    }
+
+    if (!receivedTerminal && wsGraphEvolveAbortController === abortCtrl) {
+      wsMemoryGraphController.updateEvolutionProgress({
+        type: "error",
+        message: "Connection closed before evolution finished.",
+      });
+      showStatusBanner("Evolution interrupted: connection closed before completion.", true);
+    }
+  } catch (err) {
+    if (wsGraphEvolveAbortController !== abortCtrl) {
+      return;
+    }
+    if (err && err.name === "AbortError") {
+      wsMemoryGraphController.updateEvolutionProgress({
+        type: "cancelled",
+        message: "Evolution stopped",
+      });
+      showStatusBanner("Evolution stopped.");
+    } else {
+      const msg = err?.message || String(err);
+      wsMemoryGraphController.updateEvolutionProgress({
+        type: "error",
+        message: `Evolution failed: ${msg}`,
+      });
+      showStatusBanner(`Evolution failed: ${msg}`, true);
+    }
+  } finally {
+    if (wsGraphEvolveAbortController === abortCtrl) {
+      wsGraphEvolveAbortController = null;
+    }
+  }
+}
+
+async function applyGraphEvolveWinner(configObj) {
+  if (!configObj) return;
+  try {
+    const res = await fetch("/api/studio/evolve/promote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config: configObj,
+        config_id: configObj.config_id || null,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    const activeCfg = data.active_config || configObj;
+    updateActiveConfigSidebar(activeCfg);
+    if (wsMemoryGraphController) {
+      wsMemoryGraphController.setEvolutionApplied(activeCfg);
+    }
+    showStatusBanner(`✓ Applied winning config (${activeCfg.embedding_dimensions || 256}d · ${activeCfg.injection_format || "COMPACT_BULLET"}).`);
+  } catch (err) {
+    showStatusBanner(`Apply failed: ${err?.message || err}`, true);
+  }
+}
+
+function renderWsMemoriesGraph() {
+  const container = document.getElementById("wsTreeGraphContainer");
+  if (!container || !wsState.treePayload) return;
+
+  const searchQuery = document.getElementById("wsTreeSearchInput")?.value || "";
+  const statusFilter = document.getElementById("wsTreeStatusFilter")?.value || "ALL";
+  const sessions = wsState.sessions || [];
+  const staged = Array.isArray(wsState.treePayload.staged_commits) ? wsState.treePayload.staged_commits : [];
+  const tree = wsState.treePayload.tree || {};
+  const liveNodes = [];
+  ["ORG", "TEAM", "AGENT", "USER"].forEach((tier) => {
+    (tree[tier] || []).forEach((n) => {
+      if (String(n.commit_status || "SYNCED").toUpperCase() === "SYNCED") {
+        liveNodes.push(n);
+      }
+    });
+  });
+
+  if (window.MemoryGraph && typeof window.MemoryGraph.MemoryGraphController === "function") {
+    if (!wsMemoryGraphController || wsMemoryGraphController.container !== container) {
+      wsMemoryGraphController = new window.MemoryGraph.MemoryGraphController(container, {
+        onSelectNode: (node) => {
+          if (!node) return;
+          if (node.kind === "session" && node.payload) {
+            inspectWsSession(node.payload, { fromGraph: true, skipCenterLog: true });
+          } else if (node.kind === "proposal") {
+            const target = findMemoryNodeByKey(node.memoryKey) || node.payload || staged.find((p) => p.memory_key === node.memoryKey);
+            if (target) inspectWsMemoryNode(target);
+          } else if (node.kind === "memory") {
+            const target = node.payload || liveNodes.find((n) => n.memory_key === node.memoryKey);
+            if (target) inspectWsMemoryNode(target);
+          }
+        },
+        onStartEvolve: (opts) => startGraphAlphaEvolveStream(opts),
+        onCancelEvolve: () => {
+          if (wsGraphEvolveAbortController) {
+            try {
+              wsGraphEvolveAbortController.abort();
+            } catch (_) {}
+          }
+        },
+        onApplyEvolveWinner: (cfg) => applyGraphEvolveWinner(cfg),
+      });
+    }
+    wsMemoryGraphController.update(wsState.treePayload, sessions, {
+      searchQuery,
+      statusFilter,
+      scopeFilter: studioState.activeScopeFilter || "ALL",
+    });
+    return;
+  }
+
+  container.innerHTML = `<div class="text-xs text-muted p-4">Graph renderer unavailable.</div>`;
+}
+
+const EVAL_SCENARIO_LABELS = {
+  CONTRADICTION_UPDATE: {
+    type: "Contradiction",
+    intent: "Honor updated preference over stale memory",
+  },
+  HALLUCINATION_TRAP: {
+    type: "Hallucination",
+    intent: "Avoid recalling unsupported or unrelated facts",
+  },
+  ORG_GUARDRAIL_OVERRIDE: {
+    type: "Org Guardrail",
+    intent: "Enforce organization guardrail over user preference",
+  },
+  COMPACT_TOKEN_RECALL: {
+    type: "Token Budget",
+    intent: "Recall key preference within compact token budget",
+  },
+  LIVE_FEEDBACK_CORRECTION: {
+    type: "Feedback Fix",
+    intent: "Recall corrected memory from session feedback",
+  },
+  LIVE_FEEDBACK_REINFORCEMENT: {
+    type: "Feedback Keep",
+    intent: "Keep recalling helpful memory from session feedback",
+  },
+};
+
+const EVAL_SCOPE_LABELS = {
+  ORGANIZATION: "Org",
+  ORG: "Org",
+  TEAM: "Team",
+  AGENT: "Agent",
+  USER: "User",
+};
+
+function formatEvalCaseDisplay(c) {
+  const scenarioRaw = String(c.scenario_type || c.archetype || "").trim();
+  const scenarioKey = scenarioRaw.toUpperCase();
+  const scenarioInfo = EVAL_SCENARIO_LABELS[scenarioKey] || {
+    type: scenarioRaw ? scenarioRaw.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase()) : "Verification",
+    intent: "",
+  };
+
+  const promptText = String(c.query_text || c.prompt || c.user_prompt || "").trim();
+  const rawTitle = String(c.title || "").trim();
+  const hasDescriptiveTitle = rawTitle && rawTitle.toUpperCase() !== scenarioKey;
+  const derivedIntent = hasDescriptiveTitle
+    ? rawTitle
+    : scenarioInfo.intent || (promptText ? promptText.slice(0, 96) : "Verify memory recall");
+
+  const recallList = Array.isArray(c.expected_facts) && c.expected_facts.length
+    ? c.expected_facts.map((x) => String(x).trim()).filter(Boolean)
+    : Array.isArray(c.expected_memory_keys) && c.expected_memory_keys.length
+      ? c.expected_memory_keys.map((x) => String(x).trim()).filter(Boolean)
+      : c.expected_fact || c.expected_behavior
+        ? [String(c.expected_fact || c.expected_behavior).trim()]
+        : [];
+
+  const blockList = Array.isArray(c.forbidden_facts) && c.forbidden_facts.length
+    ? c.forbidden_facts.map((x) => String(x).trim()).filter(Boolean)
+    : [];
+
+  const winningScopeRaw = String(c.expected_winning_scope || "").trim().toUpperCase();
+  const winningScope = EVAL_SCOPE_LABELS[winningScopeRaw] || winningScopeRaw;
+
+  const rawSession = String(c.source_session_id || c.session_id || "").trim();
+  const sessionId = rawSession && rawSession !== "STUDIO_EVAL" ? rawSession : "";
+
+  const notes = String(c.notes || "").trim();
+
+  const dedupeKey = JSON.stringify([
+    scenarioKey,
+    derivedIntent,
+    promptText,
+    recallList,
+    blockList,
+    winningScope,
+    sessionId,
+  ]);
+
+  return {
+    scenarioKey,
+    typeLabel: scenarioInfo.type,
+    derivedIntent,
+    promptText,
+    recallList,
+    blockList,
+    winningScope,
+    sessionId,
+    notes,
+    dedupeKey,
+  };
+}
+
+function renderWsEvalCasesTable(cases, diagnostics = null) {
+  const tbody = document.getElementById("wsEvalCasesTableBody");
+  const countEl = document.getElementById("wsEvalCasesCountBadge");
+  if (!tbody) return;
+  const list = Array.isArray(cases) ? cases : [];
+
+  if (!list.length) {
+    if (countEl) countEl.textContent = "0 cases";
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No verification cases yet. Add feedback from a Session or click Add tests.</td></tr>`;
+    return;
+  }
+
+  const diagMap = new Map();
+  if (Array.isArray(diagnostics)) {
+    diagnostics.forEach((d) => {
+      if (d.case_id) diagMap.set(d.case_id, d);
+    });
+  }
+
+  // Group identical verification cases so repeated runs don't flood the table with duplicate rows
+  const grouped = [];
+  const groupIndex = new Map();
+  list.forEach((c, idx) => {
+    const info = formatEvalCaseDisplay(c);
+    const cid = c.case_id || c.id || `case-${idx}`;
+    const diag = diagMap.get(cid) || null;
+    if (groupIndex.has(info.dedupeKey)) {
+      const existing = grouped[groupIndex.get(info.dedupeKey)];
+      existing.count += 1;
+      if (!existing.diag && diag) existing.diag = diag;
+    } else {
+      groupIndex.set(info.dedupeKey, grouped.length);
+      grouped.push({ evalCase: c, info, diag, count: 1 });
+    }
+  });
+
+  if (countEl) {
+    countEl.textContent =
+      grouped.length < list.length
+        ? `${grouped.length} unique · ${list.length} stored`
+        : `${list.length} cases`;
+  }
+
+  tbody.innerHTML = grouped
+    .map(({ evalCase, info, diag, count }, idx) => {
+      const promptHtml =
+        info.promptText && info.promptText !== info.derivedIntent
+          ? `<div class="eval-prompt-sub">“${escapeHtml(info.promptText.slice(0, 140))}”</div>`
+          : "";
+
+      const expectLines = [];
+      if (info.recallList.length) {
+        expectLines.push(
+          `<div class="eval-expect-recall"><strong>Recall:</strong> ${escapeHtml(info.recallList.join(", ").slice(0, 96))}</div>`
+        );
+      }
+      if (info.blockList.length) {
+        expectLines.push(
+          `<div class="eval-expect-block"><strong>Block:</strong> ${escapeHtml(info.blockList.join(", ").slice(0, 96))}</div>`
+        );
+      }
+      if (info.winningScope) {
+        expectLines.push(
+          `<div class="eval-expect-scope"><strong>Winner:</strong> ${escapeHtml(info.winningScope)} scope</div>`
+        );
+      }
+      if (!expectLines.length && info.notes) {
+        expectLines.push(`<div class="eval-expect-scope">${escapeHtml(info.notes.slice(0, 110))}</div>`);
+      }
+      if (!expectLines.length) {
+        expectLines.push(`<div class="text-muted">No expected facts specified</div>`);
+      }
+
+      const sourceSub = info.sessionId
+        ? `<div class="font-mono text-xs text-muted mt-2">${escapeHtml(info.sessionId.slice(0, 22))}</div>`
+        : "";
+      const dupBadge = count > 1 ? `<span class="eval-dup-count" title="${count} identical stored cases">×${count}</span>` : "";
+
+      const statusText = diag ? (diag.passed ? "Pass" : "Fail") : "Not run";
+      const statusClass = diag ? (diag.passed ? "eval-status-pass" : "eval-status-fail") : "text-muted";
+
+      return `
+        <tr class="ws-clickable-row ws-eval-case-row" data-eval-group-idx="${idx}">
+          <td>
+            <div class="eval-intent-primary">${escapeHtml(info.derivedIntent)}${dupBadge}</div>
+            ${promptHtml}
+          </td>
+          <td><div class="eval-expect-stack">${expectLines.join("")}</div></td>
+          <td>
+            <div class="text-xs font-semibold">${escapeHtml(info.typeLabel)}</div>
+            ${sourceSub}
+          </td>
+          <td class="font-mono text-xs ${statusClass}">${escapeHtml(statusText)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  tbody.querySelectorAll(".ws-eval-case-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const idx = Number(row.getAttribute("data-eval-group-idx"));
+      const entry = grouped[idx];
+      if (!entry) return;
+      inspectWsEvalCase(entry.evalCase, entry.diag || null, entry.count);
+    });
+  });
+}
+
+function inspectWsEvalCase(evalCase, diagnostic = null, duplicateCount = 1) {
+  if (!evalCase) return;
+  const info = formatEvalCaseDisplay(evalCase);
+
+  const sourceHtml = info.sessionId
+    ? `<div class="mt-4">
+         <button type="button" id="inspectorEvalJumpSessionBtn" class="inline-flow-link font-mono text-xs">${escapeHtml(info.sessionId)}</button>
+         <span class="text-xs text-muted"> · </span>
+         <a href="index.html?session_id=${encodeURIComponent(info.sessionId)}" class="inline-flow-link text-xs">Open in Chat →</a>
+       </div>`
+    : `<div class="text-xs text-muted mt-2">${escapeHtml(info.typeLabel)} benchmark case${duplicateCount > 1 ? ` (${duplicateCount} stored copies)` : ""}</div>`;
+
+  const outcomeRows = [];
+  if (info.recallList.length) {
+    outcomeRows.push(`<div class="eval-expect-recall"><strong>Must recall:</strong> ${escapeHtml(info.recallList.join(", "))}</div>`);
+  }
+  if (info.blockList.length) {
+    outcomeRows.push(`<div class="eval-expect-block"><strong>Must not recall:</strong> ${escapeHtml(info.blockList.join(", "))}</div>`);
+  }
+  if (info.winningScope) {
+    outcomeRows.push(`<div class="eval-expect-scope"><strong>Winning scope:</strong> ${escapeHtml(info.winningScope)}</div>`);
+  }
+  if (info.notes) {
+    outcomeRows.push(`<div class="text-xs text-secondary mt-2">${escapeHtml(info.notes)}</div>`);
+  }
+  if (!outcomeRows.length) {
+    outcomeRows.push(`<div class="text-xs text-muted">No expected outcome specified.</div>`);
+  }
+
+  const html = `
+    <div class="mb-8">
+      <div class="text-xs font-semibold">Intent</div>
+      <p class="text-xs text-primary mt-2">${escapeHtml(info.derivedIntent)}</p>
+      ${sourceHtml}
+    </div>
+    <div class="mb-8">
+      <div class="text-xs font-semibold">User Prompt</div>
+      <p class="text-xs text-secondary mt-2">${escapeHtml(info.promptText || "—")}</p>
+    </div>
+    <div class="mb-8">
+      <div class="text-xs font-semibold">What Should Happen</div>
+      <div class="eval-expect-stack mt-2">${outcomeRows.join("")}</div>
+    </div>
+    <div class="mb-8">
+      <div class="text-xs font-semibold">Live Recall Trace</div>
+      <div id="inspectorEvalTraceResult" class="inspector-trace-box mt-4">
+        <div class="text-xs text-muted">Tracing prompt against live memories...</div>
+      </div>
+    </div>
+  `;
+
+  updateContextDetailPane(
+    evalCase.case_id || "Verification Case",
+    `${info.typeLabel} · ${diagnostic ? (diagnostic.passed ? "Pass" : "Fail") : "Not run"}`,
+    html,
+    diagnostic ? (diagnostic.passed ? "PASS" : "FAIL") : "READY",
+    evalCase
+  );
+
+  document.getElementById("inspectorEvalJumpSessionBtn")?.addEventListener("click", async () => {
+    await switchWorkspace("workspace-sessions");
+    const found = (wsState.sessions || []).find((s) => s.session_id === info.sessionId);
+    if (found) inspectWsSession(found);
+  });
+
+  if (info.promptText) {
+    runInspectorQuickTrace(info.promptText, document.getElementById("inspectorEvalTraceResult"));
+  } else {
+    const traceEl = document.getElementById("inspectorEvalTraceResult");
+    if (traceEl) traceEl.innerHTML = `<div class="text-xs text-muted">No prompt text available to trace.</div>`;
   }
 }
 
@@ -3841,17 +5154,99 @@ function renderWsMemoryTree() {
   setText("treeStagedNewBadge", `${newCount} NEW`);
   setText("treeStagedModifiedBadge", `${modCount} MODIFIED`);
   setText("treeStagedConflictBadge", `${confCount} CONFLICT`);
-  setText("treeSyncedSummaryText", `• ${totalSynced} Synced`);
-  setText("wsBadgeTreeStaged", `${totalStaged} staged`);
+  setText("treeSyncedSummaryText", `• ${totalSynced} Live`);
+  setText("wsBadgeTreeStaged", `${totalStaged} proposals`);
   setText("inspectorCommitsCountBadge", String(totalStaged));
-  setText("cmdBarStagedSyncBadge", `${totalStaged} Staged • ${totalSynced} Synced`);
+  setText("cmdBarStagedSyncBadge", `${totalStaged} Proposals • ${totalSynced} Live`);
 
   const container = document.getElementById("wsTreeHierarchyContainer");
   if (!container) return;
 
   const query = (document.getElementById("wsTreeSearchInput")?.value || "").trim().toLowerCase();
   const statusFilter = document.getElementById("wsTreeStatusFilter")?.value || "ALL";
+  const scopeFilter = (studioState.activeScopeFilter || "ALL").toUpperCase();
   const tree = data.tree || {};
+
+  // Update inline tier filter counts from live tree payload
+  const tierCounts = {
+    ORG: Array.isArray(tree.ORG) ? tree.ORG.length : 0,
+    TEAM: Array.isArray(tree.TEAM) ? tree.TEAM.length : 0,
+    AGENT: Array.isArray(tree.AGENT) ? tree.AGENT.length : 0,
+    USER: Array.isArray(tree.USER) ? tree.USER.length : 0,
+  };
+  const allTierTotal = tierCounts.ORG + tierCounts.TEAM + tierCounts.AGENT + tierCounts.USER;
+  setText("leftCountScopeAll", String(allTierTotal));
+  setText("leftCountScopeOrg", String(tierCounts.ORG));
+  setText("leftCountScopeTeam", String(tierCounts.TEAM));
+  setText("leftCountScopeAgent", String(tierCounts.AGENT));
+  setText("leftCountScopeUser", String(tierCounts.USER));
+
+  // Render dedicated Proposals section at top of Tree view when proposals exist
+  const proposalsSection = document.getElementById("wsTreeProposalsSection");
+  const rawStagedList = Array.isArray(data.staged_commits) ? data.staged_commits : [];
+  const stagedList = scopeFilter === "ALL"
+    ? rawStagedList
+    : rawStagedList.filter((p) => String(p.scope_type || "USER").toUpperCase() === scopeFilter);
+  if (proposalsSection) {
+    const showProposals = stagedList.length > 0 && statusFilter !== "SYNCED";
+    proposalsSection.dataset.hasProposals = showProposals ? "true" : "false";
+    proposalsSection.classList.toggle("hidden", !showProposals || wsState.memoriesViewMode === "graph");
+    if (showProposals) {
+      proposalsSection.innerHTML = `
+        <div class="ws-tree-tier-header">
+          <span class="font-semibold text-xs">Proposals Waiting for Review</span>
+          <span class="badge badge-indigo">${stagedList.length} pending</span>
+        </div>
+        <div class="ws-tree-tier-nodes">
+          ${stagedList
+            .map((p) => {
+              const st = String(p.commit_status || "NEW").toUpperCase();
+              const pillCls = st === "CONFLICT" ? "commit-pill-conflict" : st === "MODIFIED" ? "commit-pill-modified" : "commit-pill-new";
+              return `
+                <div class="ws-tree-node-card ws-proposal-card" data-memory-key="${escapeHtml(p.memory_key)}" data-staged-id="${escapeHtml(p.staged_id || "")}">
+                  <div class="ws-tree-node-main">
+                    <div class="ws-tree-node-header">
+                      <span class="commit-status-pill ${pillCls}">${escapeHtml(st)}</span>
+                      <code class="font-mono font-semibold text-sm">${escapeHtml(p.memory_key)}</code>
+                      <span class="badge badge-slate">${escapeHtml(p.scope_type || "USER")}</span>
+                      ${p.source_session_id ? `<span class="text-xs font-mono text-muted">From ${escapeHtml(p.source_session_id)}</span>` : ""}
+                    </div>
+                    <div class="text-xs text-primary mt-2">${escapeHtml(p.after_value || p.proposed_content || "")}</div>
+                  </div>
+                  <div class="ws-tree-node-actions">
+                    <button type="button" class="btn btn-secondary btn-xs ws-tree-commit-node-btn" data-staged-id="${escapeHtml(p.staged_id || "")}">Approve</button>
+                    <button type="button" class="btn btn-danger-outline btn-xs ws-tree-discard-node-btn" data-staged-id="${escapeHtml(p.staged_id || "")}">Dismiss</button>
+                  </div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
+      proposalsSection.querySelectorAll(".ws-proposal-card").forEach((card) => {
+        card.addEventListener("click", (evt) => {
+          if (evt.target.closest("button")) return;
+          const mk = card.getAttribute("data-memory-key");
+          const node = findMemoryNodeByKey(mk) || stagedList.find((p) => p.memory_key === mk);
+          if (node) inspectWsMemoryNode(node);
+        });
+      });
+      proposalsSection.querySelectorAll(".ws-tree-commit-node-btn").forEach((btn) => {
+        btn.addEventListener("click", async (evt) => {
+          evt.stopPropagation();
+          const sid = btn.getAttribute("data-staged-id");
+          if (sid) await handleWsTreeCommitSingle(sid);
+        });
+      });
+      proposalsSection.querySelectorAll(".ws-tree-discard-node-btn").forEach((btn) => {
+        btn.addEventListener("click", async (evt) => {
+          evt.stopPropagation();
+          const sid = btn.getAttribute("data-staged-id");
+          if (sid) await handleWsTreeDiscard(sid, false);
+        });
+      });
+    }
+  }
 
   const tiers = [
     { key: "ORG", label: "Organization — Shared Guardrails" },
@@ -3859,8 +5254,9 @@ function renderWsMemoryTree() {
     { key: "AGENT", label: "Agent — Role Workflows" },
     { key: "USER", label: "Personal — Developer Preferences" },
   ];
+  const visibleTiers = scopeFilter === "ALL" ? tiers : tiers.filter((t) => t.key === scopeFilter);
 
-  container.innerHTML = tiers
+  container.innerHTML = visibleTiers
     .map((tier) => {
       const nodes = Array.isArray(tree[tier.key]) ? tree[tier.key] : [];
       const filteredNodes = nodes.filter((n) => {
@@ -3883,6 +5279,9 @@ function renderWsMemoryTree() {
 
               const isStaged = status !== "SYNCED" && n.staged_id;
               const usefulCount = Number(n.usefulness_count || 0);
+              const nodeScope = String(n.scope_type || tier.key).toUpperCase();
+              const nextScopeMap = { USER: "TEAM", AGENT: "TEAM", TEAM: "ORG" };
+              const nextScope = nextScopeMap[nodeScope] || "";
               const diffHtml =
                 status === "MODIFIED" || status === "CONFLICT"
                   ? `<div class="tree-node-diff font-mono text-xs mt-2">
@@ -3892,13 +5291,13 @@ function renderWsMemoryTree() {
                   : "";
 
               return `
-                <div class="ws-tree-node-card" data-staged-id="${escapeHtml(n.staged_id || "")}" data-memory-key="${escapeHtml(n.memory_key)}" data-scope-type="${escapeHtml(n.scope_type || tier.key)}" data-scope-id="${escapeHtml(n.scope_id || "")}">
+                <div class="ws-tree-node-card" data-staged-id="${escapeHtml(n.staged_id || "")}" data-memory-key="${escapeHtml(n.memory_key)}" data-scope-type="${escapeHtml(nodeScope)}" data-scope-id="${escapeHtml(n.scope_id || "")}">
                   <div class="ws-tree-node-main">
                     <div class="ws-tree-node-header">
                       <span class="commit-status-pill ${badgeClass}">${escapeHtml(status)}</span>
                       <code class="font-mono font-semibold text-sm">${escapeHtml(n.memory_key)}</code>
                       <span class="badge badge-slate">${escapeHtml(n.category || "technical")}</span>
-                      ${usefulCount > 0 ? `<span class="usefulness-attribution-pill">🔥 ${usefulCount} Helpful</span>` : ""}
+                      ${usefulCount > 0 ? `<span class="usefulness-attribution-pill">${usefulCount} helpful</span>` : ""}
                     </div>
                     <div class="text-xs text-primary mt-2"><strong>Value:</strong> ${escapeHtml(n.memory_value)}</div>
                     <div class="text-xs text-secondary">${escapeHtml(n.natural_language_belief || "")}</div>
@@ -3908,11 +5307,16 @@ function renderWsMemoryTree() {
                     ${
                       isStaged
                         ? `
-                          <button type="button" class="btn btn-primary btn-xs ws-tree-commit-node-btn" data-staged-id="${escapeHtml(n.staged_id)}">✓ Commit</button>
-                          <button type="button" class="btn btn-danger-outline btn-xs ws-tree-discard-node-btn" data-staged-id="${escapeHtml(n.staged_id)}">✕ Discard</button>
+                          <button type="button" class="btn btn-secondary btn-xs ws-tree-commit-node-btn" data-staged-id="${escapeHtml(n.staged_id)}">Approve</button>
+                          <button type="button" class="btn btn-danger-outline btn-xs ws-tree-discard-node-btn" data-staged-id="${escapeHtml(n.staged_id)}">Dismiss</button>
                         `
                         : `
-                          <button type="button" class="btn btn-danger-outline btn-xs ws-tree-delete-node-btn" data-scope-type="${escapeHtml(n.scope_type || tier.key)}" data-scope-id="${escapeHtml(n.scope_id || "")}" data-memory-key="${escapeHtml(n.memory_key)}">🗑 Delete</button>
+                          ${
+                            nextScope
+                              ? `<button type="button" class="btn btn-secondary btn-xs ws-tree-promote-node-btn" data-source-scope-type="${escapeHtml(nodeScope)}" data-source-scope-id="${escapeHtml(n.scope_id || "")}" data-target-scope-type="${escapeHtml(nextScope)}" data-memory-key="${escapeHtml(n.memory_key)}" title="Promote from ${escapeHtml(nodeScope)} to ${escapeHtml(nextScope)}">Promote → ${escapeHtml(nextScope)}</button>`
+                              : ""
+                          }
+                          <button type="button" class="btn btn-danger-outline btn-xs ws-tree-delete-node-btn" data-scope-type="${escapeHtml(nodeScope)}" data-scope-id="${escapeHtml(n.scope_id || "")}" data-memory-key="${escapeHtml(n.memory_key)}">Delete</button>
                         `
                     }
                   </div>
@@ -3934,6 +5338,17 @@ function renderWsMemoryTree() {
     })
     .join("");
 
+  container.querySelectorAll(".ws-tree-node-card").forEach((card) => {
+    card.addEventListener("click", (evt) => {
+      if (evt.target.closest("button")) return;
+      const mkey = card.getAttribute("data-memory-key") || "";
+      const stype = card.getAttribute("data-scope-type") || "";
+      const tierNodes = Array.isArray(tree[stype]) ? tree[stype] : [];
+      const found = tierNodes.find((n) => n.memory_key === mkey) || findMemoryNodeByKey(mkey);
+      if (found) inspectWsMemoryNode(found);
+    });
+  });
+
   container.querySelectorAll(".ws-tree-commit-node-btn").forEach((btn) => {
     btn.addEventListener("click", async (evt) => {
       evt.stopPropagation();
@@ -3950,6 +5365,27 @@ function renderWsMemoryTree() {
     });
   });
 
+  container.querySelectorAll(".ws-tree-promote-node-btn").forEach((btn) => {
+    btn.addEventListener("click", async (evt) => {
+      evt.stopPropagation();
+      const ids = getScopeIds();
+      const sourceType = btn.getAttribute("data-source-scope-type") || "USER";
+      const sourceId = btn.getAttribute("data-source-scope-id") || (sourceType === "TEAM" ? ids.team_id : sourceType === "AGENT" ? ids.agent_id : ids.user_id);
+      const targetType = btn.getAttribute("data-target-scope-type") || "TEAM";
+      const targetId = targetType === "ORG" ? ids.org_id : ids.team_id;
+      const mkey = btn.getAttribute("data-memory-key") || "";
+      if (mkey) {
+        await handlePromoteMemory({
+          source_scope_type: sourceType,
+          source_scope_id: sourceId,
+          target_scope_type: targetType,
+          target_scope_id: targetId,
+          memory_key: mkey,
+        });
+      }
+    });
+  });
+
   container.querySelectorAll(".ws-tree-delete-node-btn").forEach((btn) => {
     btn.addEventListener("click", async (evt) => {
       evt.stopPropagation();
@@ -3959,6 +5395,11 @@ function renderWsMemoryTree() {
       if (mkey && sid) await handleWsTreeDeleteNode(st, sid, mkey);
     });
   });
+
+  if (wsState.memoriesViewMode === "graph") {
+    renderWsMemoriesGraph();
+  }
+  renderLeftMemoryTree();
 }
 
 function renderInspectorStagedCommits() {
@@ -3984,8 +5425,8 @@ function renderInspectorStagedCommits() {
           <div class="text-xs mt-2"><strong>Before:</strong> <code>${escapeHtml(item.before_value || "(none)")}</code></div>
           <div class="text-xs mt-2"><strong>After:</strong> <code>${escapeHtml(item.after_value || "")}</code></div>
           <div class="quick-editor-actions mt-4">
-            <button type="button" class="btn btn-primary btn-xs inspector-commit-single-btn" data-staged-id="${escapeHtml(item.staged_id)}">✓ Commit</button>
-            <button type="button" class="btn btn-danger-outline btn-xs inspector-discard-single-btn" data-staged-id="${escapeHtml(item.staged_id)}">✕ Discard</button>
+            <button type="button" class="btn btn-secondary btn-xs inspector-commit-single-btn" data-staged-id="${escapeHtml(item.staged_id)}">Approve</button>
+            <button type="button" class="btn btn-danger-outline btn-xs inspector-discard-single-btn" data-staged-id="${escapeHtml(item.staged_id)}">Dismiss</button>
           </div>
         </div>
       `;
@@ -4248,68 +5689,52 @@ async function handleWsEvalRunSuite() {
         .join("");
     }
     showStatusBanner(`✓ Benchmark completed (Overall Score: ${Number(sc.pareto_fitness || 0).toFixed(3)}).`);
+    studioState.lastScorecard = data;
+    renderWsEvalCasesTable(studioState.evalCases || [], data.diagnostics || []);
   } catch (err) {
     showStatusBanner(`Benchmark failed: ${err.message}`, true);
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Run Benchmark";
+      btn.textContent = "Run eval";
     }
   }
 }
 
 async function handleWsEvalRunAlphaEvolve() {
   const btn = document.getElementById("wsEvalRunAlphaEvolveBtn");
+  const optBtn = document.getElementById("wsOptimizeRunAlphaEvolveBtn");
   const ids = getScopeIds();
+  const alphaWeight = Number(document.getElementById("optimizeAlphaSlider")?.value || 0.7);
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Auto-Tuning Settings...";
+    btn.textContent = "Auto-tuning...";
+  }
+  if (optBtn) {
+    optBtn.disabled = true;
+    optBtn.textContent = "Auto-tuning...";
   }
   try {
-    const res = await fetch("/api/studio/evolve/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: ids.user_id,
-        team_id: ids.team_id,
-        agent_id: ids.agent_id,
-        generations: 4,
-        population_size: 4,
-      }),
+    const job = await startStudioJob("alpha_evolve", "Optimize", {
+      user_id: ids.user_id,
+      team_id: ids.team_id,
+      agent_id: ids.agent_id,
+      generations: 4,
+      candidates_per_generation: 2,
+      alpha_quality_weight: alphaWeight,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    const champ = data.champion || {};
-    const cfg = champ.config || {};
-    const setText = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = val;
-    };
-    setText("wsEvalChampionVal", cfg.config_id || "recommended-preset");
-    setText("wsEvalChampionSub", `${cfg.embedding_dimensions || 256}d • ${cfg.injection_format || "MINIMAL_KV"}`);
-
-    const gridEl = document.getElementById("wsEvalMapElitesGrid");
-    const cells = data.archive_summary?.cells || [];
-    if (gridEl && cells.length) {
-      gridEl.innerHTML = `<div class=" studio-designer-grid">${cells
-        .map(
-          (c) => `
-          <div class="studio-audit-card ws-clickable-row" data-cell-niche="${escapeHtml(c.niche || "")}">
-            <div class="font-mono text-xs font-semibold">${escapeHtml(c.niche || "")}</div>
-            <div class="text-sm font-semibold mt-2">Score: ${Number(c.pareto_fitness || 0).toFixed(3)}</div>
-            <div class="text-xs text-secondary">${escapeHtml(c.config?.injection_format || "")} • τ=${escapeHtml(String(c.config?.retrieval_cosine_threshold || 0.65))}</div>
-          </div>
-        `
-        )
-        .join("")}</div>`;
+    if (job) {
+      showStatusBanner("Auto-tune started in background — live progress in Jobs.");
     }
-    showStatusBanner(`✓ Auto-tune completed (${cells.length} setting combinations compared).`);
   } catch (err) {
     showStatusBanner(`Auto-tune failed: ${err.message}`, true);
-  } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Auto-Tune Retrieval Settings";
+      btn.textContent = "Auto-tune";
+    }
+    if (optBtn) {
+      optBtn.disabled = false;
+      optBtn.textContent = "Run Auto-Tune";
     }
   }
 }
@@ -4317,12 +5742,50 @@ async function handleWsEvalRunAlphaEvolve() {
 // ----------------------------------------------------------------------------
 // WORKSPACE 5: Enterprise Entities & Scope Hierarchy
 // ----------------------------------------------------------------------------
+function populateContextEntitySelects() {
+  const entities = Array.isArray(wsState.entities) ? wsState.entities : [];
+  const fillSelect = (selectId, scopeType, defaultLabel) => {
+    const selectEl = document.getElementById(selectId);
+    if (!selectEl || selectEl.tagName !== "SELECT") return;
+    const prevVal = selectEl.value;
+    const matching = entities.filter((e) => String(e.scope_type || "").toUpperCase() === scopeType);
+    selectEl.innerHTML = [
+      `<option value="">${escapeHtml(defaultLabel)}</option>`,
+      ...matching.map(
+        (e) => `<option value="${escapeHtml(e.scope_id)}">${escapeHtml(e.display_name || e.scope_id)}</option>`
+      ),
+    ].join("");
+    if (prevVal && matching.some((e) => e.scope_id === prevVal)) {
+      selectEl.value = prevVal;
+    }
+  };
+  fillSelect("teamIdInput", "TEAM", "All teams");
+  fillSelect("agentIdInput", "AGENT", "All agents");
+
+  const readoutEl = document.getElementById("activeSignedInUserBadge");
+  if (readoutEl) {
+    const override = (document.getElementById("userIdInput")?.value || "").trim();
+    let stored = "";
+    try {
+      stored = sessionStorage.getItem("electric_sheep_user_email") || "";
+    } catch (_) {}
+    readoutEl.textContent = override || studioState.authenticatedEmail || stored || "Signed-in user";
+  }
+}
+
 async function loadWsEntities() {
   try {
     const res = await fetch("/api/studio/entities");
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     const data = await res.json();
+    if (data.authenticated_email) {
+      studioState.authenticatedEmail = String(data.authenticated_email).trim();
+      try {
+        sessionStorage.setItem("electric_sheep_user_email", studioState.authenticatedEmail);
+      } catch (_) {}
+    }
     wsState.entities = Array.isArray(data.entities) ? data.entities : [];
+    populateContextEntitySelects();
     const countBadge = document.getElementById("wsEntitiesCountBadge");
     if (countBadge) countBadge.textContent = `${wsState.entities.length} Entities`;
     const tbody = document.getElementById("wsEntitiesTableBody");
@@ -4342,7 +5805,7 @@ async function loadWsEntities() {
           <td class="font-mono text-xs">${escapeHtml(e.owner || "")}</td>
           <td>
             ${
-              e.scope_id !== "org:default"
+              e.scope_id !== "org:default" && e.scope_type !== "ORG"
                 ? `<button type="button" class="btn btn-danger-outline btn-xs ws-delete-entity-btn" data-scope-type="${escapeHtml(e.scope_type)}" data-scope-id="${escapeHtml(e.scope_id)}">🗑 Delete</button>`
                 : `<span class="badge badge-teal">Root Guardrail</span>`
             }
@@ -4435,7 +5898,7 @@ async function loadWsCategories() {
           <td><span class="badge ${c.auto_extract !== false ? "badge-teal" : "badge-slate"}">${c.auto_extract !== false ? "AUTO" : "MANUAL"}</span></td>
           <td class="font-mono text-xs">${Number(c.memory_count || 0)}</td>
           <td>
-            <button type="button" class="btn btn-danger-outline btn-xs ws-delete-cat-btn" data-category-id="${escapeHtml(c.category_id)}">🗑 Delete</button>
+            <button type="button" class="btn btn-danger-outline btn-xs ws-delete-cat-btn" data-category-id="${escapeHtml(c.category_id)}">Delete</button>
           </td>
         </tr>
       `
@@ -4589,7 +6052,7 @@ async function handleWsSaveIngestService() {
 }
 
 // ----------------------------------------------------------------------------
-// WORKSPACE 8: Memory Extractors & Interactive Gemini 3.8 Co-Designer Chat
+// WORKSPACE 8: Memory Extractors & Interactive Gemini 4 Neon Co-Designer Chat
 // ----------------------------------------------------------------------------
 async function loadWsExtractors() {
   try {
@@ -4609,7 +6072,7 @@ async function loadWsExtractors() {
             <div class="studio-candidate-card ws-clickable-row ${isActive ? "active" : ""}" data-extractor-id="${escapeHtml(ext.extractor_id)}">
               <div class="card-header-compact">
                 <span class="font-semibold text-xs">${escapeHtml(ext.name)}</span>
-                <span class="badge badge-indigo font-mono">${escapeHtml(ext.model_name || "gemini-3.8-flash")}</span>
+                <span class="badge badge-indigo font-mono">${escapeHtml(ext.model_name || "gemini-4-hydrogen")}</span>
               </div>
               <div class="text-xs text-secondary mt-2">Categories: <code>${escapeHtml((ext.target_categories || []).join(", "))}</code></div>
             </div>
@@ -4644,7 +6107,7 @@ function selectWsExtractor(ext) {
 
   if (idInput) idInput.value = ext.extractor_id;
   if (nameInput) nameInput.value = ext.name || "";
-  if (modelInput) modelInput.value = ext.model_name || "gemini-3.8-flash";
+  if (modelInput) modelInput.value = ext.model_name || "gemini-4-hydrogen";
   if (catInput) catInput.value = (ext.target_categories || []).join(", ");
   if (promptArea) promptArea.value = ext.system_prompt || "";
 
@@ -4664,7 +6127,7 @@ function selectWsExtractor(ext) {
 
   updateContextDetailPane(
     ext.name || ext.extractor_id,
-    `${ext.extractor_id} • ${ext.model_name || "gemini-3.8-flash"}`,
+    `${ext.extractor_id} • ${ext.model_name || "gemini-4-hydrogen"}`,
     `<div class="text-xs font-semibold mb-4">Few-Shot Extraction Examples (${examples.length})</div>${examplesHtml}`,
     ext.status || "ACTIVE",
     ext
@@ -4674,7 +6137,7 @@ function selectWsExtractor(ext) {
 async function handleWsSaveExtractor() {
   const extractorId = document.getElementById("wsActiveExtractorIdInput")?.value || "extractor:crystalline-default";
   const name = (document.getElementById("wsExtractorNameInput")?.value || "").trim();
-  const modelName = (document.getElementById("wsExtractorModelInput")?.value || "gemini-3.8-flash").trim();
+  const modelName = (document.getElementById("wsExtractorModelInput")?.value || "gemini-4-hydrogen").trim();
   const cats = (document.getElementById("wsExtractorCategoriesInput")?.value || "")
     .split(",")
     .map((s) => s.trim())
@@ -4732,7 +6195,7 @@ async function handleWsExtractorChatSubmit(evt) {
       turnEl.innerHTML = `
         <div class="turn-badge">CO-DESIGNER TURN (${escapeHtml(extractorId)})</div>
         <p class="turn-text"><strong>You:</strong> ${escapeHtml(message)}</p>
-        <p class="turn-text mt-4"><strong>Gemini 3.8 Co-Designer:</strong> ${escapeHtml(reply.assistant_reply || "")}</p>
+        <p class="turn-text mt-4"><strong>Gemini 4 Neon Co-Designer:</strong> ${escapeHtml(reply.assistant_reply || "")}</p>
       `;
       historyEl.prepend(turnEl);
     }
@@ -4741,7 +6204,7 @@ async function handleWsExtractorChatSubmit(evt) {
       selectWsExtractor(data.extractor);
     }
     await loadWsExtractors();
-    showStatusBanner(`✓ Gemini 3.8 Co-Designer updated system prompt & few-shot examples for ${extractorId}.`);
+    showStatusBanner(`✓ Gemini 4 Neon Co-Designer updated system prompt & few-shot examples for ${extractorId}.`);
   } catch (err) {
     showStatusBanner(`Extractor Co-Designer chat failed: ${err.message}`, true);
   } finally {
@@ -5014,6 +6477,498 @@ async function handleWsRbacSimulate() {
   } catch (err) {
     showStatusBanner(`RBAC permission simulation failed: ${err.message}`, true);
   }
+}
+
+// ----------------------------------------------------------------------------
+// WORKSPACE: Jobs Queue, Live SSE Stream & Cross-Tab Execution Control
+// ----------------------------------------------------------------------------
+const JOB_CATEGORY_LABELS = {
+  compaction: "Compaction",
+  optimize: "Auto-Tune",
+  ingest: "Ingest",
+  transform: "Transform",
+};
+
+const JOB_STATUS_LABELS = {
+  QUEUED: "Queued",
+  RUNNING: "Running",
+  SUCCEEDED: "Completed",
+  FAILED: "Failed",
+  CANCELED: "Canceled",
+};
+
+function formatJobDurationMs(ms) {
+  if (ms === null || ms === undefined || Number.isNaN(Number(ms))) return "—";
+  const totalSec = Math.max(0, Math.round(Number(ms) / 100) / 10);
+  if (totalSec < 60) return `${totalSec.toFixed(totalSec < 10 ? 1 : 0)}s`;
+  const mins = Math.floor(totalSec / 60);
+  const rem = Math.round(totalSec % 60);
+  return `${mins}m ${String(rem).padStart(2, "0")}s`;
+}
+
+function formatJobTimestamp(iso) {
+  if (!iso) return "—";
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return "—";
+  return dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function syncOptimizeAutoTuneButtonsFromJobs() {
+  const runningEvolve = (wsState.jobs || []).find(
+    (j) => j.job_type === "alpha_evolve" && (j.status === "RUNNING" || j.status === "QUEUED")
+  );
+  const btn = document.getElementById("wsEvalRunAlphaEvolveBtn");
+  const optBtn = document.getElementById("wsOptimizeRunAlphaEvolveBtn");
+  if (runningEvolve) {
+    const label = runningEvolve.progress_pct ? `Auto-tuning (${runningEvolve.progress_pct}%)` : "Auto-tuning...";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = label;
+    }
+    if (optBtn) {
+      optBtn.disabled = true;
+      optBtn.textContent = label;
+    }
+  } else {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Auto-tune";
+    }
+    if (optBtn) {
+      optBtn.disabled = false;
+      optBtn.textContent = "Run Auto-Tune";
+    }
+  }
+}
+
+function syncJobsBadgesAndTicker() {
+  const jobs = Array.isArray(wsState.jobs) ? wsState.jobs : [];
+  const activeCount = jobs.filter((j) => j.status === "RUNNING" || j.status === "QUEUED").length;
+  const succeededCount = jobs.filter((j) => j.status === "SUCCEEDED").length;
+  const failedCount = jobs.filter((j) => j.status === "FAILED").length;
+  wsState.jobsActiveCount = activeCount;
+
+  const badgeEl = document.getElementById("wsBadgeJobsRunning");
+  if (badgeEl) {
+    badgeEl.classList.toggle("hidden", activeCount === 0);
+    if (activeCount > 0) {
+      badgeEl.textContent = `${activeCount} running`;
+    }
+  }
+
+  const summaryEl = document.getElementById("wsJobsQuietSummary");
+  if (summaryEl) {
+    let text = `${activeCount} running · ${succeededCount} completed`;
+    if (failedCount > 0) text += ` · ${failedCount} failed`;
+    summaryEl.textContent = text;
+  }
+
+  syncOptimizeAutoTuneButtonsFromJobs();
+
+  if (activeCount > 0 && !wsState.jobsTickTimer) {
+    wsState.jobsTickTimer = window.setInterval(() => {
+      document.querySelectorAll("[data-live-job-duration]").forEach((el) => {
+        const startedIso = el.getAttribute("data-live-job-duration");
+        if (!startedIso) return;
+        const t0 = Date.parse(startedIso);
+        if (!Number.isNaN(t0)) {
+          el.textContent = formatJobDurationMs(Date.now() - t0);
+        }
+      });
+    }, 1000);
+  } else if (activeCount === 0 && wsState.jobsTickTimer) {
+    window.clearInterval(wsState.jobsTickTimer);
+    wsState.jobsTickTimer = null;
+  }
+}
+
+async function loadWsJobs() {
+  try {
+    const res = await fetch("/api/studio/jobs?limit=50");
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    wsState.jobs = Array.isArray(data.jobs) ? data.jobs : [];
+    wsState.jobsCounts = data.counts || {};
+    syncJobsBadgesAndTicker();
+    renderWsJobsTable();
+    if (wsState.selectedJobId) {
+      const sel = wsState.jobs.find((j) => j.job_id === wsState.selectedJobId);
+      if (sel && wsState.activeWorkspace === "workspace-jobs") {
+        inspectWsJob(sel, true);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load Studio jobs:", err);
+  }
+}
+
+function renderWsJobsTable() {
+  const tbody = document.getElementById("wsJobsTableBody");
+  if (!tbody) return;
+
+  const catFilter = (wsState.jobsFilterCategory || "ALL").toLowerCase();
+  const statusFilter = (wsState.jobsFilterStatus || "ALL").toUpperCase();
+  const query = (wsState.jobsSearchQuery || "").trim().toLowerCase();
+
+  const filtered = (wsState.jobs || []).filter((j) => {
+    if (catFilter !== "all" && String(j.category || "").toLowerCase() !== catFilter) return false;
+    if (statusFilter !== "ALL" && String(j.status || "").toUpperCase() !== statusFilter) return false;
+    if (query) {
+      const hay = `${j.title || ""} ${j.job_id || ""} ${j.result_summary || ""} ${j.current_step || ""} ${j.triggered_from || ""} ${j.scope_summary || ""}`.toLowerCase();
+      if (!hay.includes(query)) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    const emptyMsg = (wsState.jobs || []).length
+      ? "No jobs match filter"
+      : "No jobs yet";
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">${escapeHtml(emptyMsg)}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered
+    .map((j) => {
+      const st = String(j.status || "QUEUED").toUpperCase();
+      const stLower = st.toLowerCase();
+      const stLabel = JOB_STATUS_LABELS[st] || st;
+      const catLabel = JOB_CATEGORY_LABELS[String(j.category || "").toLowerCase()] || j.category || "Job";
+      const isSelected = wsState.selectedJobId === j.job_id;
+      const isRunning = st === "RUNNING";
+      const isActive = st === "RUNNING" || st === "QUEUED";
+      const startedIso = j.started_at || j.created_at || "";
+      const durationHtml = isRunning && startedIso
+        ? `<span data-live-job-duration="${escapeHtml(startedIso)}">${escapeHtml(formatJobDurationMs(Date.now() - Date.parse(startedIso)))}</span>`
+        : escapeHtml(formatJobDurationMs(j.duration_ms));
+
+      const progressHtml = isRunning
+        ? `<div class="job-step-meta">
+             <progress class="job-inline-progress" max="100" value="${Number(j.progress_pct || 10)}"></progress>
+             <span class="text-xs text-secondary">${escapeHtml(j.current_step || "Running...")}</span>
+           </div>`
+        : `<div class="text-xs text-secondary mt-2">${escapeHtml(j.current_step || "")}</div>`;
+
+      let actionBtnHtml = "";
+      if (isActive) {
+        actionBtnHtml = `<button type="button" class="btn btn-danger-outline btn-xs" data-job-cancel="${escapeHtml(j.job_id)}">Cancel</button>`;
+      } else if (st === "FAILED" || st === "CANCELED") {
+        actionBtnHtml = `<button type="button" class="btn btn-secondary btn-xs" data-job-retry="${escapeHtml(j.job_id)}">Retry</button>`;
+      } else if (j.target_workspace) {
+        const targetLabel = j.target_workspace === "workspace-eval"
+          ? "View preset"
+          : (j.target_workspace === "workspace-sessions" ? "View sessions" : "View memories");
+        actionBtnHtml = `<button type="button" class="btn btn-secondary btn-xs" data-job-open-ws="${escapeHtml(j.target_workspace)}">${escapeHtml(targetLabel)}</button>`;
+      }
+
+      return `
+        <tr class="ws-clickable-row ${isSelected ? "job-row-selected" : ""}" data-job-id="${escapeHtml(j.job_id)}">
+          <td>
+            <div class="font-semibold text-sm">${escapeHtml(j.title || j.job_type)}</div>
+            <div class="text-xs text-muted">${escapeHtml(j.triggered_from || "Jobs")} · ${escapeHtml(j.scope_summary || "All scopes")}</div>
+          </td>
+          <td><span class="badge badge-slate">${escapeHtml(catLabel)}</span></td>
+          <td>
+            <span class="job-status-pill ${escapeHtml(stLower)}">
+              ${isRunning ? '<span class="job-pulse-dot" aria-hidden="true"></span>' : ""}
+              ${escapeHtml(stLabel)}
+            </span>
+            ${progressHtml}
+          </td>
+          <td class="text-xs">${escapeHtml(j.result_summary || j.error || "—")}</td>
+          <td class="font-mono text-xs">${escapeHtml(formatJobTimestamp(startedIso))}</td>
+          <td class="font-mono text-xs">${durationHtml}</td>
+          <td>${actionBtnHtml}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  tbody.querySelectorAll("tr[data-job-id]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const jid = row.getAttribute("data-job-id");
+      const job = (wsState.jobs || []).find((x) => x.job_id === jid);
+      if (job) inspectWsJob(job, false);
+    });
+  });
+
+  tbody.querySelectorAll("[data-job-cancel]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const jid = btn.getAttribute("data-job-cancel");
+      if (jid) await cancelStudioJob(jid);
+    });
+  });
+
+  tbody.querySelectorAll("[data-job-retry]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const jid = btn.getAttribute("data-job-retry");
+      if (jid) await retryStudioJob(jid);
+    });
+  });
+
+  tbody.querySelectorAll("[data-job-open-ws]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const targetWs = btn.getAttribute("data-job-open-ws");
+      if (targetWs) await switchWorkspace(targetWs);
+    });
+  });
+}
+
+function inspectWsJob(job, silentDrawer = false) {
+  if (!job) return;
+  wsState.selectedJobId = job.job_id;
+  if (!silentDrawer) {
+    renderWsJobsTable();
+  }
+  const st = String(job.status || "QUEUED").toUpperCase();
+  const stLabel = JOB_STATUS_LABELS[st] || st;
+  const steps = Array.isArray(job.steps) ? job.steps : [];
+  const timelineHtml = steps.length
+    ? `<ol class="job-step-timeline">${steps
+        .map(
+          (s) => `
+          <li class="job-step-timeline-item">
+            <div class="job-step-timeline-head">
+              <strong>${escapeHtml(s.label || "")}</strong>
+              <span class="font-mono text-muted">${escapeHtml(formatJobTimestamp(s.ts))}</span>
+            </div>
+            <div class="job-step-timeline-detail">${escapeHtml(s.detail || "")}</div>
+          </li>
+        `
+        )
+        .join("")}</ol>`
+    : '<div class="text-xs text-muted mt-4">No steps recorded yet.</div>';
+
+  const metricsEntries = Object.entries(job.metrics || {});
+  const metricsHtml = metricsEntries.length
+    ? `<div class="mt-8">${metricsEntries
+        .map(([k, v]) => `<div class="engine-kv-row"><span class="engine-kv-label">${escapeHtml(formatInspectorLabel(k))}</span><strong class="mono">${escapeHtml(String(v))}</strong></div>`)
+        .join("")}</div>`
+    : "";
+
+  const isActive = st === "RUNNING" || st === "QUEUED";
+  const buttonsHtml = `
+    <div class="quick-editor-actions mt-8">
+      ${isActive ? `<button type="button" class="btn btn-danger-outline btn-xs" id="inspectorCancelJobBtn">Cancel</button>` : ""}
+      ${st === "FAILED" || st === "CANCELED" ? `<button type="button" class="btn btn-secondary btn-xs" id="inspectorRetryJobBtn">Retry</button>` : ""}
+      ${st === "SUCCEEDED" && job.target_workspace ? `<button type="button" class="btn btn-primary btn-xs" id="inspectorOpenJobWsBtn">Open view</button>` : ""}
+    </div>
+  `;
+
+  const bodyHtml = `
+    <div class="engine-kv-row"><span class="engine-kv-label">Job ID</span><strong class="mono">${escapeHtml(job.job_id)}</strong></div>
+    <div class="engine-kv-row"><span class="engine-kv-label">Origin</span><strong>${escapeHtml(job.triggered_from || "Jobs")}</strong></div>
+    <div class="engine-kv-row"><span class="engine-kv-label">Scope</span><strong class="mono">${escapeHtml(job.scope_summary || "All scopes")}</strong></div>
+    <div class="engine-kv-row"><span class="engine-kv-label">Duration</span><strong class="mono">${escapeHtml(formatJobDurationMs(job.duration_ms))}</strong></div>
+    ${job.result_summary ? `<div class="engine-kv-row"><span class="engine-kv-label">Outcome</span><strong>${escapeHtml(job.result_summary)}</strong></div>` : ""}
+    ${job.error ? `<div class="text-xs mt-4" style="color: var(--color-warn);">${escapeHtml(job.error)}</div>` : ""}
+    ${metricsHtml}
+    ${buttonsHtml}
+    <div class="mt-12">
+      <div class="rail-section-title">Steps</div>
+      ${timelineHtml}
+    </div>
+  `;
+
+  updateContextDetailPane(
+    job.title || job.job_type,
+    `${stLabel} · ${job.current_step || ""}`,
+    bodyHtml,
+    stLabel,
+    job.output_preview && Object.keys(job.output_preview).length ? job.output_preview : job
+  );
+
+  document.getElementById("inspectorCancelJobBtn")?.addEventListener("click", () => cancelStudioJob(job.job_id));
+  document.getElementById("inspectorRetryJobBtn")?.addEventListener("click", () => retryStudioJob(job.job_id));
+  document.getElementById("inspectorOpenJobWsBtn")?.addEventListener("click", () => switchWorkspace(job.target_workspace));
+}
+
+async function startStudioJob(jobType, triggeredFrom = "Jobs", extraParams = null) {
+  const ids = getScopeIds();
+  const params = {
+    user_id: ids.user_id,
+    team_id: ids.team_id,
+    agent_id: ids.agent_id,
+    ...(extraParams || {}),
+  };
+  const res = await fetch("/api/studio/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      job_type: jobType,
+      triggered_from: triggeredFrom,
+      params,
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const job = data.job;
+  if (job) {
+    upsertLocalStudioJob(job);
+    wsState.selectedJobId = job.job_id;
+    syncJobsBadgesAndTicker();
+    renderWsJobsTable();
+    if (triggeredFrom === "Jobs") {
+      showStatusBanner(`Started ${job.title || jobType}.`);
+    }
+  }
+  return job;
+}
+
+async function cancelStudioJob(jobId) {
+  try {
+    const res = await fetch(`/api/studio/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    if (data.job) {
+      upsertLocalStudioJob(data.job);
+      syncJobsBadgesAndTicker();
+      renderWsJobsTable();
+      if (wsState.selectedJobId === jobId) inspectWsJob(data.job, true);
+    }
+    showStatusBanner("Cancellation requested.");
+  } catch (err) {
+    showStatusBanner(`Cancel failed: ${err.message}`, true);
+  }
+}
+
+async function retryStudioJob(jobId) {
+  try {
+    const res = await fetch(`/api/studio/jobs/${encodeURIComponent(jobId)}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    if (data.job) {
+      upsertLocalStudioJob(data.job);
+      wsState.selectedJobId = data.job.job_id;
+      syncJobsBadgesAndTicker();
+      renderWsJobsTable();
+      inspectWsJob(data.job, true);
+      showStatusBanner(`Retried ${data.job.title || jobId}.`);
+    }
+  } catch (err) {
+    showStatusBanner(`Retry failed: ${err.message}`, true);
+  }
+}
+
+async function clearFinishedStudioJobs() {
+  try {
+    const res = await fetch("/api/studio/jobs/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    wsState.jobs = Array.isArray(data.jobs) ? data.jobs : [];
+    if (wsState.selectedJobId && !wsState.jobs.some((j) => j.job_id === wsState.selectedJobId)) {
+      wsState.selectedJobId = null;
+    }
+    syncJobsBadgesAndTicker();
+    renderWsJobsTable();
+    showStatusBanner(`Cleared ${Number(data.removed || 0)} finished job(s).`);
+  } catch (err) {
+    showStatusBanner(`Clear failed: ${err.message}`, true);
+  }
+}
+
+function upsertLocalStudioJob(job) {
+  if (!job || !job.job_id) return null;
+  const list = Array.isArray(wsState.jobs) ? [...wsState.jobs] : [];
+  const idx = list.findIndex((x) => x.job_id === job.job_id);
+  const prevStatus = idx >= 0 ? String(list[idx].status || "").toUpperCase() : "";
+  if (idx >= 0) {
+    list[idx] = job;
+  } else {
+    list.unshift(job);
+  }
+  list.sort((a, b) => String(b.started_at || b.created_at || "").localeCompare(String(a.started_at || a.created_at || "")));
+  wsState.jobs = list.slice(0, 100);
+  return prevStatus;
+}
+
+function connectStudioJobsStream() {
+  if (typeof EventSource === "undefined") return;
+  if (wsState.jobsEventSource) {
+    try {
+      wsState.jobsEventSource.close();
+    } catch (_) {}
+  }
+  let onceMode = false;
+  try {
+    onceMode = new URLSearchParams(window.location.search).get("once") === "1";
+  } catch (_) {}
+  const es = new EventSource(onceMode ? "/api/studio/jobs/stream?once=true" : "/api/studio/jobs/stream");
+  wsState.jobsEventSource = es;
+
+  if (onceMode) {
+    es.onerror = () => {
+      try {
+        es.close();
+      } catch (_) {}
+    };
+  }
+
+  es.onmessage = async (msg) => {
+    if (!msg || !msg.data) return;
+    let payload = null;
+    try {
+      payload = JSON.parse(msg.data);
+    } catch (_) {
+      return;
+    }
+    if (!payload) return;
+    if (payload.type === "snapshot") {
+      wsState.jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+      wsState.jobsCounts = payload.counts || {};
+      syncJobsBadgesAndTicker();
+      if (wsState.activeWorkspace === "workspace-jobs") {
+        renderWsJobsTable();
+      }
+      if (onceMode) {
+        try {
+          es.close();
+        } catch (_) {}
+      }
+      return;
+    }
+    if (payload.type === "job_updated" && payload.job) {
+      const job = payload.job;
+      const prevStatus = upsertLocalStudioJob(job);
+      if (payload.counts) wsState.jobsCounts = payload.counts;
+      syncJobsBadgesAndTicker();
+      if (wsState.activeWorkspace === "workspace-jobs") {
+        renderWsJobsTable();
+      }
+      if (wsState.selectedJobId === job.job_id && wsState.activeWorkspace === "workspace-jobs") {
+        inspectWsJob(job, true);
+      }
+      const nowStatus = String(job.status || "").toUpperCase();
+      if (prevStatus !== "SUCCEEDED" && nowStatus === "SUCCEEDED") {
+        if (job.job_type === "alpha_evolve" || job.job_type === "eval_benchmark") {
+          await refreshEvolveArchive();
+          if (job.job_type === "alpha_evolve") {
+            showStatusBanner(`✓ ${job.title || "Auto-tune"} completed (${job.result_summary || ""}).`);
+          }
+        } else if (job.job_type === "dream_compaction" || job.job_type === "memory_transform") {
+          await loadWsMemoryTree();
+          await loadSyncStatus();
+        } else if (job.job_type === "session_ingest") {
+          await loadWsSessions();
+        }
+      }
+    }
+  };
 }
 
 

@@ -4,6 +4,8 @@ import datetime
 import json
 import logging
 import re
+import threading
+import time
 import uuid
 from typing import Any, Dict, List, Optional
 from src.common.config import get_config
@@ -1836,8 +1838,8 @@ class SpannerPreferenceClient:
                 "precedence_rank": 3,
                 "write_mode": "READ_ONLY_LOCKED",
                 "owner": "service-account:workcell-agent@your-gcp-project-id.iam.gserviceaccount.com",
-                "identity_binding": "model:gemini-3.8-pro-preview | runtime:cloud-run-workcell",
-                "binding": "model:gemini-3.8-pro-preview | runtime:cloud-run-workcell",
+                "identity_binding": "model:gemini-4-neon | runtime:cloud-run-workcell",
+                "binding": "model:gemini-4-neon | runtime:cloud-run-workcell",
                 "description": "Real-time robotics supervisor agent monitoring J1-J6 joint torque and triggering Cascade Andon Halts.",
                 "updated_at": now_iso,
             },
@@ -1855,8 +1857,8 @@ class SpannerPreferenceClient:
                 "precedence_rank": 3,
                 "write_mode": "WRITE_THROUGH_LIVE",
                 "owner": "service-account:reviewer-agent@your-gcp-project-id.iam.gserviceaccount.com",
-                "identity_binding": "model:gemini-3.8-flash-preview | skill:subagent-delegated-execution",
-                "binding": "model:gemini-3.8-flash-preview | skill:subagent-delegated-execution",
+                "identity_binding": "model:gemini-4-hydrogen | skill:subagent-delegated-execution",
+                "binding": "model:gemini-4-hydrogen | skill:subagent-delegated-execution",
                 "description": "Paired rater subagent verifying live Cloud Run HTTP probes, DESIGN.md compliance, and zero-mock adherence.",
                 "updated_at": now_iso,
             },
@@ -2073,8 +2075,8 @@ class SpannerPreferenceClient:
                 "id": "ext_dev_corrections",
                 "extractor_id": "ext_dev_corrections",
                 "name": "Developer Correction & Tooling Preference Extractor",
-                "model": "gemini-3.8-flash-preview",
-                "model_id": "gemini-3.8-flash-preview",
+                "model": "gemini-4-hydrogen",
+                "model_id": "gemini-4-hydrogen",
                 "location": "global",
                 "source_stream": "MCP_LIVE_STREAM",
                 "subscribedStreams": ["MCP_LIVE_STREAM", "BIGQUERY_REALTIME_SINK"],
@@ -2095,7 +2097,7 @@ class SpannerPreferenceClient:
                     "owner": "developer@example.com",
                 },
                 "systemPrompt": (
-                    "You are the Developer Correction Memory Extractor running on Vertex AI (gemini-3.8-flash-preview).\n"
+                    "You are the Developer Correction Memory Extractor running on Vertex AI (gemini-4-hydrogen).\n"
                     "Inspect the ingested session turns between USER and AGENT.\n"
                     "1. Detect any explicit developer correction (e.g., \"Stop! Never use X, always use Y\").\n"
                     "2. Formulate a concise, atomic crystallized belief (< 60 tokens).\n"
@@ -2108,8 +2110,8 @@ class SpannerPreferenceClient:
                 "id": "ext_arch_invariants",
                 "extractor_id": "ext_arch_invariants",
                 "name": "Architectural & Cloud Run Invariant Synthesizer",
-                "model": "gemini-3.8-pro-preview",
-                "model_id": "gemini-3.8-pro-preview",
+                "model": "gemini-4-neon",
+                "model_id": "gemini-4-neon",
                 "location": "global",
                 "source_stream": "MCP_LIVE_STREAM",
                 "subscribedStreams": ["MCP_LIVE_STREAM", "BIGQUERY_REALTIME_SINK"],
@@ -2130,7 +2132,7 @@ class SpannerPreferenceClient:
                     "owner": "platform-leads@example.com",
                 },
                 "systemPrompt": (
-                    "You are the Organizational Invariant Extractor (gemini-3.8-pro-preview).\n"
+                    "You are the Organizational Invariant Extractor (gemini-4-neon).\n"
                     "Identify non-negotiable infrastructure, authentication (ADC), hardware (Apple Silicon), and Cloud Run deployment verification rules.\n"
                     "Route verified invariants to /org/acme-org/<category>/<name>.mem as staged commits."
                 ),
@@ -2709,6 +2711,9 @@ class SpannerPreferenceClient:
             },
         }
 
+        self._studio_jobs: Dict[str, Dict[str, Any]] = {}
+        self._studio_jobs_last_persisted: Dict[str, float] = {}
+        self._studio_jobs_lock = threading.RLock()
         self._studio_defaults_ready = True
 
     def _persist_studio_meta_to_spanner(self, namespace: str, item_id: str, payload: Dict[str, Any]) -> None:
@@ -2786,6 +2791,7 @@ class SpannerPreferenceClient:
             self._load_studio_meta_from_spanner("staged_commits", self._studio_staged_commits)
             self._load_studio_meta_from_spanner("audit_ledger", self._studio_audit_ledger)
             self._load_studio_meta_from_spanner("rbac_policies", self._studio_rbac_policies)
+            self._load_studio_meta_from_spanner("jobs", self._studio_jobs)
             self._studio_spanner_hydrated = True
         return {
             "status": "READY",
@@ -2800,6 +2806,7 @@ class SpannerPreferenceClient:
                 "extractor_jobs",
                 "memory_audit_ledger",
                 "rbac_policies",
+                "studio_jobs",
             ],
         }
 
@@ -3392,7 +3399,7 @@ class SpannerPreferenceClient:
             ext_id = f"ext_{slug}"
         existing = self._studio_extractors.get(ext_id, {})
 
-        model_id = str(payload.get("model_id") or payload.get("model") or existing.get("model") or "gemini-3.8-flash-preview")
+        model_id = str(payload.get("model_id") or payload.get("model") or existing.get("model") or "gemini-4-hydrogen")
         hp = payload.get("humanParams") or payload.get("human_params")
         if isinstance(hp, str):
             try:
@@ -3499,15 +3506,15 @@ class SpannerPreferenceClient:
             },
             {
                 "id": "bk_vertex_models",
-                "name": "Vertex AI Gemini 3.8 & Gemma 4 Inference Runtime",
+                "name": "Vertex AI Gemini 4 (Hydrogen & Neon) & Gemma 4 Inference Runtime",
                 "type": "VERTEX_LLM",
                 "projectId": proj_id,
                 "region": "global / us-central1",
-                "resourceUri": f"projects/{proj_id}/locations/global/publishers/google/models/gemini-3.8-flash-preview",
+                "resourceUri": f"projects/{proj_id}/locations/global/publishers/google/models/gemini-4-hydrogen",
                 "authMode": "Google Cloud ADC (Zero API Keys Required)",
-                "tablesOrModels": "gemini-3.8-pro-preview, gemini-3.8-flash-preview, gemma-4-27b-it",
+                "tablesOrModels": "gemini-4-hydrogen, gemini-4-neon, gemma-4-27b-it",
                 "latencyP95": "410 ms",
-                "quorumOrConfig": "LOCATION=global for Gemini 3.8 · Dedicated L4 GPU Pool for Gemma 4",
+                "quorumOrConfig": "LOCATION=global for Gemini 4 (Hydrogen fast loop, Neon deep synthesis) · Dedicated L4 GPU Pool for Gemma 4",
                 "teardownPolicy": "Zero Local Weight Loading on macOS Host · Auto-Scale to 0 Idle",
                 "status": "HEALTHY",
                 "notes": "Executes AI Session Summaries, Extractor Subagent jobs, and Contradiction/Helpfulness Evaluators without local Apple Silicon memory pressure.",
@@ -3757,6 +3764,131 @@ class SpannerPreferenceClient:
                 else f"DENIED by Policy '{matched_pol['name']}' ({matched_pol['treeCondition']}): principal '{norm_princ}' is not authorized for '{norm_act}'."
             ),
         }
+
+    # -------------------------------------------------------------------------
+    # Studio Background & Inline Jobs Persistence (`studio::jobs`)
+    # -------------------------------------------------------------------------
+    def _jobs_lock(self) -> threading.RLock:
+        lock = getattr(self, "_studio_jobs_lock", None)
+        if lock is None:
+            lock = threading.RLock()
+            self._studio_jobs_lock = lock
+        return lock
+
+    def list_studio_jobs(
+        self,
+        category: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """List Studio background and inline jobs ordered newest-first."""
+        self.ensure_studio_schema()
+        cat_filter = (category or "").strip().lower()
+        status_filter = (status or "").strip().upper()
+        with self._jobs_lock():
+            rows = [
+                dict(row)
+                for row in self._studio_jobs.values()
+                if isinstance(row, dict) and not row.get("_deleted")
+            ]
+        if cat_filter and cat_filter != "all":
+            rows = [r for r in rows if str(r.get("category") or "").lower() == cat_filter]
+        if status_filter and status_filter != "ALL":
+            rows = [r for r in rows if str(r.get("status") or "").upper() == status_filter]
+        rows.sort(
+            key=lambda r: str(r.get("started_at") or r.get("created_at") or ""),
+            reverse=True,
+        )
+        return rows[: max(1, int(limit or 50))]
+
+    def get_studio_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Return a single Studio job record by ID."""
+        self.ensure_studio_schema()
+        with self._jobs_lock():
+            row = self._studio_jobs.get(job_id)
+            if isinstance(row, dict) and not row.get("_deleted"):
+                return dict(row)
+        return None
+
+    def stage_studio_job_in_memory(
+        self, record: Dict[str, Any], force_persist: bool = False
+    ) -> tuple[Dict[str, Any], bool]:
+        """Store or update a Studio job record in memory and return (stored_copy, should_persist)."""
+        self.ensure_studio_schema()
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        stored = dict(record)
+        job_id = str(stored.get("job_id") or "").strip()
+        if not job_id:
+            job_id = f"job-{uuid.uuid4().hex[:8]}"
+            stored["job_id"] = job_id
+        stored.setdefault("created_at", now_iso)
+        stored["updated_at"] = now_iso
+
+        steps = stored.get("steps")
+        if isinstance(steps, list) and len(steps) > 50:
+            stored["steps"] = steps[-50:]
+
+        raw_params = stored.get("raw_params")
+        if isinstance(raw_params, dict):
+            try:
+                if len(json.dumps(raw_params)) > 32768:
+                    stored["raw_params"] = dict(stored.get("input_params") or {})
+            except Exception:
+                stored["raw_params"] = dict(stored.get("input_params") or {})
+
+        preview = stored.get("output_preview")
+        if isinstance(preview, dict):
+            try:
+                encoded = json.dumps(preview)
+                if len(encoded) > 12000:
+                    stored["output_preview"] = {"truncated": True, "summary": stored.get("result_summary", "")}
+            except Exception:
+                stored["output_preview"] = {"summary": str(stored.get("result_summary", ""))}
+
+        status_upper = str(stored.get("status") or "QUEUED").upper()
+        is_terminal = status_upper in ("SUCCEEDED", "FAILED", "CANCELED")
+        should_persist = force_persist or is_terminal
+
+        with self._jobs_lock():
+            prev = self._studio_jobs.get(job_id)
+            prev_status = str((prev or {}).get("status") or "").upper()
+            if prev_status != status_upper:
+                should_persist = True
+            now_mono = time.monotonic()
+            last_p = self._studio_jobs_last_persisted.get(job_id, 0.0)
+            if not should_persist and (now_mono - last_p) >= 0.5:
+                should_persist = True
+            self._studio_jobs[job_id] = stored
+            if should_persist:
+                self._studio_jobs_last_persisted[job_id] = now_mono
+
+        return dict(stored), should_persist
+
+    def flush_studio_job_to_spanner(self, job_id: str, record: Dict[str, Any]) -> None:
+        """Persist a staged Studio job record to Cloud Spanner outside runner locks."""
+        self._persist_studio_meta_to_spanner("jobs", job_id, record)
+
+    def upsert_studio_job(self, record: Dict[str, Any], force_persist: bool = False) -> Dict[str, Any]:
+        """Store or update a Studio job record in memory and Cloud Spanner."""
+        stored, should_persist = self.stage_studio_job_in_memory(record, force_persist=force_persist)
+        if should_persist:
+            self.flush_studio_job_to_spanner(stored["job_id"], stored)
+        return stored
+
+    def clear_finished_studio_jobs(self) -> int:
+        """Delete terminal (SUCCEEDED/FAILED/CANCELED) job records while keeping active jobs."""
+        self.ensure_studio_schema()
+        terminal = {"SUCCEEDED", "FAILED", "CANCELED"}
+        removed_ids: List[str] = []
+        with self._jobs_lock():
+            for job_id, row in list(self._studio_jobs.items()):
+                if str((row or {}).get("status") or "").upper() in terminal:
+                    removed_ids.append(job_id)
+                    self._studio_jobs.pop(job_id, None)
+                    self._studio_jobs_last_persisted.pop(job_id, None)
+        for job_id in removed_ids:
+            self._persist_studio_meta_to_spanner("jobs", job_id, {"_deleted": True})
+        return len(removed_ids)
 
 
 SpannerMemoryClient = SpannerPreferenceClient

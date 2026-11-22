@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     <title>Electric Sheep • Control Center Login</title>
+    <script>
+        try { if (localStorage.getItem("sheep-theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (_) {}
+    </script>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=3.9">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <style>
@@ -17,9 +21,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--bg-canvas, #f6f5f0);
-            font-family: var(--font-sans, 'IBM Plex Sans', sans-serif);
-            color: var(--text-primary, #14171c);
+            background: var(--bg-canvas, #f2f5f9);
+            font-family: var(--font-sans, 'Plus Jakarta Sans', sans-serif);
+            color: var(--text-primary, #0f172a);
         }
 
         .login-card {
@@ -32,20 +36,21 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            border: 1px solid var(--border-subtle, #dad6ca);
+            border: 1px solid var(--border-subtle, #d8e1ee);
+            box-shadow: var(--shadow-card);
         }
 
         .login-logo {
             width: 44px;
             height: 44px;
             border-radius: 10px;
-            background: #121720;
-            border: 1px solid #2c374b;
+            background: #0f172a;
+            border: 1px solid #1e2b42;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #eef1f6;
-            --icon-accent: #be94ff;
+            color: #f1f5f9;
+            --icon-accent: #22d3ee;
             margin-bottom: 16px;
         }
 
@@ -295,7 +300,12 @@
                     }
                     return response.json();
                 })
-                .then(() => {
+                .then(data => {
+                    try {
+                        if (data && data.email) {
+                            sessionStorage.setItem("electric_sheep_user_email", data.email);
+                        }
+                    } catch (_) {}
                     window.location.href = "/";
                 })
                 .catch(error => {
@@ -320,7 +330,12 @@
                 }
                 return response.json();
             })
-            .then(() => {
+            .then(data => {
+                try {
+                    if (data && data.email) {
+                        sessionStorage.setItem("electric_sheep_user_email", data.email);
+                    }
+                } catch (_) {}
                 window.location.href = "/";
             })
             .catch(error => {

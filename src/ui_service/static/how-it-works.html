@@ -3,13 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>Guide — Electric Sheep Architecture</title>
   <meta name="description" content="Architecture guide for Google ADK 2.0 multi-agent memory consolidation and recall.">
+  <script>
+    try { if (localStorage.getItem("sheep-theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (_) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="style.css?v=2.5">
+  <link rel="stylesheet" href="style.css?v=3.9">
   <script type="module">
     if (!("popover" in HTMLElement.prototype)) {
       import("https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover.min.js");
@@ -34,8 +38,11 @@
         </div>
         <nav class="app-nav" aria-label="Main Navigation">
           <a href="index.html" class="nav-pill app-nav-link"><span>Chat</span></a>
-          <a href="studio.html" class="nav-pill app-nav-link"><span>Memory</span></a>
-          <a href="how-it-works.html" class="nav-pill app-nav-link active"><span>Guide</span></a>
+          <a href="studio.html#sessions" class="nav-pill app-nav-link"><span>Sessions</span></a>
+          <a href="studio.html" class="nav-pill app-nav-link"><span>Memories</span></a>
+          <a href="studio.html#optimize" class="nav-pill app-nav-link"><span>Optimize</span></a>
+          <a href="studio.html#jobs" class="nav-pill app-nav-link"><span>Jobs</span></a>
+          <a href="studio.html#settings" class="nav-pill app-nav-link"><span>Settings</span></a>
         </nav>
       </div>
 
@@ -43,18 +50,15 @@
         <div class="topbar-controls">
           <button type="button" popovertarget="viewMenuPopover" class="btn btn-secondary btn-sm">View</button>
           <div id="viewMenuPopover" popover="auto" class="view-menu-popover">
+            <a href="how-it-works.html" class="view-menu-item active" aria-current="page">Architecture guide</a>
             <button type="button" class="view-menu-item" data-toggle-theme>Dark theme</button>
             <button type="button" id="githubPopoutBtn" class="view-menu-item">GitHub</button>
-            <div class="info-tooltip-container">
-              <button type="button" id="sessionInfoBtn" class="view-menu-item" aria-describedby="sessionInfoTooltip">Architecture info</button>
-              <div id="sessionInfoTooltip" class="info-tooltip" role="tooltip">
-                <div class="info-tooltip-body">
-                  <div class="info-tooltip-item">
-                    <p>Read-only guide for the ADK 2.0 consolidation pipeline.</p>
-                  </div>
-                </div>
+            <details class="view-menu-disclosure">
+              <summary id="sessionInfoBtn" class="view-menu-item">Architecture info</summary>
+              <div id="sessionInfoTooltip" class="view-menu-note">
+                <p>Read-only guide for the offline memory consolidation and fast recall pipeline.</p>
               </div>
-            </div>
+            </details>
             <div class="view-menu-divider"></div>
             <a href="/logout" class="signout-btn">Sign out</a>
           </div>
@@ -122,7 +126,7 @@
           <div class="hero-content">
             <h2>Do AI Agents Dream of Binary Sheep?</h2>
             <p class="hero-subtitle">
-              Multi-agent memory architecture built on Google ADK 2.0 and Gemini 3.8 Flash: append-only session logs distill offline into indexed preferences for sub-10ms recall.
+              Multi-agent memory architecture built on Google ADK 2.0, Gemini 4 Hydrogen (low-latency waking capture &amp; recall), and Gemini 4 Neon (deep offline belief synthesis &amp; AlphaEvolve retrieval tuning).
             </p>
           </div>
         </div>
@@ -142,7 +146,7 @@
             <button type="button" class="arch-stage-box" data-arch-step="2" role="tab" aria-selected="false">
               <div class="arch-stage-top"><span class="arch-stage-badge">Step 2</span></div>
               <div class="arch-stage-title">Belief Synthesis</div>
-              <div class="arch-stage-tech">Gemini 3.8 Flash</div>
+              <div class="arch-stage-tech">Gemini 4 Neon</div>
             </button>
 
             <button type="button" class="arch-stage-box" data-arch-step="3" role="tab" aria-selected="false">
@@ -200,7 +204,7 @@ CLUSTER BY user_id, session_id;</pre>
             <button type="button" class="flow-node-btn active" data-flow-stage="1" role="tab" aria-selected="true">
               <span class="flow-node-num">1</span>
               <span class="flow-node-title">Interview Agent</span>
-              <span class="flow-node-sub">ADK 2.0</span>
+              <span class="flow-node-sub">Gemini 4 Hydrogen</span>
             </button>
             <button type="button" class="flow-node-btn" data-flow-stage="2" role="tab" aria-selected="false">
               <span class="flow-node-num">2</span>
@@ -210,7 +214,7 @@ CLUSTER BY user_id, session_id;</pre>
             <button type="button" class="flow-node-btn" data-flow-stage="3" role="tab" aria-selected="false">
               <span class="flow-node-num">3</span>
               <span class="flow-node-title">Synthesis</span>
-              <span class="flow-node-sub">Gemini 3.8 Flash</span>
+              <span class="flow-node-sub">Gemini 4 Neon</span>
             </button>
             <button type="button" class="flow-node-btn" data-flow-stage="4" role="tab" aria-selected="false">
               <span class="flow-node-num">4</span>
@@ -248,6 +252,12 @@ CLUSTER BY user_id, session_id;</pre>
             <h3>Dual Storage Tiers</h3>
             <p>
               BigQuery handles high-throughput event ingestion while Cloud Spanner serves sub-10ms indexed preference lookups.
+            </p>
+          </div>
+          <div class="philosophy-card">
+            <h3>AlphaEvolve Retrieval Tuning</h3>
+            <p>
+              In <strong>Memory → Benchmarks → Auto-tune</strong>, AlphaEvolve uses <strong>Gemini 4 Neon</strong> to mutate embedding size (128d–768d), cosine thresholds, confidence gates, and prompt formats against failed eval cases—scoring measured token savings against recall accuracy and org guardrails on the live eval suite.
             </p>
           </div>
         </div>
@@ -372,7 +382,7 @@ def record_user_answer(user_id: str, question: str, answer: str) -&gt; str:
 
 agent = Agent(
     name="InterviewAgent",
-    model=get_config().model_name,  # gemini-3.8-flash
+    model=get_config().model_name,  # gemini-4-hydrogen
     tools=[record_user_answer],
 )</code></pre>
             </div>
@@ -402,7 +412,7 @@ agent = Agent(
     def sync_to_spanner(self, user_id: str, session_id: str) -&gt; dict:
         logs = self.telemetry_sink.get_session_logs(session_id)
         response = self.genai_client.models.generate_content(
-            model=get_config().model_name,  # gemini-3.8-flash
+            model=get_config().reasoning_model_name,  # gemini-4-neon
             contents=f"Extract structured beliefs:\n{logs}",
         )
         summary = self._parse_json(response.text)
@@ -472,6 +482,6 @@ async def query_preference_agent(request: ChatRequest):
     </div>
   </dialog>
 
-  <script src="how-it-works.js?v=2.5"></script>
+  <script src="how-it-works.js?v=3.0"></script>
 </body>
 </html>

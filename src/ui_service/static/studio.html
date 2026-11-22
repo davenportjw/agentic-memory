@@ -3,13 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>Electric Sheep • Memory</title>
   <meta name="description" content="Inspect session logs, organize scoped memories, benchmark recall quality vs. token cost, and tune retrieval settings.">
+  <script>
+    try { if (localStorage.getItem("sheep-theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (_) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="style.css?v=2.5">
+  <link rel="stylesheet" href="style.css?v=3.9">
   <script type="module">
     if (!("popover" in HTMLElement.prototype)) {
       import("https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover.min.js");
@@ -33,41 +37,81 @@
           </span>
           <span class="brand-name">Electric Sheep</span>
         </div>
-        <nav class="app-nav" aria-label="Main Navigation">
+        <nav class="app-nav" aria-label="Main Navigation" id="studio10WorkspaceNav">
           <a href="index.html" class="nav-pill app-nav-link"><span>Chat</span></a>
-          <a href="studio.html" class="nav-pill app-nav-link active"><span>Memory</span></a>
-          <a href="how-it-works.html" class="nav-pill app-nav-link"><span>Guide</span></a>
+          <a href="studio.html#sessions" class="nav-pill app-nav-link studio-top-tab" data-top-tab="sessions" data-workspace="workspace-sessions">
+            <span>Sessions</span>
+            <span class="ws-nav-badge" id="wsBadgeSessions">0</span>
+          </a>
+          <a href="studio.html" class="nav-pill app-nav-link studio-top-tab active" data-top-tab="memories" data-workspace="workspace-tree" aria-current="page">
+            <span>Memories</span>
+            <span class="ws-nav-badge ws-nav-badge-indigo" id="wsBadgeTreeStaged">0 proposals</span>
+          </a>
+          <a href="studio.html#optimize" class="nav-pill app-nav-link studio-top-tab" data-top-tab="optimize" data-workspace="workspace-eval">
+            <span>Optimize</span>
+          </a>
+          <a href="studio.html#jobs" class="nav-pill app-nav-link studio-top-tab" data-top-tab="jobs" data-workspace="workspace-jobs">
+            <span>Jobs</span>
+            <span class="ws-nav-badge ws-nav-badge-indigo hidden" id="wsBadgeJobsRunning">0 running</span>
+          </a>
+          <a href="studio.html#settings" class="nav-pill app-nav-link studio-top-tab" data-top-tab="settings" data-workspace="workspace-entities">
+            <span>Settings</span>
+          </a>
         </nav>
       </div>
 
       <div class="session-info">
         <div class="topbar-controls">
+          <button type="button" id="topScopeTriggerBtn" popovertarget="scopeMenuPopover" class="btn btn-secondary btn-sm top-scope-btn" title="Choose active team, agent, or user context">
+            <span id="topScopeTriggerLabel">Context</span>
+            <span class="dropdown-caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="scopeMenuPopover" popover="auto" class="view-menu-popover scope-menu-popover">
+            <div class="scope-popover-header">
+              <span class="rail-section-title">Working as</span>
+              <button type="button" id="contextManageScopesBtn" class="inline-preset-btn text-xs">Manage</button>
+            </div>
+            <div class="context-picker-field">
+              <span class="context-picker-label">Account</span>
+              <div class="context-user-readout" id="activeSignedInUserBadge">Signed-in user</div>
+            </div>
+            <div class="context-picker-field">
+              <label class="context-picker-label" for="teamIdInput">Team</label>
+              <select id="teamIdInput" class="studio-select studio-select-sm w-full">
+                <option value="">All teams</option>
+              </select>
+            </div>
+            <div class="context-picker-field">
+              <label class="context-picker-label" for="agentIdInput">Agent</label>
+              <select id="agentIdInput" class="studio-select studio-select-sm w-full">
+                <option value="">All agents</option>
+              </select>
+            </div>
+            <div class="view-menu-divider"></div>
+            <details class="rail-sub-disclosure" id="scopeIdsDisclosure">
+              <summary class="rail-sub-disclosure-summary">Test as another user</summary>
+              <div class="context-picker-field mt-4">
+                <label class="context-picker-label" for="userIdInput">User override</label>
+                <input type="text" id="userIdInput" value="" placeholder="e.g. user:developer" class="studio-input studio-input-sm w-full font-mono">
+              </div>
+            </details>
+          </div>
           <span class="quiet-tnum-status" id="cmdBarStagedSyncBadge">0 staged · 0 synced</span>
           <button type="button" popovertarget="viewMenuPopover" class="btn btn-secondary btn-sm">View</button>
           <div id="viewMenuPopover" popover="auto" class="view-menu-popover">
             <button type="button" id="toggleInspectorBtn" class="view-menu-item">Details</button>
-            <button type="button" id="openStudioGuideBtn" class="view-menu-item">Walkthrough</button>
+            <button type="button" id="openStudioGuideBtn" class="view-menu-item">Quick help</button>
+            <a href="how-it-works.html" class="view-menu-item">Architecture guide</a>
             <button type="button" class="view-menu-item" data-toggle-theme>Dark theme</button>
             <button type="button" id="githubPopoutBtn" class="view-menu-item">GitHub</button>
-            <div class="info-tooltip-container">
-              <button type="button" id="sessionInfoBtn" class="view-menu-item" aria-describedby="sessionInfoTooltip">Scope info</button>
-              <div id="sessionInfoTooltip" class="info-tooltip hidden" role="tooltip">
-                <div class="info-tooltip-body">
-                  <div class="info-tooltip-item">
-                    <span class="info-tooltip-badge">ORG</span>
-                    <p>Organization-wide guardrails (<code>ORG &gt; TEAM &gt; AGENT &gt; USER</code>).</p>
-                  </div>
-                  <div class="info-tooltip-item">
-                    <span class="info-tooltip-badge">TEAM &amp; AGENT</span>
-                    <p>Shared team rules and agent formatting conventions.</p>
-                  </div>
-                  <div class="info-tooltip-item">
-                    <span class="info-tooltip-badge">USER</span>
-                    <p>Personal preferences (<code>USER &gt; TEAM &gt; ORG</code>).</p>
-                  </div>
-                </div>
+            <details class="view-menu-disclosure">
+              <summary id="sessionInfoBtn" class="view-menu-item">Scope info</summary>
+              <div id="sessionInfoTooltip" class="view-menu-note">
+                <p><strong>ORG:</strong> Organization-wide guardrails (<code>ORG &gt; TEAM &gt; AGENT &gt; USER</code>).</p>
+                <p><strong>TEAM &amp; AGENT:</strong> Shared team rules and agent formatting conventions.</p>
+                <p><strong>USER:</strong> Personal preferences (<code>USER &gt; TEAM &gt; ORG</code>).</p>
               </div>
-            </div>
+            </details>
             <div class="view-menu-divider"></div>
             <a href="/logout" class="signout-btn">Sign out</a>
           </div>
@@ -76,15 +120,15 @@
     </div>
   </header>
 
-  <!-- 3-Pane Studio Workbench Layout (Left Scope/Data/Memory Rail + Center Active Workbench + Right Run Settings/Inspector/Guide Rail) -->
-  <main class="app-body-layout" data-studio-layout="studio-workbench-layout" id="appBodyLayout">
+  <!-- Context-Adaptive Workbench Layout (Per-Tab Tailored Panes: Memories Explorer | Sessions Sources | Full-Width Optimize | Settings Menu) -->
+  <main class="app-body-layout" data-studio-layout="studio-workbench-layout" data-active-tab="memories" id="appBodyLayout">
     <!-- ====================================================================
-         PANE 1: Left Scope Pills, File/Data System & Memory Hierarchy Explorer
+         PANE 1: Context-Specific Left Pane (Only shows controls for the active tab; hidden on Optimize)
          ==================================================================== -->
-    <aside class="left-nav" data-studio-rail="studio-left-rail" id="leftNavSidebar" aria-label="Memory Studio Data &amp; Scope Explorer">
+    <aside class="left-nav" data-studio-rail="studio-left-rail" id="leftNavSidebar" aria-label="Workspace Context Navigation">
       <div class="left-nav-header">
         <div class="left-nav-header-row">
-          <span class="nav-title">Memory</span>
+          <span class="nav-title" id="leftRailContextTitle">Explorer</span>
           <button type="button" id="leftNavToggleBtn" class="left-nav-collapse-btn" title="Collapse / Expand Sidebar" aria-label="Toggle Left Navigation">
             <svg class="collapse-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="10 13 5 8 10 3"></polyline>
@@ -93,152 +137,17 @@
         </div>
       </div>
 
-      <!-- SECTION 0: Studio Workspace Navigation Selector -->
-      <nav class="studio-rail-section studio-workspace-nav-section" id="studio10WorkspaceNav" aria-label="Memory Navigation">
-        <div class="studio-rail-section-header">
-          <span class="rail-section-title">CORE WORKFLOW</span>
-        </div>
-        <div class="studio-workspace-nav-group" role="tablist" aria-label="Core Studio Pipeline Workspaces">
-          <button type="button" class="left-nav-item studio-workspace-nav-btn active" data-workspace="workspace-sessions" role="tab" aria-selected="true">
-            <span class="nav-item-title">Session Logs</span>
-            <span class="ws-nav-badge" id="wsBadgeSessions">3</span>
-          </button>
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-tree" role="tab" aria-selected="false">
-            <span class="nav-item-title">Memory Tree</span>
-            <span class="ws-nav-badge ws-nav-badge-indigo" id="wsBadgeTreeStaged">0 staged</span>
-          </button>
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-playground" role="tab" aria-selected="false">
-            <span class="nav-item-title">Playground</span>
-          </button>
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-eval" role="tab" aria-selected="false">
-            <span class="nav-item-title">Benchmarks</span>
-          </button>
-        </div>
-
-        <div class="studio-rail-section-header mt-8">
-          <span class="rail-section-title">ADMINISTRATION</span>
-        </div>
-        <div class="studio-workspace-nav-group" role="tablist" aria-label="Admin &amp; Control Plane Workspaces">
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-entities" role="tab" aria-selected="false">
-            <span class="nav-item-title">Scopes</span>
-          </button>
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-categories" role="tab" aria-selected="false">
-            <span class="nav-item-title">Categories</span>
-          </button>
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-ingest" role="tab" aria-selected="false">
-            <span class="nav-item-title">Data Ingest</span>
-          </button>
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-extractors" role="tab" aria-selected="false">
-            <span class="nav-item-title">Extractors</span>
-          </button>
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-backend" role="tab" aria-selected="false">
-            <span class="nav-item-title">Storage</span>
-          </button>
-          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-security" role="tab" aria-selected="false">
-            <span class="nav-item-title">Access</span>
-          </button>
-        </div>
-      </nav>
-
-      <!-- SECTION A: Left Scope Filters & Active Scope IDs -->
-      <div class="studio-rail-section" id="leftScopePillsContainer">
-        <div class="studio-rail-section-header">
-          <span class="rail-section-title">Scopes</span>
-          <span class="text-xs font-mono text-muted" id="railMemoryCountText">0 mem · 0 evals</span>
-        </div>
-        <div class="left-scope-pills-row" role="group" aria-label="Scope Filter">
-          <button type="button" class="left-scope-pill active" data-scope-filter="ALL">
-            All <span class="scope-count-pill" id="leftCountScopeAll">0</span>
-          </button>
-          <button type="button" class="left-scope-pill" data-scope-filter="ORG">
-            Org <span class="scope-count-pill" id="leftCountScopeOrg">0</span>
-          </button>
-          <button type="button" class="left-scope-pill" data-scope-filter="TEAM">
-            Team <span class="scope-count-pill" id="leftCountScopeTeam">0</span>
-          </button>
-          <button type="button" class="left-scope-pill" data-scope-filter="AGENT">
-            Agent <span class="scope-count-pill" id="leftCountScopeAgent">0</span>
-          </button>
-          <button type="button" class="left-scope-pill" data-scope-filter="USER">
-            User <span class="scope-count-pill" id="leftCountScopeUser">0</span>
-          </button>
-        </div>
-
-        <div class="left-scope-context-inputs">
-          <div class="left-scope-id-pill">
-            <label for="userIdInput">User</label>
-            <input type="text" id="userIdInput" value="" placeholder="Signed-in user" class="input-inline" title="User Scope ID">
-          </div>
-          <div class="left-scope-id-pill">
-            <label for="teamIdInput">Team</label>
-            <input type="text" id="teamIdInput" value="" placeholder="Optional team" class="input-inline" title="Team Scope ID">
-          </div>
-          <div class="left-scope-id-pill">
-            <label for="agentIdInput">Agent</label>
-            <input type="text" id="agentIdInput" value="" placeholder="Optional agent" class="input-inline" title="Agent Scope ID">
-          </div>
-        </div>
-      </div>
-
-      <!-- SECTION B: Log Sources & Portable Backups -->
-      <div class="studio-rail-section" id="studioFileDataTree">
-        <div class="studio-rail-section-header">
-          <span class="rail-section-title">Log Sources &amp; Portable Backups</span>
-          <span class="badge badge-slate">Sources</span>
-        </div>
-        <ul class="left-nav-list studio-file-tree" role="tree" aria-label="Log Sources and Portable Backups">
-          <li class="file-tree-folder" role="treeitem" aria-expanded="true">
-            <div class="file-tree-folder-label">📋 Log Sources</div>
-            <ul class="file-tree-children" role="group">
-              <li class="file-tree-item active" data-stream-source="session_transcripts" role="treeitem" tabindex="0" title="Load Session Transcript Logs">
-                <span class="file-tree-icon">📄</span>
-                <span class="file-tree-name">Session Transcripts</span>
-                <span class="file-tree-badge">JSONL</span>
-              </li>
-              <li class="file-tree-item" data-stream-source="live_chat_events" role="treeitem" tabindex="0" title="Load Live Chat Events">
-                <span class="file-tree-icon">💬</span>
-                <span class="file-tree-name">Live Chat Events</span>
-                <span class="file-tree-badge">LIVE</span>
-              </li>
-              <li class="file-tree-item" data-stream-source="activity_log" role="treeitem" tabindex="0" title="Load Recorded Activity Log">
-                <span class="file-tree-icon">📊</span>
-                <span class="file-tree-name">Activity Log</span>
-                <span class="file-tree-badge">LOG</span>
-              </li>
-              <li class="file-tree-item" data-stream-source="mcp_events" role="treeitem" tabindex="0" title="Load MCP Tool Invocation Events">
-                <span class="file-tree-icon">🔌</span>
-                <span class="file-tree-name">MCP Tool Events</span>
-                <span class="file-tree-badge">MCP</span>
-              </li>
-            </ul>
-          </li>
-          <li class="file-tree-folder" role="treeitem" aria-expanded="true">
-            <div class="file-tree-folder-label">📦 Portable Backups</div>
-            <ul class="file-tree-children" role="group">
-              <li class="file-tree-item" id="fileTreeExportPackNode" data-pack-action="export" role="treeitem" tabindex="0" title="Export Portable JSON Memory Backup">
-                <span class="file-tree-icon">⬇️</span>
-                <span class="file-tree-name">Export Memories (.json)</span>
-              </li>
-              <li class="file-tree-item" id="fileTreeImportPackNode" data-pack-action="import" role="treeitem" tabindex="0" title="Import Portable JSON Memory Backup">
-                <span class="file-tree-icon">⬆️</span>
-                <span class="file-tree-name">Import Memories (.json)</span>
-              </li>
-            </ul>
-          </li>
-        </ul>
-      </div>
-
-      <!-- SECTION C: Live Memory Hierarchy Visualization & Inline Quick-Editor -->
-      <div class="studio-rail-section studio-memory-explorer-section" id="leftMemoryExplorerSection">
-        <div class="studio-rail-section-header">
-          <span class="rail-section-title">SAVED MEMORIES</span>
+      <!-- CONTEXT A: Memories Explorer (Visible only on Memories tab) -->
+      <div class="studio-rail-section studio-memory-explorer-section rail-context-panel" id="leftMemoryExplorerSection" data-rail-context="memories">
+        <div class="studio-rail-section-header" style="margin-bottom: 6px;">
+          <span class="rail-section-title">Memory Tree</span>
           <button type="button" id="leftNewMemoryBtn" class="btn btn-secondary btn-xs" title="Author a New Scoped Memory">Add note</button>
         </div>
         <input
           type="search"
           id="leftMemoryTreeSearch"
           class="studio-input studio-input-sm w-full"
-          placeholder="Filter ORG / TEAM / AGENT / USER keys..."
+          placeholder="Filter keys..."
           aria-label="Search memory hierarchy"
         >
         <div id="leftMemoryTreeList" class="left-memory-tree-list" role="tree" aria-label="Live Scoped Memory Hierarchy">
@@ -248,7 +157,7 @@
         <!-- Inline Quick Memory Editor Drawer inside Left Rail -->
         <div id="leftMemoryQuickEditor" class="left-memory-quick-editor hidden">
           <div class="quick-editor-header">
-            <span class="quick-editor-title">Quick Memory Editor</span>
+            <span class="quick-editor-title">Edit Memory</span>
             <button type="button" id="closeLeftQuickEditorBtn" class="btn-close" aria-label="Close Quick Editor">✕</button>
           </div>
           <div class="quick-editor-body">
@@ -292,157 +201,83 @@
               </div>
             </div>
             <div class="quick-editor-actions">
-              <button type="button" id="leftQuickSaveMemoryBtn" class="btn btn-secondary btn-xs">Save note</button>
+              <button type="button" id="leftQuickSaveMemoryBtn" class="btn btn-secondary btn-xs">Stage note</button>
               <button type="button" id="leftQuickPromoteBtn" class="btn btn-secondary btn-xs" title="Promote Scope (USER → TEAM → ORG)">Promote</button>
               <button type="button" id="leftQuickDeleteBtn" class="btn btn-danger-outline btn-xs" title="Delete Memory">Delete</button>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- CONTEXT B: Log Sources (Visible only on Sessions tab) -->
+      <div class="studio-rail-section rail-context-panel hidden" id="studioFileDataTree" data-rail-context="sessions">
+        <div class="studio-rail-section-header">
+          <span class="rail-section-title">Log Sources</span>
+        </div>
+        <ul class="left-nav-list studio-file-tree" role="tree" aria-label="Session Log Sources">
+          <li class="file-tree-item active" data-stream-source="session_transcripts" role="treeitem" tabindex="0" title="Load Session Transcript Logs">
+            <span class="file-tree-name">Session Transcripts</span>
+            <span class="file-tree-badge">JSONL</span>
+          </li>
+          <li class="file-tree-item" data-stream-source="live_chat_events" role="treeitem" tabindex="0" title="Load Live Chat Events">
+            <span class="file-tree-name">Live Chat Events</span>
+            <span class="file-tree-badge">LIVE</span>
+          </li>
+          <li class="file-tree-item" data-stream-source="activity_log" role="treeitem" tabindex="0" title="Load Recorded Activity Log">
+            <span class="file-tree-name">Activity Log</span>
+            <span class="file-tree-badge">LOG</span>
+          </li>
+          <li class="file-tree-item" data-stream-source="mcp_events" role="treeitem" tabindex="0" title="Load MCP Tool Invocation Events">
+            <span class="file-tree-name">MCP Tool Events</span>
+            <span class="file-tree-badge">MCP</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- CONTEXT C: Settings Navigation (Visible only on Settings tab) -->
+      <nav class="studio-rail-section rail-context-panel hidden" id="studioAdminNavSection" data-rail-context="settings" aria-label="Settings Navigation">
+        <div class="studio-rail-section-header">
+          <span class="rail-section-title">Configuration</span>
+        </div>
+        <div class="studio-workspace-nav-group" role="tablist" aria-label="Settings Sections">
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-entities" role="tab" aria-selected="false">
+            <span class="nav-item-title">Entities</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-categories" role="tab" aria-selected="false">
+            <span class="nav-item-title">Categories</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-ingest" role="tab" aria-selected="false">
+            <span class="nav-item-title">Data Ingest</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-extractors" role="tab" aria-selected="false">
+            <span class="nav-item-title">Extractors</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-backend" role="tab" aria-selected="false">
+            <span class="nav-item-title">Storage &amp; Backups</span>
+          </button>
+          <button type="button" class="left-nav-item studio-workspace-nav-btn" data-workspace="workspace-security" role="tab" aria-selected="false">
+            <span class="nav-item-title">Access</span>
+          </button>
+        </div>
+        <div class="view-menu-divider" style="margin: 12px 0;"></div>
+        <div class="studio-rail-section-header">
+          <span class="rail-section-title">Portable Backups</span>
+        </div>
+        <ul class="left-nav-list studio-file-tree" role="tree" aria-label="Portable Backups">
+          <li class="file-tree-item" id="fileTreeExportPackNode" data-pack-action="export" role="treeitem" tabindex="0" title="Export Portable JSON Memory Backup">
+            <span class="file-tree-name">Export Memories (.json)</span>
+          </li>
+          <li class="file-tree-item" id="fileTreeImportPackNode" data-pack-action="import" role="treeitem" tabindex="0" title="Import Portable JSON Memory Backup">
+            <span class="file-tree-name">Import Memories (.json)</span>
+          </li>
+        </ul>
+      </nav>
     </aside>
 
     <!-- ====================================================================
          PANE 2: Center Studio Workspace Canvas (Viewport-Locked, Tab-Switched)
          ==================================================================== -->
     <section class="single-pane-container" data-studio-canvas="studio-workspace-canvas" aria-label="Active Studio Workspace">
-      <!-- Secondary Top Navigation Bar across the Intent Stream + Contextual Stage Commands -->
-      <header class="studio-command-bar" aria-label="Secondary Top Intent Navigation &amp; Contextual Commands">
-        <div class="toolbar-left-group">
-          <div class="toolbar-current-view">
-            <span class="quiet-tnum-status hidden" id="toolbarViewModeBadge">Tools</span>
-            <strong id="toolbarCurrentTitle" class="toolbar-view-title">Session Logs</strong>
-          </div>
-
-          <div class="studio-intent-pills">
-            <!-- Quick 4-Step Walkthrough Dropdown -->
-            <details class="toolbar-dropdown" id="workflowStageDropdown">
-              <summary class="toolbar-dropdown-btn" aria-label="Walkthrough">
-                <span>Walkthrough</span>
-                <span class="toolbar-dropdown-active-pill" id="activeStageDropdownLabel">Import Logs</span>
-                <span class="dropdown-caret" aria-hidden="true">▾</span>
-              </summary>
-              <nav id="studioIntentTopNav" class="studio-intent-top-nav toolbar-dropdown-menu" role="tablist" aria-label="Walkthrough Steps">
-                <a href="#stage-1-sandbox" class="nav-item left-nav-item studio-intent-tab active" data-stage="stage-1-sandbox" role="tab" aria-selected="true">
-                  <span class="dropdown-item-body">
-                    <span class="nav-item-title">Import Logs</span>
-                  </span>
-                </a>
-                <a href="#stage-2-scopes" class="nav-item left-nav-item studio-intent-tab" data-stage="stage-2-scopes" role="tab" aria-selected="false">
-                  <span class="dropdown-item-body">
-                    <span class="nav-item-title">Author Rules</span>
-                  </span>
-                </a>
-                <a href="#stage-3-eval" class="nav-item left-nav-item studio-intent-tab" data-stage="stage-3-eval" role="tab" aria-selected="false">
-                  <span class="dropdown-item-body">
-                    <span class="nav-item-title">Test Recall</span>
-                  </span>
-                </a>
-                <a href="#stage-4-evolve" class="nav-item left-nav-item studio-intent-tab" data-stage="stage-4-evolve" role="tab" aria-selected="false">
-                  <span class="dropdown-item-body">
-                    <span class="nav-item-title">Save &amp; Tune</span>
-                  </span>
-                </a>
-              </nav>
-            </details>
-
-            <div class="studio-active-intent-meta hidden">
-              <span class="badge badge-indigo" id="activeStudioModeLabel">Import Logs</span>
-              <span class="text-xs text-secondary" id="activeStudioIntentDesc"></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="toolbar-actions-group">
-          <!-- Contextual Quick Actions Dropdown -->
-          <details class="toolbar-dropdown" id="stageActionsDropdown">
-            <summary class="toolbar-dropdown-btn" aria-label="Actions">
-              <span>Actions</span>
-              <span class="dropdown-caret" aria-hidden="true">▾</span>
-            </summary>
-            <div class="toolbar-dropdown-menu toolbar-actions-menu">
-              <div class="studio-cmd-group" id="cmdGroupStage1" data-for-stage="stage-1-sandbox">
-                <div class="dropdown-group-label">Import Logs</div>
-                <button type="button" class="intent-pill intent-pill-primary toolbar-menu-item" id="openTrajectoryIngestCmdBtn" title="Extract candidate rules from recent sessions">
-                  <span class="menu-item-title">Extract rules</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="refreshRawStreamCmdBtn" title="Reload session logs">
-                  <span class="menu-item-title">Reload logs</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="saveIngestConfigCmdBtn" title="Save ingest configuration">
-                  <span class="menu-item-title">Save settings</span>
-                </button>
-              </div>
-
-              <div class="studio-cmd-group hidden" id="cmdGroupStage2" data-for-stage="stage-2-scopes">
-                <div class="dropdown-group-label">Author Rules</div>
-                <button type="button" class="intent-pill intent-pill-primary toolbar-menu-item" id="openMemoryDesignerCmdBtn" title="Create or edit a scoped rule">
-                  <span class="menu-item-title">Add rule</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="openCategoryCreatorCmdBtn" title="Create a memory category">
-                  <span class="menu-item-title">New category</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="intentRunConsensus" title="Promote shared rules to Team scope">
-                  <span class="menu-item-title">Promote shared</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="intentJumpToScenarioCmdBtn" title="Test how rules match prompts">
-                  <span class="menu-item-title">Test recall</span>
-                </button>
-              </div>
-
-              <div class="studio-cmd-group hidden" id="cmdGroupStage3" data-for-stage="stage-3-eval">
-                <div class="dropdown-group-label">Test Recall</div>
-                <button type="button" class="intent-pill intent-pill-primary toolbar-menu-item" id="runScenarioRetestCmdBtn" title="Test the sample prompt">
-                  <span class="menu-item-title">Test prompt</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="intentSynthesizeAdversarialCmdBtn" title="Add edge-case test prompts">
-                  <span class="menu-item-title">Add cases</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="intentRunRedTeam" title="Run recall and cost benchmark">
-                  <span class="menu-item-title">Run eval</span>
-                </button>
-              </div>
-
-              <div class="studio-cmd-group hidden" id="cmdGroupStage4" data-for-stage="stage-4-evolve">
-                <div class="dropdown-group-label">Save &amp; Tune</div>
-                <button type="button" class="intent-pill intent-pill-primary toolbar-menu-item" id="pushToSpannerCmdBtn" title="Commit staged rules to the memory store">
-                  <span class="menu-item-title">Save staged</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="openMemoryPackCmdBtn" title="Export or import JSON backup">
-                  <span class="menu-item-title">Backup JSON</span>
-                </button>
-                <button type="button" class="intent-pill toolbar-menu-item" id="intentRunAlphaEvolve" title="Tune embedding size and prompt format">
-                  <span class="menu-item-title">Tune settings</span>
-                </button>
-              </div>
-            </div>
-          </details>
-
-          <div class="studio-telemetry-readout">
-            <details class="toolbar-dropdown" id="engineConfigDropdown">
-              <summary class="toolbar-dropdown-btn toolbar-dropdown-btn-subtle" title="View active retrieval settings">
-                <span>Settings</span>
-                <span class="dropdown-caret" aria-hidden="true">▾</span>
-              </summary>
-              <div class="toolbar-dropdown-menu toolbar-dropdown-menu-right toolbar-engine-popover">
-                <div class="dropdown-group-label">Active Retrieval Settings</div>
-                <div class="engine-kv-row">
-                  <span class="engine-kv-label">Preset</span>
-                  <strong id="topbarConfigId" class="mono">standard</strong>
-                </div>
-                <div class="engine-kv-row">
-                  <span class="engine-kv-label">Embedding Size</span>
-                  <strong id="topbarConfigSlice" class="mono">768d</strong>
-                </div>
-                <div class="engine-kv-row">
-                  <span class="engine-kv-label">Prompt Injection Format</span>
-                  <strong id="topbarConfigFormat" class="mono">COMPACT_BULLET</strong>
-                </div>
-              </div>
-            </details>
-          </div>
-        </div>
-      </header>
-
       <!-- Live Action Feedback Banner -->
       <div id="zeroResetStatus" class="studio-status-strip hidden" role="status" aria-live="polite"></div>
 
@@ -450,11 +285,12 @@
            10-WORKSPACE ENTERPRISE MASTER-DETAIL WORKBENCH (PHASE 3)
            ================================================================== -->
 
-      <!-- WORKSPACE 1 of 10: Session Logs, Episodic Summaries & Memory Usefulness Attribution -->
-      <section class="studio-workspace-view active-workspace" id="workspace-sessions" role="tabpanel" aria-label="Session Logs &amp; Usefulness Attribution">
+      <!-- WORKSPACE 1: Sessions (Log in Center, Proposals & Attribution in Right Inspector) -->
+      <section class="studio-workspace-view hidden" id="workspace-sessions" role="tabpanel" aria-label="Sessions &amp; Transcripts">
         <div class="ws-master-header">
           <div>
-            <h2 class="ws-title">Session Logs &amp; Usefulness Attribution</h2>
+            <h2 class="ws-title">Sessions</h2>
+            <p class="ws-purpose">Read past conversation turns, extract memory candidates, and mark which recalled memories helped.</p>
           </div>
           <div class="ws-header-actions">
             <input type="search" id="wsSessionSearchInput" class="studio-input studio-input-sm" placeholder="Search sessions, summaries, or keys...">
@@ -473,18 +309,18 @@
           <span id="wsSessionsTotalCount">0</span> sessions · <span id="wsSessionsSummarizedCount">0</span> mined · <span id="wsSessionsTriggeredTotal">0</span> triggered · <span id="wsSessionsHelpfulRate">—</span> helpful
         </div>
 
-        <div class="studio-audit-card">
+        <div class="studio-audit-card mb-8">
           <div class="card-header-compact">
-            <span class="card-title-sm">Sessions</span>
+            <span class="card-title-sm">Recent Sessions</span>
           </div>
           <div class="raw-telemetry-table-wrap">
             <table class="math-comparison-table" id="wsSessionsTable">
               <thead>
                 <tr>
-                  <th>Session ID / Scope</th>
-                  <th>Session Title &amp; Episodic Summary</th>
+                  <th>Session / Scope</th>
+                  <th>Title &amp; Summary</th>
                   <th>Turns</th>
-                  <th>Memory Usefulness Attribution</th>
+                  <th>Memory Attribution</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
@@ -497,30 +333,60 @@
             </table>
           </div>
         </div>
+
+        <!-- Center Session Log Viewer (Selected Session Transcript; Proposals & Feedback open in Right Inspector) -->
+        <div class="studio-audit-card ws-session-log-card" id="wsSessionLogViewer">
+          <div class="card-header-compact">
+            <div>
+              <span class="card-title-sm" id="wsSessionLogTitle">Select a session to inspect its log</span>
+              <span class="text-xs font-mono text-muted ml-8" id="wsSessionLogMeta"></span>
+            </div>
+            <div class="ws-header-actions">
+              <button type="button" id="wsSessionLogExtractBtn" class="btn btn-secondary btn-xs hidden">Extract</button>
+              <a href="index.html" id="wsSessionOpenInChatBtn" class="btn btn-primary btn-xs hidden">Open in Chat</a>
+            </div>
+          </div>
+          <div id="wsSessionLogBody" class="ws-session-log-body">
+            <div class="text-xs text-muted">Click any session above to read its full transcript here and review extracted proposals on the right.</div>
+          </div>
+        </div>
       </section>
 
-      <!-- WORKSPACE 2 of 10: Memory Tree & Top Pending Staged Commits Bar -->
-      <section class="studio-workspace-view hidden" id="workspace-tree" role="tabpanel" aria-label="Memory Tree &amp; Staged Commits">
+      <!-- WORKSPACE 2 (DEFAULT ACTIVE): Memories — Proposals, Tree View, and Provenance Graph -->
+      <section class="studio-workspace-view active-workspace" id="workspace-tree" role="tabpanel" aria-label="Memories &amp; Proposals">
         <div class="ws-master-header ws-header">
           <div>
-            <h2 class="ws-title">Memory Tree &amp; Staged Commits</h2>
+            <h2 class="ws-title">Memories</h2>
+            <p class="ws-purpose">Review proposed memories, inspect the Org → Team → Agent → User hierarchy, and commit approved changes.</p>
+          </div>
+          <div class="ws-header-actions">
+            <div class="memories-view-toggle" role="group" aria-label="Memories View Mode">
+              <button type="button" id="wsMemoriesViewTreeBtn" class="memories-view-btn active" data-memories-view="tree" aria-pressed="true">Tree</button>
+              <button type="button" id="wsMemoriesViewGraphBtn" class="memories-view-btn" data-memories-view="graph" aria-pressed="false">Graph</button>
+            </div>
+            <button type="button" id="wsTreeOpenStageModalBtn" class="btn btn-secondary btn-xs">Add rule</button>
+            <button type="button" id="memoriesMoreBtn" popovertarget="memoriesMorePopover" class="btn btn-secondary btn-xs" aria-label="More memory actions" title="More actions">⋯</button>
+            <div id="memoriesMorePopover" popover="auto" class="view-menu-popover">
+              <button type="button" class="view-menu-item" id="intentRunConsensus" title="Promote shared rules to Team scope">Promote shared</button>
+              <button type="button" class="view-menu-item" id="openMemoryPackCmdBtn" title="Export or import JSON backup">Export / Import backup</button>
+              <button type="button" class="view-menu-item" id="refreshRawStreamCmdBtn" title="Reload sessions and memories">Reload all</button>
+            </div>
           </div>
         </div>
 
-        <!-- Prominent Top Pending Commits Bar (High-Visibility Git-Style Staging Bar) -->
-        <div class="tree-pending-commits-bar" id="treePendingCommitsBar" role="region" aria-label="Pending Staged Memory Commits">
+        <!-- Pending Proposals Review Bar -->
+        <div class="tree-pending-commits-bar" id="treePendingCommitsBar" role="region" aria-label="Pending Memory Proposals">
           <div class="pending-commits-left">
-            <span class="pending-commits-title">Pending Staged Commits</span>
+            <span class="pending-commits-title">Proposals</span>
             <span class="commit-status-pill commit-pill-new" id="treeStagedNewBadge">0 NEW</span>
             <span class="commit-status-pill commit-pill-modified" id="treeStagedModifiedBadge">0 MODIFIED</span>
             <span class="commit-status-pill commit-pill-conflict" id="treeStagedConflictBadge">0 CONFLICT</span>
-            <span class="text-xs text-secondary" id="treeSyncedSummaryText">• 0 Synced</span>
+            <span class="text-xs text-secondary" id="treeSyncedSummaryText">• 0 Live</span>
           </div>
           <div class="pending-commits-actions">
-            <button type="button" id="wsTreeOpenStageModalBtn" class="btn btn-secondary btn-xs">Add note</button>
             <button type="button" id="wsTreeOpenCommitsInspectorBtn" class="btn btn-secondary btn-xs">View diffs</button>
-            <button type="button" id="wsTreeDiscardAllBtn" class="btn btn-danger-outline btn-xs">Discard</button>
-            <button type="button" id="wsTreeCommitAllBtn" class="btn btn-primary btn-xs">Commit all</button>
+            <button type="button" id="wsTreeDiscardAllBtn" class="btn btn-danger-outline btn-xs">Dismiss</button>
+            <button type="button" id="wsTreeCommitAllBtn" class="btn btn-primary btn-xs">Approve all</button>
           </div>
         </div>
 
@@ -570,21 +436,42 @@
           </div>
         </div>
 
-        <!-- Filter & Search Bar for the 4-Tier Hierarchical Memory Tree -->
-        <div class="studio-audit-card">
-          <div class="card-header-compact">
-            <div class="studio-memory-search-bar">
-              <input type="search" id="wsTreeSearchInput" class="studio-input studio-input-sm" placeholder="Search ORG / TEAM / AGENT / USER nodes...">
-              <select id="wsTreeStatusFilter" class="studio-select studio-select-sm" aria-label="Filter Tree by Commit Status">
-                <option value="ALL">All Statuses (Synced + Staged)</option>
-                <option value="STAGED">Pending Staged Only (NEW / MODIFIED / CONFLICT)</option>
-                <option value="SYNCED">Committed Only (SYNCED)</option>
-              </select>
+        <!-- Filter & Search Bar for the 4-Tier Hierarchical Memory Tree & Provenance Graph -->
+        <div class="studio-audit-card" id="wsMemoriesTreeCard">
+          <div class="card-header-compact memories-toolbar-header">
+            <div class="left-scope-pills-row memories-tier-filter" id="leftScopePillsContainer" role="group" aria-label="Filter by scope level">
+              <button type="button" class="left-scope-pill active" data-scope-filter="ALL" aria-pressed="true">
+                All <span class="scope-count-pill" id="leftCountScopeAll">0</span>
+              </button>
+              <button type="button" class="left-scope-pill" data-scope-filter="ORG" aria-pressed="false">
+                Org <span class="scope-count-pill" id="leftCountScopeOrg">0</span>
+              </button>
+              <button type="button" class="left-scope-pill" data-scope-filter="TEAM" aria-pressed="false">
+                Team <span class="scope-count-pill" id="leftCountScopeTeam">0</span>
+              </button>
+              <button type="button" class="left-scope-pill" data-scope-filter="AGENT" aria-pressed="false">
+                Agent <span class="scope-count-pill" id="leftCountScopeAgent">0</span>
+              </button>
+              <button type="button" class="left-scope-pill" data-scope-filter="USER" aria-pressed="false">
+                Personal <span class="scope-count-pill" id="leftCountScopeUser">0</span>
+              </button>
             </div>
-            <button type="button" id="wsTreeRefreshBtn" class="btn btn-secondary btn-xs">Refresh</button>
+            <div class="studio-memory-search-bar memories-toolbar-controls">
+              <input type="search" id="wsTreeSearchInput" class="studio-input studio-input-sm" placeholder="Search rules or proposals...">
+              <select id="wsTreeStatusFilter" class="studio-select studio-select-sm" aria-label="Filter Memories by Status">
+                <option value="ALL">All (Proposals + Live)</option>
+                <option value="STAGED">Proposals Only</option>
+                <option value="SYNCED">Live Only</option>
+              </select>
+              <button type="button" id="wsTreeRefreshBtn" class="btn btn-secondary btn-xs">Refresh</button>
+            </div>
           </div>
+          <div id="wsTreeProposalsSection" class="ws-proposals-section hidden"></div>
           <div id="wsTreeHierarchyContainer" class="ws-tree-hierarchy-container">
-            <div class="text-xs text-muted">Loading memory tree...</div>
+            <div class="text-xs text-muted">Loading memories...</div>
+          </div>
+          <div id="wsTreeGraphContainer" class="provenance-graph-wrap hidden" aria-label="Memory Provenance Graph">
+            <div class="text-xs text-muted">Loading provenance graph...</div>
           </div>
         </div>
       </section>
@@ -593,7 +480,8 @@
       <section class="studio-workspace-view hidden" id="workspace-playground" role="tabpanel" aria-label="Multi-Scope Playground &amp; Context Trace">
         <div class="ws-master-header">
           <div>
-            <h2 class="ws-title">Multi-Scope Playground &amp; Context Trace</h2>
+            <h2 class="ws-title">Scope &amp; Context Trace</h2>
+            <p class="ws-purpose">Dry-run a prompt to see which scoped memories trigger, how conflicts resolve, and exact token cost. For live chat, use <a href="index.html">Chat</a>.</p>
           </div>
           <div class="ws-header-actions">
             <select id="wsPgDimSelect" class="studio-select studio-select-sm" aria-label="Embedding Size">
@@ -651,11 +539,12 @@
         </div>
       </section>
 
-      <!-- WORKSPACE 4 of 10: Memory Quality & Token Cost Benchmark -->
-      <section class="studio-workspace-view hidden" id="workspace-eval" role="tabpanel" aria-label="Memory Quality &amp; Token Cost Benchmark">
+      <!-- WORKSPACE 4 of 10: Benchmarks & Verification -->
+      <section class="studio-workspace-view hidden" id="workspace-eval" role="tabpanel" aria-label="Optimize: Test Cases &amp; Auto-Tune">
         <div class="ws-master-header">
           <div>
-            <h2 class="ws-title">Memory Quality &amp; Token Cost Benchmark</h2>
+            <h2 class="ws-title">Optimize</h2>
+            <p class="ws-purpose">Verify recall quality and guardrails on real test cases, then run AlphaEvolve to auto-tune retrieval and prompt settings.</p>
           </div>
           <div class="ws-header-actions">
             <button type="button" id="wsEvalSynthesizeAdvBtn" class="btn btn-secondary btn-xs">Add tests</button>
@@ -664,45 +553,171 @@
           </div>
         </div>
 
-        <div class="quiet-tnum-summary mb-8" id="wsEvalMetricsGrid">
-          Score <span id="wsEvalParetoVal">—</span> · Accuracy <span id="wsEvalAccuracyVal">—</span> · Guardrails <span id="wsEvalGuardrailVal">—</span> · Recommended Settings: <span id="wsEvalChampionVal">baseline-default</span> (<span id="wsEvalChampionSub">768d · Compact Bullets</span>)
+        <div class="optimize-status-row mb-8">
+          <div class="quiet-tnum-summary" id="wsEvalMetricsGrid">
+            Score <span id="wsEvalParetoVal">—</span> · Accuracy <span id="wsEvalAccuracyVal">—</span> · Guardrails <span id="wsEvalGuardrailVal">—</span> · Active preset:
+            <button type="button" id="openRetrievalSettingsBtn" class="inline-preset-btn" title="Inspect or manually edit active retrieval settings">
+              <span id="wsEvalChampionVal">baseline-default</span> (<span id="wsEvalChampionSub">768d · Compact Bullets</span>)
+            </button>
+          </div>
+          <div class="memories-view-toggle optimize-subtabs" role="tablist" aria-label="Optimize Views">
+            <button type="button" id="optimizeTabTestsBtn" class="memories-view-btn active" data-optimize-tab="tests" role="tab" aria-selected="true" aria-controls="optimizePanelTests">Test Cases</button>
+            <button type="button" id="optimizeTabAutotuneBtn" class="memories-view-btn" data-optimize-tab="autotune" role="tab" aria-selected="false" aria-controls="optimizePanelAutotune">Auto-Tune</button>
+          </div>
         </div>
 
-        <div class="studio-split-pane-2col">
-          <div class="studio-scroll-pane">
-            <div class="studio-audit-card">
-              <div class="card-header-compact">
-                <span class="card-title-sm">Accuracy by Embedding Size (128d–768d)</span>
-                <span class="badge badge-teal">Calibrated Benchmarks</span>
-              </div>
-              <table class="math-comparison-table">
+        <details class="code-arch-collapse mb-8" id="alphaEvolveWhyDisclosure">
+          <summary>How test cases &amp; AlphaEvolve work</summary>
+          <div class="code-arch-content text-xs">
+            <strong>Test Cases (Run eval):</strong> Tests each verification case against live memory retrieval, checking whether expected facts are recalled, forbidden/stale facts are blocked, and org guardrails beat conflicting user preferences.<br>
+            <strong>Auto-Tune (AlphaEvolve):</strong> Uses those test cases as a fitness function on <code>gemini-4-neon</code> to evolve embedding size (<code>128d–768d</code>), similarity threshold, confidence gate, dedup threshold, scope weights, and prompt format (<code>ATOMIC_KV</code>, <code>COMPACT_BULLET</code>, <code>FULL_BELIEF</code>)—then lets you apply any winning preset with one click.
+          </div>
+        </details>
+
+        <!-- SUB-VIEW 1: Test Cases & Embedding Slice Breakdown -->
+        <div id="optimizePanelTests" class="optimize-subpanel" role="tabpanel" aria-labelledby="optimizeTabTestsBtn">
+          <!-- Verification Cases (Intent + Prompt + Expected Outcome) -->
+          <div class="studio-audit-card mb-8" id="wsEvalCasesTableCard">
+            <div class="card-header-compact">
+              <span class="card-title-sm">Verification Cases</span>
+              <span class="quiet-tnum-status" id="wsEvalCasesCountBadge">0 cases</span>
+            </div>
+            <div class="raw-telemetry-table-wrap">
+              <table class="math-comparison-table" id="wsEvalCasesTable">
                 <thead>
                   <tr>
-                    <th>Embedding Size</th>
-                    <th>Accuracy</th>
-                    <th>Conflict Res.</th>
-                    <th>Guardrail</th>
-                    <th>Overall Score</th>
+                    <th>Intent &amp; Prompt</th>
+                    <th>What Should Happen</th>
+                    <th>Type / Source</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
-                <tbody id="wsEvalSliceTableBody">
+                <tbody id="wsEvalCasesTableBody">
                   <tr>
-                    <td colspan="5" class="text-center text-muted">Click "Run Benchmark" to compare all 4 embedding sizes (128d–768d).</td>
+                    <td colspan="4" class="text-center text-muted">Loading verification cases...</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </div>
-          <div class="studio-scroll-pane">
-            <div class="studio-audit-card">
-              <div class="card-header-compact">
-                <span class="card-title-sm">Settings Comparison Grid (Embedding Size × Prompt Budget)</span>
-                <span class="badge badge-indigo">Click Cell to Apply</span>
+
+          <div class="studio-audit-card">
+            <div class="card-header-compact">
+              <span class="card-title-sm">Accuracy by Embedding Size (128d–768d)</span>
+              <span class="quiet-tnum-status">Matryoshka slices</span>
+            </div>
+            <table class="math-comparison-table">
+              <thead>
+                <tr>
+                  <th>Embedding Size</th>
+                  <th>Accuracy</th>
+                  <th>Conflict Res.</th>
+                  <th>Guardrail</th>
+                  <th>Overall Score</th>
+                </tr>
+              </thead>
+              <tbody id="wsEvalSliceTableBody">
+                <tr>
+                  <td colspan="5" class="text-center text-muted">Click <strong>Run eval</strong> to compare all 4 embedding sizes (128d–768d).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- SUB-VIEW 2: Auto-Tune (AlphaEvolve) -->
+        <div id="optimizePanelAutotune" class="optimize-subpanel hidden" role="tabpanel" aria-labelledby="optimizeTabAutotuneBtn">
+          <div class="studio-audit-card mb-8">
+            <div class="optimize-autotune-bar">
+              <div class="optimize-autotune-control">
+                <label for="optimizeAlphaSlider" class="text-xs font-medium">
+                  Quality vs. Token Balance: <strong id="optimizeAlphaVal" class="font-mono">70% Quality</strong>
+                </label>
+                <input type="range" id="optimizeAlphaSlider" min="0.1" max="0.95" step="0.05" value="0.7" class="studio-range">
               </div>
-              <div id="wsEvalMapElitesGrid" class="map-elites-table-wrapper">
-                <div class="empty-state-compact">Click <strong>Auto-Tune Retrieval Settings</strong> to compare embedding sizes and prompt budgets.</div>
+              <div class="optimize-autotune-actions">
+                <span class="quiet-tnum-status" id="topbarConfigId">baseline-default</span>
+                <span class="quiet-tnum-status" id="topbarConfigSlice">768d</span>
+                <span class="quiet-tnum-status" id="topbarConfigFormat">COMPACT_BULLET</span>
+                <button type="button" id="wsOptimizeRunAlphaEvolveBtn" class="btn btn-primary btn-xs">Run Auto-Tune</button>
               </div>
             </div>
+          </div>
+
+          <div class="studio-audit-card">
+            <div class="card-header-compact">
+              <span class="card-title-sm">AlphaEvolve Results (Embedding Size × Prompt Budget)</span>
+              <span class="quiet-tnum-status">Select any cell to apply as live preset</span>
+            </div>
+            <div id="wsEvalMapElitesGrid" class="map-elites-table-wrapper">
+              <div class="empty-state-compact">Click <strong>Run Auto-Tune</strong> to evolve and compare embedding sizes and prompt budgets against your test cases.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WORKSPACE: Jobs Queue & Live Execution Monitor -->
+      <section class="studio-workspace-view hidden" id="workspace-jobs" role="tabpanel" aria-label="Jobs">
+        <div class="ws-master-header">
+          <div>
+            <h2 class="ws-title">Jobs</h2>
+          </div>
+          <div class="ws-header-actions">
+            <span class="quiet-tnum-status" id="wsJobsQuietSummary" aria-live="polite">0 running · 0 completed</span>
+            <button type="button" id="wsJobsClearBtn" class="btn btn-secondary btn-xs">Clear finished</button>
+            <button type="button" id="wsRunJobMenuBtn" popovertarget="runJobPopover" class="btn btn-primary btn-xs">Run job <span class="dropdown-caret" aria-hidden="true">▾</span></button>
+            <div id="runJobPopover" popover="auto" class="view-menu-popover run-job-popover">
+              <button type="button" class="view-menu-item" data-run-job="dream_compaction">Dream compaction</button>
+              <button type="button" class="view-menu-item" data-run-job="alpha_evolve">Auto-tune recall</button>
+              <button type="button" class="view-menu-item" data-run-job="eval_benchmark">Run benchmark</button>
+              <button type="button" class="view-menu-item" data-run-job="session_ingest">Ingest sessions</button>
+              <button type="button" class="view-menu-item" data-run-job="memory_transform">Extract &amp; sync</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="studio-audit-card">
+          <div class="jobs-toolbar-row">
+            <div class="left-scope-pills-row memories-tier-filter" id="wsJobsCategoryPills" role="group" aria-label="Filter jobs by category">
+              <button type="button" class="left-scope-pill active" data-job-category="ALL">All</button>
+              <button type="button" class="left-scope-pill" data-job-category="compaction">Compaction</button>
+              <button type="button" class="left-scope-pill" data-job-category="optimize">Auto-Tune</button>
+              <button type="button" class="left-scope-pill" data-job-category="ingest">Ingest</button>
+              <button type="button" class="left-scope-pill" data-job-category="transform">Transforms</button>
+            </div>
+            <div class="jobs-toolbar-filters">
+              <select id="wsJobsStatusSelect" class="studio-select studio-select-sm" aria-label="Filter jobs by status">
+                <option value="ALL">All statuses</option>
+                <option value="RUNNING">Running</option>
+                <option value="QUEUED">Queued</option>
+                <option value="SUCCEEDED">Succeeded</option>
+                <option value="FAILED">Failed</option>
+                <option value="CANCELED">Canceled</option>
+              </select>
+              <input type="search" id="wsJobsSearchInput" class="studio-input studio-input-sm" placeholder="Filter jobs..." aria-label="Search jobs">
+            </div>
+          </div>
+
+          <div class="raw-telemetry-table-wrap jobs-table-wrap">
+            <table class="math-comparison-table" id="wsJobsTable">
+              <caption class="visually-hidden">Background and inline pipeline jobs</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Job</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Status &amp; Step</th>
+                  <th scope="col">Outcome</th>
+                  <th scope="col">Started</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody id="wsJobsTableBody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted">No jobs yet</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -712,6 +727,7 @@
         <div class="ws-master-header">
           <div>
             <h2 class="ws-title">Entities &amp; Scope Hierarchy</h2>
+            <p class="ws-purpose">Register and manage Organization, Team, Agent, and User scopes in the hierarchy.</p>
           </div>
           <div class="ws-header-actions">
             <button type="button" id="wsRefreshEntitiesBtn" class="btn btn-secondary btn-xs">Refresh</button>
@@ -789,6 +805,7 @@
         <div class="ws-master-header">
           <div>
             <h2 class="ws-title">Memory Categories &amp; Retention Policies</h2>
+            <p class="ws-purpose">Define topic categories, extraction hints, and default similarity thresholds.</p>
           </div>
           <div class="ws-header-actions">
             <button type="button" id="wsRefreshCategoriesBtn" class="btn btn-secondary btn-xs">Refresh</button>
@@ -861,6 +878,7 @@
         <div class="ws-master-header">
           <div>
             <h2 class="ws-title">Data Ingest &amp; Live Telemetry</h2>
+            <p class="ws-purpose">Configure session and telemetry connectors feeding raw turns into memory extraction.</p>
           </div>
           <div class="ws-header-actions">
             <button type="button" id="wsRefreshIngestServicesBtn" class="btn btn-secondary btn-xs">Refresh</button>
@@ -947,11 +965,12 @@
         </div>
       </section>
 
-      <!-- WORKSPACE 8 of 10: Memory Extractors & Interactive Gemini 3.8 Co-Designer Chat -->
+      <!-- WORKSPACE 8 of 10: Memory Extractors & Interactive Gemini 4 Co-Designer Chat -->
       <section class="studio-workspace-view hidden" id="workspace-extractors" role="tabpanel" aria-label="Memory Extractors &amp; Prompt Co-Designer">
         <div class="ws-master-header">
           <div>
             <h2 class="ws-title">Memory Extractors &amp; Prompt Co-Designer</h2>
+            <p class="ws-purpose">Author and test prompt rules that distill raw conversations into structured memories.</p>
           </div>
           <div class="ws-header-actions">
             <button type="button" id="wsRefreshExtractorsBtn" class="btn btn-secondary btn-xs">Refresh</button>
@@ -978,7 +997,11 @@
               <div class="studio-form-row-2 mb-8">
                 <div class="studio-field">
                   <label for="wsExtractorModelInput">Model Name</label>
-                  <input type="text" id="wsExtractorModelInput" class="studio-input studio-input-sm font-mono" value="gemini-3.8-flash">
+                  <input type="text" id="wsExtractorModelInput" list="gemini4ModelOptions" class="studio-input studio-input-sm font-mono" value="gemini-4-hydrogen">
+                  <datalist id="gemini4ModelOptions">
+                    <option value="gemini-4-hydrogen">Gemini 4 Hydrogen (Fast extraction)</option>
+                    <option value="gemini-4-neon">Gemini 4 Neon (Deep invariant reasoning)</option>
+                  </datalist>
                 </div>
                 <div class="studio-field">
                   <label for="wsExtractorCategoriesInput">Target Categories (comma-separated)</label>
@@ -1000,6 +1023,7 @@
             <div class="studio-audit-card">
               <div class="card-header-compact">
                 <span class="card-title-sm">Prompt Co-Designer</span>
+                <span class="quiet-tnum-status">gemini-4-neon</span>
               </div>
 
               <div class="preset-chips-row mb-8">
@@ -1031,6 +1055,7 @@
         <div class="ws-master-header">
           <div>
             <h2 class="ws-title">Memory Backend &amp; Write-Back Audit</h2>
+            <p class="ws-purpose">Monitor store sync health, test live agent write-back, and roll back bad mutations.</p>
           </div>
           <div class="ws-header-actions">
             <button type="button" id="wsBackendRefreshBtn" class="btn btn-secondary btn-xs">Refresh</button>
@@ -1126,6 +1151,7 @@
         <div class="ws-master-header">
           <div>
             <h2 class="ws-title">Security &amp; Access Control</h2>
+            <p class="ws-purpose">Set path-level read/write policies and simulate scope access decisions.</p>
           </div>
           <div class="ws-header-actions">
             <button type="button" id="wsRefreshSecurityBtn" class="btn btn-secondary btn-xs">Refresh</button>
@@ -1886,7 +1912,7 @@
                 <span class="badge badge-slate">Live Benchmark</span>
               </div>
               <div id="evalMetricsBars" class="studio-metric-bars">
-                <div class="empty-state-compact">Click <strong>Run Benchmark</strong> to compute live scores.</div>
+                <div class="empty-state-compact">Click <strong>Run eval</strong> to compute live scores.</div>
               </div>
             </div>
 
@@ -1907,7 +1933,7 @@
                 </thead>
                 <tbody id="matryoshkaTableBody">
                   <tr>
-                    <td colspan="5" class="text-center text-muted">Click "Run Benchmark" to compare 128d, 256d, 512d, and 768d embedding sizes.</td>
+                    <td colspan="5" class="text-center text-muted">Click <strong>Run eval</strong> to compare 128d, 256d, 512d, and 768d embedding sizes.</td>
                   </tr>
                 </tbody>
               </table>
@@ -2016,7 +2042,7 @@
               </div>
               <div id="mapElitesGridContainer" class="map-elites-table-wrapper">
                 <div class="empty-state-compact">
-                  Click <strong>Auto-Tune Retrieval Settings</strong> to compare <code>128d–768d</code> embedding sizes across prompt budgets.
+                  Click <strong>Auto-tune</strong> to evolve <code>128d–768d</code> embedding sizes across prompt budgets with AlphaEvolve (<code>gemini-4-neon</code>).
                 </div>
               </div>
             </div>
@@ -2030,7 +2056,7 @@
               </div>
               <div id="championConfigDiff" class="studio-config-diff-box">
                 <div class="empty-state-compact">
-                  Setting differences and token savings will appear here after running Auto-Tune Retrieval Settings.
+                  Setting differences and token savings will appear here after running <strong>Auto-tune</strong>.
                 </div>
               </div>
             </div>
@@ -2055,19 +2081,19 @@
     <aside class="studio-inspector-drawer collapsed" id="studioInspectorDrawer" aria-label="Details, Settings &amp; Guide Drawer">
       <div class="inspector-drawer-header">
         <div class="inspector-tabs" role="tablist">
-          <button type="button" class="inspector-tab-btn active" id="tabBtnContextDetail" data-inspector-tab="detail">
+          <button type="button" class="inspector-tab-btn active" id="tabBtnContextDetail" data-inspector-tab="detail" role="tab" aria-selected="true">
             Detail
           </button>
-          <button type="button" class="inspector-tab-btn hidden" id="tabBtnCommitsInspector" data-inspector-tab="commits" title="Staged Memory Commits">
+          <button type="button" class="inspector-tab-btn hidden" id="tabBtnCommitsInspector" data-inspector-tab="commits" role="tab" aria-selected="false" title="Staged Memory Commits">
             Commits <span class="badge badge-indigo" id="inspectorCommitsCountBadge">0</span>
           </button>
-          <button type="button" class="inspector-tab-btn" id="tabBtnRunSettings" data-inspector-tab="settings">
+          <button type="button" class="inspector-tab-btn" id="tabBtnRunSettings" data-inspector-tab="settings" role="tab" aria-selected="false">
             Settings
           </button>
-          <button type="button" class="inspector-tab-btn" id="tabBtnJsonInspector" data-inspector-tab="json">
+          <button type="button" class="inspector-tab-btn" id="tabBtnJsonInspector" data-inspector-tab="json" role="tab" aria-selected="false">
             Record
           </button>
-          <button type="button" class="inspector-tab-btn" id="tabBtnStudioGuide" data-inspector-tab="guide">
+          <button type="button" class="inspector-tab-btn" id="tabBtnStudioGuide" data-inspector-tab="guide" role="tab" aria-selected="false">
             Guide
           </button>
         </div>
@@ -2078,7 +2104,7 @@
       <div id="inspectorContextDetailPane" class="inspector-tab-pane">
         <div class="guide-section-card" id="inspectorContextDetailCard">
           <div class="card-header-compact">
-            <span class="badge badge-indigo" id="inspectorDetailWorkspaceBadge">Session Logs</span>
+            <span class="badge badge-indigo" id="inspectorDetailWorkspaceBadge">Memories</span>
             <span class="badge badge-teal" id="inspectorDetailStatusBadge">LIVE</span>
           </div>
           <h3 id="inspectorDetailTitle" class="inspector-title mt-4">Select an Item</h3>
@@ -2221,63 +2247,102 @@
       <!-- TAB 3: Interactive Guide & Sample Data -->
       <div id="inspectorGuidePane" class="inspector-tab-pane hidden">
         <div class="guide-section-card">
-          <h3 class="inspector-title">Quick Walkthrough</h3>
-          <ol class="studio-guide-steps">
-            <li><strong>1. Load Sessions:</strong> Inspect turns and extract candidate memories.</li>
-            <li><strong>2. Author Rules:</strong> Create memories across <code>ORG &gt; TEAM &gt; AGENT &gt; USER</code>.</li>
-            <li><strong>3. Test Triggers:</strong> Run prompts to measure matches and token usage.</li>
-            <li><strong>4. Save &amp; Tune:</strong> Commit staged memories and compare <code>128d–768d</code> sizes.</li>
+          <div class="guide-section-header">
+            <h3 class="guide-section-title">How Memory Flows</h3>
+          </div>
+          <ol class="studio-guide-steps guide-flow-list">
+            <li>
+              <button type="button" class="guide-step-btn" data-guide-workspace="workspace-sessions">
+                <span class="guide-step-num" aria-hidden="true">1</span>
+                <span class="guide-step-copy">
+                  <strong>Session Logs</strong>
+                  <span>Conversations arrive from Chat or Data Ingest; click Extract to stage candidates.</span>
+                </span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="guide-step-btn" data-guide-workspace="workspace-tree">
+                <span class="guide-step-num" aria-hidden="true">2</span>
+                <span class="guide-step-copy">
+                  <strong>Memory Tree</strong>
+                  <span>Review staged rules (from extraction or Add note), commit to <code>ORG &gt; TEAM &gt; AGENT &gt; USER</code>, and promote upward.</span>
+                </span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="guide-step-btn" data-guide-workspace="workspace-playground">
+                <span class="guide-step-num" aria-hidden="true">3</span>
+                <span class="guide-step-copy">
+                  <strong>Context Trace</strong>
+                  <span>Run live prompts to verify which scoped memories match and how many tokens they use.</span>
+                </span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="guide-step-btn" data-guide-workspace="workspace-eval">
+                <span class="guide-step-num" aria-hidden="true">4</span>
+                <span class="guide-step-copy">
+                  <strong>Benchmarks</strong>
+                  <span>Score recall quality vs. token cost and tune <code>128d–768d</code> retrieval settings.</span>
+                </span>
+              </button>
+            </li>
           </ol>
         </div>
 
-        <!-- Sample Data Loader -->
+        <!-- Starter Data Actions -->
         <div class="guide-section-card">
-          <div class="run-setting-label-row">
-            <label>Sample Data</label>
+          <div class="guide-section-header">
+            <h4 class="guide-section-label">Starter Data</h4>
           </div>
-          <div class="guide-btn-stack">
-            <button type="button" id="seedMultiScopeBtn" class="btn btn-secondary btn-xs w-full" title="Populate ORG, TEAM, AGENT, and USER scopes with sample memories">
+          <div class="guide-btn-grid">
+            <button type="button" id="seedMultiScopeBtn" class="btn btn-secondary btn-xs" title="Populate ORG, TEAM, AGENT, and USER scopes with sample memories">
               Load sample
             </button>
-          </div>
-        </div>
-
-        <!-- Stage 1 Sample Transcripts & Probe Prompts -->
-        <div class="guide-section-card">
-          <div class="run-setting-label-row">
-            <label>Sample Transcript &amp; Probes</label>
-          </div>
-          <button type="button" id="loadSampleTranscriptGuideBtn" class="btn btn-secondary btn-xs w-full mb-8">
-            Load transcript
-          </button>
-          <div class="guide-chips-stack">
-            <button type="button" class="chip studio-prompt-chip" data-prompt="What Python package manager and security auth policy should I use?">
-              Package manager
-            </button>
-            <button type="button" class="chip studio-prompt-chip" data-prompt="We standardized on uv for Python testing and indexed rules for memory.">
-              Save preference
-            </button>
-            <button type="button" class="chip studio-prompt-chip" data-prompt="What is our team test runner standard and communication format?">
-              Team standards
+            <button type="button" id="loadSampleTranscriptGuideBtn" class="btn btn-secondary btn-xs" title="Load a sample session transcript into the extractor">
+              Load transcript
             </button>
           </div>
         </div>
 
-        <!-- Stage 3 Sample Verification Scenarios -->
+        <!-- Sample Prompts -->
         <div class="guide-section-card">
-          <div class="run-setting-label-row">
-            <label>3. Stage 3 Sample Verification Scenarios</label>
+          <div class="guide-section-header">
+            <h4 class="guide-section-label">Try a Prompt</h4>
           </div>
-          <p class="run-setting-hint">Click any scenario preset to switch to Stage 3, populate the Scenario Re-Tester, and measure token usage.</p>
-          <div class="guide-chips-stack">
-            <button type="button" class="chip scenario-preset-btn" data-scenario-prompt="What Python package manager, test runner, and GCP authentication method should I use?" data-scenario-expected="python_package_manager = uv">
-              ⚡ Scenario: Python Tooling + GCP Auth
+          <div class="guide-action-list">
+            <button type="button" class="guide-action-row studio-prompt-chip" data-prompt="What Python package manager and security auth policy should I use?">
+              <span class="guide-action-title">Package manager</span>
+              <span class="guide-action-arrow" aria-hidden="true">→</span>
             </button>
-            <button type="button" class="chip scenario-preset-btn" data-scenario-prompt="Can I hardcode a GEMINI_API_KEY and use pip install for a quick test?" data-scenario-expected="security_auth_policy">
-              🛡️ Scenario: Security Guardrail Override Check
+            <button type="button" class="guide-action-row studio-prompt-chip" data-prompt="We standardized on uv for Python testing and indexed rules for memory.">
+              <span class="guide-action-title">Save preference</span>
+              <span class="guide-action-arrow" aria-hidden="true">→</span>
             </button>
-            <button type="button" class="chip scenario-preset-btn" data-scenario-prompt="How should I format my status tables and deploy containers locally on macOS?" data-scenario-expected="container_runtime_policy">
-              📦 Scenario: Agent Format + Apple Container
+            <button type="button" class="guide-action-row studio-prompt-chip" data-prompt="What is our team test runner standard and communication format?">
+              <span class="guide-action-title">Team standards</span>
+              <span class="guide-action-arrow" aria-hidden="true">→</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Verification Scenarios -->
+        <div class="guide-section-card">
+          <div class="guide-section-header">
+            <h4 class="guide-section-label">Verification Scenarios</h4>
+          </div>
+          <div class="guide-action-list">
+            <button type="button" class="guide-action-row scenario-preset-btn" data-scenario-prompt="What Python package manager, test runner, and GCP authentication method should I use?" data-scenario-expected="python_package_manager = uv">
+              <span class="guide-action-title">Python tooling &amp; auth</span>
+              <span class="guide-action-arrow" aria-hidden="true">→</span>
+            </button>
+            <button type="button" class="guide-action-row scenario-preset-btn" data-scenario-prompt="Can I hardcode a GEMINI_API_KEY and use pip install for a quick test?" data-scenario-expected="security_auth_policy">
+              <span class="guide-action-title">Guardrail override check</span>
+              <span class="guide-action-arrow" aria-hidden="true">→</span>
+            </button>
+            <button type="button" class="guide-action-row scenario-preset-btn" data-scenario-prompt="How should I format my status tables and deploy containers locally on macOS?" data-scenario-expected="container_runtime_policy">
+              <span class="guide-action-title">Format &amp; local containers</span>
+              <span class="guide-action-arrow" aria-hidden="true">→</span>
             </button>
           </div>
         </div>
@@ -2304,6 +2369,7 @@
     </div>
   </dialog>
 
-  <script src="studio.js?v=2.5"></script>
+  <script src="memory_graph.js?v=1.2"></script>
+  <script src="studio.js?v=3.6"></script>
 </body>
 </html>

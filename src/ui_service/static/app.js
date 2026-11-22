@@ -13,6 +13,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- Stage 2 Recorded Turns Elements ---
   const refreshLogsBtn = document.getElementById("refreshLogsBtn");
   const logsTableBody = document.getElementById("logsTableBody");
+  const activityTableFooter = document.getElementById("activityTableFooter");
+  const activityCountStatus = document.getElementById("activityCountStatus");
+  const activityShowMoreBtn = document.getElementById("activityShowMoreBtn");
+  const activityCollapseBtn = document.getElementById("activityCollapseBtn");
+  const ACTIVITY_PAGE_SIZE = 50;
+  const ACTIVITY_MSG_PREVIEW_CHARS = 240;
+  let visibleLogLimit = ACTIVITY_PAGE_SIZE;
+  let lastLogTargetSession = "ALL";
   const logFilters = document.querySelectorAll("#logFilters .intent-pill");
   const lakehouseSessionSelect = document.getElementById("lakehouseSessionSelect");
   const lakehouseSessionBadge = document.getElementById("lakehouseSessionBadge");
@@ -152,7 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (dreamSessionVal) dreamSessionVal.textContent = session_id;
     if (dreamUserVal) dreamUserVal.textContent = user_id;
-    if (dreamHelp) dreamHelp.innerHTML = `Consolidate session <strong>${escapeHtml(session_id)}</strong>`;
+    if (dreamHelp) dreamHelp.textContent = "Ready";
     if (spannerUserVal) spannerUserVal.textContent = user_id;
     if (mcpUserVal) mcpUserVal.textContent = user_id;
     if (topbarQuietScope) {
@@ -614,11 +622,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!sessionId) return;
     turnsStreamBox.innerHTML = "<div class='empty-state-card'>Loading structured turns...</div>";
     try {
-      const res = await fetch(`/api/antigravity/sessions/${sessionId}/turns`);
+      const res = await fetch(`/api/antigravity/sessions/${encodeURIComponent(sessionId)}/turns`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       renderTurns(data.turns || []);
     } catch (err) {
-      turnsStreamBox.innerHTML = `<div class='empty-state-card'>Failed to load turns: ${err}</div>`;
+      turnsStreamBox.innerHTML = `<div class='empty-state-card'>Failed to load turns: ${escapeHtml(String(err))}</div>`;
     }
   }
 
@@ -865,15 +874,35 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       currentLogs = data.logs || [];
+      visibleLogLimit = ACTIVITY_PAGE_SIZE;
       renderLogsTable(targetSession);
     } catch (err) {
       console.error("Error fetching logs:", err);
       logsTableBody.innerHTML = `<tr><td colspan="4" class="empty-state" style="color: var(--color-warn);">Failed to load traces: ${escapeHtml(err.message)}</td></tr>`;
+      if (activityTableFooter) activityTableFooter.style.display = "none";
       throw err;
     }
   }
 
+  const ACTIVITY_EVENT_LABELS = {
+    USER_PROMPT: "Prompt",
+    AGENT_RESPONSE: "Reply",
+    TOOL_CALL: "Tool",
+    TOOL_RESULT: "Result",
+  };
+
+  function formatActivityPreview(message) {
+    const lines = message.split(/\r?\n/);
+    const needsLineTrim = lines.length > 3;
+    const clippedLines = needsLineTrim ? lines.slice(0, 3).join("\n") : message;
+    if (clippedLines.length > ACTIVITY_MSG_PREVIEW_CHARS) {
+      return `${clippedLines.slice(0, ACTIVITY_MSG_PREVIEW_CHARS).trimEnd()}…`;
+    }
+    return needsLineTrim ? `${clippedLines.trimEnd()}…` : message;
+  }
+
   function renderLogsTable(targetSession = "ALL") {
+    lastLogTargetSession = targetSession;
     logsTableBody.innerHTML = "";
     const filtered = currentLogs.filter((l) => {
       if (currentFilter === "ALL") return true;
@@ -881,14 +910,19 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (filtered.length === 0) {
-      const sessionLabel = targetSession === "ALL" ? "in the telemetry lakehouse" : `for session '${targetSession}'`;
-      logsTableBody.innerHTML = `<tr><td colspan="4" class="empty-state">No matching logs found ${sessionLabel}.</td></tr>`;
+      const emptyMsg =
+        targetSession === "ALL"
+          ? "No matching events found."
+          : `No matching events for session '${escapeHtml(targetSession)}'.`;
+      logsTableBody.innerHTML = `<tr><td colspan="4" class="empty-state">${emptyMsg}</td></tr>`;
+      if (activityTableFooter) activityTableFooter.style.display = "none";
       return;
     }
 
     const { session_id: activeSessionId } = getParams();
+    const visibleLogs = filtered.slice(0, visibleLogLimit);
 
-    filtered.forEach((log) => {
+    visibleLogs.forEach((log) => {
       const tr = document.createElement("tr");
       const tsShort = log.timestamp ? log.timestamp.substring(11, 19) : "--:--:--";
       const logSession = log.session_id || "";
@@ -897,16 +931,68 @@ document.addEventListener("DOMContentLoaded", () => {
         ? `<div style="margin-top: 3px;"><span class="intent-pill ${isActiveSession ? 'pill-primary' : 'pill-neutral'}" style="font-size: 0.68rem; padding: 1px 6px;" title="Session: ${escapeHtml(logSession)}">${escapeHtml(logSession.length > 20 ? logSession.substring(0, 18) + '...' : logSession)}</span></div>`
         : "";
 
+      const rawType = String(log.event_type || "EVENT");
+      const eventLabel = ACTIVITY_EVENT_LABELS[rawType] || rawType;
+      const rawMsg = String(log.message || "");
+      const previewMsg = formatActivityPreview(rawMsg);
+      const isTruncated = previewMsg !== rawMsg;
+
       tr.innerHTML = `
-        <td><span class="intent-pill pill-neutral">${log.event_type}</span></td>
+        <td><span class="intent-pill pill-neutral" title="${escapeHtml(rawType)}">${escapeHtml(eventLabel)}</span></td>
         <td>
           <strong>${escapeHtml(log.agent_name || "antigravity")}</strong>
           ${sessionBadge}
         </td>
-        <td>${escapeHtml(log.message || "")}</td>
-        <td style="font-family: var(--font-mono); font-size: 0.78rem;">${tsShort}</td>
+        <td class="activity-msg-cell"><span class="activity-msg-text">${escapeHtml(previewMsg)}</span>${isTruncated ? '<button type="button" class="activity-msg-toggle">Expand</button>' : ""}</td>
+        <td style="font-family: var(--font-mono); font-size: 0.78rem;">${escapeHtml(tsShort)}</td>
       `;
+
+      if (isTruncated) {
+        const msgSpan = tr.querySelector(".activity-msg-text");
+        const toggleBtn = tr.querySelector(".activity-msg-toggle");
+        let expanded = false;
+        toggleBtn.addEventListener("click", () => {
+          expanded = !expanded;
+          msgSpan.textContent = expanded ? rawMsg : previewMsg;
+          msgSpan.classList.toggle("is-expanded", expanded);
+          toggleBtn.textContent = expanded ? "Collapse" : "Expand";
+        });
+      }
+
       logsTableBody.appendChild(tr);
+    });
+
+    if (activityTableFooter) {
+      activityTableFooter.style.display = "flex";
+      if (activityCountStatus) {
+        activityCountStatus.textContent =
+          filtered.length > visibleLogs.length
+            ? `Showing ${visibleLogs.length} of ${filtered.length} events`
+            : `${filtered.length} event${filtered.length === 1 ? "" : "s"}`;
+      }
+      if (activityShowMoreBtn) {
+        activityShowMoreBtn.style.display = visibleLogs.length < filtered.length ? "inline-flex" : "none";
+      }
+      if (activityCollapseBtn) {
+        activityCollapseBtn.style.display =
+          visibleLogLimit > ACTIVITY_PAGE_SIZE && filtered.length > ACTIVITY_PAGE_SIZE ? "inline-flex" : "none";
+      }
+    }
+  }
+
+  if (activityShowMoreBtn) {
+    activityShowMoreBtn.addEventListener("click", () => {
+      visibleLogLimit += ACTIVITY_PAGE_SIZE;
+      renderLogsTable(lastLogTargetSession);
+    });
+  }
+
+  if (activityCollapseBtn) {
+    activityCollapseBtn.addEventListener("click", () => {
+      visibleLogLimit = ACTIVITY_PAGE_SIZE;
+      renderLogsTable(lastLogTargetSession);
+      const wrapper = logsTableBody.closest(".activity-table-wrapper");
+      if (wrapper) wrapper.scrollTop = 0;
     });
   }
 
@@ -915,6 +1001,7 @@ document.addEventListener("DOMContentLoaded", () => {
       logFilters.forEach((p) => p.classList.remove("active"));
       pill.classList.add("active");
       currentFilter = pill.getAttribute("data-filter");
+      visibleLogLimit = ACTIVITY_PAGE_SIZE;
       const isActiveScope = lakehouseScopeActiveBtn && lakehouseScopeActiveBtn.classList.contains("active");
       const currentTarget = isActiveScope
         ? (getParams().session_id || "ALL")
@@ -962,7 +1049,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const dreamScopeHelp = document.getElementById("dreamScopeHelp");
     if (dreamScopeBadge) {
       dreamScopeBadge.textContent = isMulti ? "All Sessions (Cross-Session Synthesis)" : `Active Session (${session_id})`;
-      dreamScopeBadge.className = isMulti ? "intent-pill pill-neutral" : "intent-pill pill-primary";
     }
     if (dreamScopeHelp) {
       dreamScopeHelp.innerHTML = isMulti
@@ -1347,23 +1433,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  document.querySelectorAll("[data-toggle-theme]").forEach((btn) => {
-    const syncLabel = () => {
-      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-      btn.textContent = isDark ? "Light theme" : "Dark theme";
-    };
-    syncLabel();
-    btn.addEventListener("click", () => {
-      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-      const next = isDark ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", next);
-      try {
-        localStorage.setItem("electric_sheep_theme", next);
-      } catch (_) {}
-      syncLabel();
-    });
-  });
-
   // Live MCP Runner
   const mcpToolSelect = document.getElementById("mcpToolSelect");
   const mcpArgInput = document.getElementById("mcpArgInput");
@@ -1482,12 +1551,12 @@ document.addEventListener("DOMContentLoaded", () => {
       .replace(/'/g, "&#039;");
   }
 
-  // Session Info Tooltip Handler
+  // Session Info Tooltip Handler (no-op when rendered as native <details> disclosure)
   const sessionInfoBtn = document.getElementById("sessionInfoBtn");
   const sessionInfoTooltip = document.getElementById("sessionInfoTooltip");
   const tooltipContainer = document.querySelector(".info-tooltip-container");
 
-  if (sessionInfoBtn && sessionInfoTooltip) {
+  if (sessionInfoBtn && sessionInfoTooltip && tooltipContainer) {
     sessionInfoBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       sessionInfoTooltip.classList.toggle("show");
@@ -1509,13 +1578,104 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Load exact live REM synthesis prompt template from backend on boot
+  async function fetchDreamPromptTemplate() {
+    if (!dreamPromptCode) return;
+    try {
+      const res = await fetch("/api/harvest/prompt-template");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.prompt_template) {
+        dreamPromptCode.textContent = data.prompt_template;
+      }
+      const badge = document.getElementById("dreamPromptModelBadge");
+      if (badge && data.model) {
+        badge.textContent = data.model;
+      }
+    } catch (_) {
+      dreamPromptCode.textContent = "Run Extract to inspect the live synthesis prompt.";
+    }
+  }
+
+  // Hydrate live configured model names from /health so env overrides stay accurate
+  async function syncLiveModelLabels() {
+    try {
+      const res = await fetch("/health");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.model) {
+        document.querySelectorAll('[data-live-model="chat"]').forEach((el) => {
+          el.textContent = data.model;
+        });
+      }
+      if (data.reasoning_model) {
+        document.querySelectorAll('[data-live-model="reasoning"]').forEach((el) => {
+          el.textContent = data.reasoning_model;
+        });
+      }
+    } catch (_) {}
+  }
+
+  async function hydrateSessionFromUrlParam() {
+    const params = new URLSearchParams(window.location.search);
+    const targetSid = (params.get("session_id") || "").trim();
+    if (!targetSid) return;
+    setSessionId(targetSid, false);
+    try {
+      const res = await fetch("/api/studio/sessions?limit=50");
+      if (res.ok) {
+        const data = await res.json();
+        const found = (data.sessions || []).find((s) => s.session_id === targetSid);
+        if (found && interviewChatBox) {
+          const turns = Array.isArray(found.turns) ? found.turns : [];
+          if (turns.length) {
+            interviewChatBox.innerHTML = "";
+            turns.forEach((t) => {
+              const isUser = String(t.role || "").toLowerCase() === "user";
+              appendMsg(interviewChatBox, isUser ? "You" : "Agent", t.content || "", isUser);
+            });
+          } else if (found.title || found.summary) {
+            appendMsg(interviewChatBox, "Session Loaded", `${found.title || targetSid}: ${found.summary || ""}`, false);
+          }
+          return;
+        }
+      }
+      // Fallback for older sessions: fetch directly by ID and render into chat box
+      const turnsRes = await fetch(`/api/antigravity/sessions/${encodeURIComponent(targetSid)}/turns`);
+      if (turnsRes.ok && interviewChatBox) {
+        const turnsData = await turnsRes.json();
+        const turns = Array.isArray(turnsData.turns) ? turnsData.turns : [];
+        if (turns.length) {
+          interviewChatBox.innerHTML = "";
+          turns.forEach((t) => {
+            if (t.user_prompt) appendMsg(interviewChatBox, "You", t.user_prompt, true);
+            else if (t.agent_response || t.agent_thought) {
+              appendMsg(interviewChatBox, "Agent", t.agent_response || t.agent_thought, false);
+            }
+          });
+          return;
+        }
+      }
+      if (interviewChatBox) {
+        appendMsg(interviewChatBox, "Session Loaded", `Active session set to ${targetSid}.`, false);
+      }
+    } catch (err) {
+      if (interviewChatBox) {
+        appendMsg(interviewChatBox, "System", `Could not load session ${targetSid}: ${err.message}`, false);
+      }
+    }
+  }
+
   // --- Initial Boot ---
   updateAllScopeIndicators();
   syncMcpToolArgs();
+  syncLiveModelLabels();
+  fetchDreamPromptTemplate();
   fetchAntigravitySessions();
   fetchLakehouseSessions();
   fetchLogs();
   fetchSpannerPrefs();
   fetchSpannerGuardrails();
   fetchSpannerSummaries();
+  hydrateSessionFromUrlParam();
 });

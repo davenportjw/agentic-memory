@@ -10,13 +10,14 @@ from src.common.auth import get_default_dev_email
 
 
 def test_ui_service_health_check():
-    """Verify UI service readiness and default model gemini-3.8-flash."""
+    """Verify UI service readiness and default models gemini-4-hydrogen / gemini-4-neon."""
     client = TestClient(api)
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert "gemini" in data["model"]
+    assert data["model"] == "gemini-4-hydrogen"
+    assert data["reasoning_model"] == "gemini-4-neon"
 
 
 def test_ui_service_e2e_lifecycle():
@@ -162,6 +163,7 @@ def test_ui_service_topbar_and_layout_integrity():
         assert 'class="app-nav"' in html
         assert 'href="index.html"' in html
         assert 'href="studio.html"' in html
+        assert 'href="studio.html#jobs"' in html
         assert 'href="how-it-works.html"' in html
         title_idx = html.find('class="app-title-group"')
         nav_idx = html.find('class="app-nav"')
@@ -483,7 +485,7 @@ def test_ui_service_studio_page_and_dom_integrity():
         "settingDimButtonGroup",
         "playgroundContextPre",
         "toggleManualFeedbackBuilderBtn",
-        "studioIntentTopNav",
+        "studio10WorkspaceNav",
         "leftScopePillsContainer",
         "studioFileDataTree",
         "leftMemoryTreeList",
@@ -499,9 +501,10 @@ def test_ui_service_studio_page_and_dom_integrity():
         "studio-workbench-layout",
         "studio-left-rail",
         "studio-workspace-canvas",
-        "studio-command-bar",
-        "studio-intent-top-nav",
-        "studio-intent-tab",
+        "scope-menu-popover",
+        "optimize-subtabs",
+        "memories-view-toggle",
+        "provenance-graph-wrap",
         "left-scope-pill",
         "studio-file-tree",
         "studio-system-context-bar",
@@ -551,8 +554,8 @@ def test_ui_service_studio_page_and_dom_integrity():
         "memoryPackDrawer",
         "exportMemoryPackBtn",
         "importMemoryPackBtn",
-        "openTrajectoryIngestCmdBtn",
-        "openMemoryDesignerCmdBtn",
+        "wsMemoriesViewTreeBtn",
+        "wsMemoriesViewGraphBtn",
         "openMemoryPackCmdBtn",
     ):
         assert f'id="{practitioner_id}"' in html, f"Missing Practitioner Workbench control {practitioner_id}"
@@ -1062,9 +1065,8 @@ def test_studio_ten_workspaces_and_master_detail_contracts():
         assert required_token in html, f"Missing required layout/drawer token '{required_token}' in studio.html"
 
     expected_workspaces = (
-        "sessions",
         "tree",
-        "playground",
+        "sessions",
         "eval",
         "entities",
         "categories",
@@ -1281,7 +1283,7 @@ def test_studio_ten_workspaces_and_master_detail_contracts():
         json={
             "extractor_id": first_ext_id,
             "name": extractors[0]["name"],
-            "model_name": "gemini-3.8-flash",
+            "model_name": "gemini-4-hydrogen",
             "target_category": "workflow",
             "human_params": extractors[0].get("human_params", {}),
             "system_prompt": extractors[0].get("system_prompt", ""),
@@ -1372,16 +1374,21 @@ def test_studio_toolbar_dropdowns_and_scroll_integrity() -> None:
     assert studio_res.status_code == 200
     html = studio_res.text
 
-    # 1. Verify dropdown menus & current view indicator in studio.html
+    # 1. Verify unified top-bar Scope Switcher, Memories overflow popover, Optimize sub-tabs, and zero duplicate middle command bar
     for expected_id in (
-        "workflowStageDropdown",
-        "stageActionsDropdown",
-        "engineConfigDropdown",
-        "toolbarViewModeBadge",
-        "toolbarCurrentTitle",
-        "activeStageDropdownLabel",
+        "topScopeTriggerBtn",
+        "scopeMenuPopover",
+        "memoriesMorePopover",
+        "openRetrievalSettingsBtn",
+        "optimizeTabTestsBtn",
+        "optimizeTabAutotuneBtn",
+        "optimizeAlphaSlider",
+        "wsOptimizeRunAlphaEvolveBtn",
     ):
-        assert f'id="{expected_id}"' in html, f"Missing expected toolbar element #{expected_id} in studio.html"
+        assert f'id="{expected_id}"' in html, f"Missing expected navigation/optimize element #{expected_id} in studio.html"
+    assert 'class="studio-command-bar"' not in html, "Redundant middle .studio-command-bar should be removed"
+    assert 'id="workflowStageDropdown"' not in html, "Legacy duplicate #workflowStageDropdown should be removed"
+    assert 'class="studio-lifecycle-strip"' not in html, "Duplicate topbar .studio-lifecycle-strip should be removed"
 
     # 2. Verify vertical scroll rules and .studio-scroll-pane in style.css
     static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
@@ -1568,7 +1575,7 @@ def test_studio_plain_english_intent_and_interactive_handler_fixes() -> None:
     for plain_label in (
         "Search",
         "Save rule",
-        "Add note",
+        "Add rule",
         "Run eval",
         "Load sample",
         "Recommended Settings",
@@ -1705,31 +1712,47 @@ def test_brand_v21_tokens_and_v1_memory_api() -> None:
     assert fav_res.status_code == 200
     assert "<svg" in fav_res.text
 
-    # 2. Brand v2.1 tokens + dark theme in style.css, and inline SVG mark in HTML pages
+    # 2. Observatory Slate & Electric Teal tokens + dark theme in style.css, and inline SVG mark in HTML pages
     css_text = client.get("/style.css").text.lower()
     for token_pair in (
-        "--bg-canvas: #f6f5f0",
+        "--bg-canvas: #f2f5f9",
         "--surface-card: #ffffff",
-        "--surface-muted: #eceae2",
-        "--border-subtle: #dad6ca",
-        "--text-primary: #14171c",
-        "--text-secondary: #38414e",
-        "--text-muted: #556070",
-        "--color-primary: #6a359c",
-        "--color-primary-hover: #53277d",
-        "--color-success: #0b6a48",
-        "--color-warn: #b83710",
+        "--surface-muted: #e8eef6",
+        "--border-subtle: #d8e1ee",
+        "--text-primary: #0f172a",
+        "--text-secondary: #334155",
+        "--text-muted: #475569",
+        "--color-primary: #0e7490",
+        "--color-primary-hover: #155e75",
+        "--on-primary: #ffffff",
+        "--on-primary: #06131a",
+        "--color-harvest: #4f46e5",
+        "--color-success: #059669",
+        "--color-warn: #dc2626",
         'html[data-theme="dark"]',
-        "#0b0e13",
-        "#121720",
-        "#be94ff",
+        "#090e17",
+        "#111827",
+        "#22d3ee",
     ):
-        assert token_pair in css_text, f"Missing Brand v2.1 token {token_pair} in style.css"
+        assert token_pair in css_text, f"Missing Observatory theme token {token_pair} in style.css"
 
     for page in ("/", "/studio.html", "/how-it-works.html"):
         html = client.get(page).text
         assert 'href="favicon.svg"' in html, f"Missing favicon.svg link on {page}"
         assert "🐑" not in html, f"Legacy sheep emoji still in brand header on {page}"
+        assert 'class="view-menu-disclosure"' in html, f"View popover must use inline disclosure (no box-in-a-box) on {page}"
+        assert 'class="info-tooltip-container"' not in html, f"Legacy nested floating .info-tooltip-container found on {page}"
+
+    index_html = client.get("/").text
+    assert '<code id="dreamPromptCode">--</code>' not in index_html, "Stage 3 Prompt template must not render empty '--' placeholder"
+    assert 'class="stage-guide-note"' in index_html, "Stage annotations must explain how each workflow step works"
+
+    prompt_tpl_res = client.get("/api/harvest/prompt-template")
+    assert prompt_tpl_res.status_code == 200
+    prompt_tpl_json = prompt_tpl_res.json()
+    assert "REM Memory Synthesizer" in prompt_tpl_json["prompt_template"]
+    assert "{full_transcript}" in prompt_tpl_json["prompt_template"]
+    assert prompt_tpl_json["model"] == get_config().reasoning_model_name
 
     # 3. Live /api/v1/memory/* adapter endpoints backed by spanner_client + telemetry_sink
     mounts_res = client.get("/api/v1/memory/mounts")
@@ -1958,6 +1981,433 @@ def test_adversarial_round2_remediation_contracts() -> None:
         assert leaked_cloud_or_seed not in everyday_chrome, (
             f"Leaked cloud product name, seeded default, or >2-word label {leaked_cloud_or_seed!r}"
         )
+
+
+def test_gemini_4_hydrogen_neon_routing_and_alpha_evolve_ui() -> None:
+    """Verify two-tier Gemini 4 Hydrogen / Neon config routing and AlphaEvolve UI disclosures."""
+    cfg = get_config()
+    assert cfg.model_name == "gemini-4-hydrogen"
+    assert cfg.reasoning_model_name == "gemini-4-neon"
+
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    index_html = (static_dir / "index.html").read_text(encoding="utf-8")
+    studio_html = (static_dir / "studio.html").read_text(encoding="utf-8")
+    studio_js = (static_dir / "studio.js").read_text(encoding="utf-8")
+    how_html = (static_dir / "how-it-works.html").read_text(encoding="utf-8")
+    how_js = (static_dir / "how-it-works.js").read_text(encoding="utf-8")
+
+    # Quiet model routing labels in index.html
+    assert "gemini-4-hydrogen" in index_html
+    assert "gemini-4-neon" in index_html
+
+    # Studio uses Gemini 4 Hydrogen / Neon, explains AlphaEvolve cleanly, and fixes button copy
+    assert 'id="alphaEvolveWhyDisclosure"' in studio_html
+    assert 'id="gemini4ModelOptions"' in studio_html
+    assert 'value="gemini-4-hydrogen"' in studio_html
+    assert 'value="gemini-4-neon"' in studio_html
+    assert "gemini-3.8-flash" not in studio_html
+    assert "gemini-3.8-flash" not in studio_js
+    assert 'Click "Run Benchmark"' not in studio_html
+    assert "Auto-Tune Retrieval Settings" not in studio_html
+
+    # Guide page documents Gemini 4 Hydrogen, Gemini 4 Neon, and AlphaEvolve
+    assert "Gemini 4 Hydrogen" in how_html
+    assert "Gemini 4 Neon" in how_html
+    assert "AlphaEvolve Retrieval Tuning" in how_html
+    assert "gemini-4-neon" in how_js
+    for name, text in (
+        ("index.html", index_html),
+        ("studio.html", studio_html),
+        ("studio.js", studio_js),
+        ("how-it-works.html", how_html),
+        ("how-it-works.js", how_js),
+    ):
+        lower = text.lower()
+        assert "gemini 3.8" not in lower, f"Legacy 'Gemini 3.8' found in {name}"
+        assert "gemini-3.8" not in lower, f"Legacy 'gemini-3.8' found in {name}"
+
+
+def test_studio_three_pane_lifecycle_ia_and_guide_redesign() -> None:
+    """Verify the 3-view Running-System Master-Detail IA (Memories default with Tree|Graph + Proposals,
+    Sessions with center transcript + right proposals + Open in Chat, Benchmarks with trajectory eval cases),
+    single left-rail navigation (zero duplicate topbar strip or Labs dropdown), and linked right inspector.
+    """
+    static_dir = Path(__file__).resolve().parent.parent / "src" / "ui_service" / "static"
+    studio_html = (static_dir / "studio.html").read_text(encoding="utf-8")
+    studio_js = (static_dir / "studio.js").read_text(encoding="utf-8")
+    app_js = (static_dir / "app.js").read_text(encoding="utf-8")
+    css_text = (static_dir / "style.css").read_text(encoding="utf-8")
+
+    # 1. Unified Top-Bar Lifecycle Nav (Chat · Sessions · Memories · Optimize · Settings) + Top-Bar Scope Switcher + Context-Specific Left Pane
+    assert 'data-top-tab="sessions"' in studio_html
+    assert 'data-top-tab="memories"' in studio_html
+    assert 'data-top-tab="optimize"' in studio_html
+    assert 'data-top-tab="settings"' in studio_html
+    assert 'id="scopeMenuPopover"' in studio_html
+    assert 'id="scopeIdsDisclosure"' in studio_html
+    assert 'id="studioAdminNavSection"' in studio_html
+    assert 'data-rail-context="memories"' in studio_html
+    assert 'data-rail-context="sessions"' in studio_html
+    assert 'data-rail-context="settings"' in studio_html
+    assert 'data-active-tab="memories"' in studio_html
+    assert 'class="studio-command-bar"' not in studio_html
+    assert 'class="studio-lifecycle-strip"' not in studio_html
+    assert 'id="workflowStageDropdown"' not in studio_html
+    assert 'data-workspace="workspace-playground"' not in studio_html
+
+    # 2. Pane 2 (Center Workbench): Memories default active with Tree|Graph toggle, Sessions with center log + Open in Chat, Benchmarks with Eval Cases
+    assert 'class="studio-workspace-view active-workspace" id="workspace-tree"' in studio_html
+    assert 'id="wsMemoriesViewTreeBtn"' in studio_html
+    assert 'id="wsMemoriesViewGraphBtn"' in studio_html
+    assert 'id="wsTreeProposalsSection"' in studio_html
+    assert 'id="wsTreeGraphContainer"' in studio_html
+    assert 'id="wsSessionLogViewer"' in studio_html
+    assert 'id="wsSessionOpenInChatBtn"' in studio_html
+    assert 'id="wsEvalCasesTableBody"' in studio_html
+
+    # 3. Pane 3 (Right Context Inspector -> Redesigned Guide): Zero double numbering, zero legacy Stage 3 header or emoji pills
+    assert "How Memory Flows" in studio_html
+    assert "Starter Data" in studio_html
+    assert "Try a Prompt" in studio_html
+    assert "Verification Scenarios" in studio_html
+    for removed_guide_clutter in (
+        "<strong>1. Load Sessions:</strong>",
+        "<strong>2. Author Rules:</strong>",
+        "3. Stage 3 Sample Verification Scenarios",
+        "⚡ Scenario: Python Tooling",
+        "🛡️ Scenario: Security Guardrail",
+        "📦 Scenario: Agent Format",
+    ):
+        assert removed_guide_clutter not in studio_html, f"Removed guide clutter '{removed_guide_clutter}' still present"
+
+    # 4. Interactive JS flows: Provenance Graph, Memory Inspector + Quick Trace, Session Log + Open in Chat, Eval Cases, and Chat ?session_id= deep-link
+    assert "renderWsMemoriesGraph" in studio_js
+    assert "inspectWsMemoryNode" in studio_js
+    assert "runInspectorQuickTrace" in studio_js
+    assert "renderSessionLogCenter" in studio_js
+    assert "renderWsEvalCasesTable" in studio_js
+    assert "inspectorExtractSessionBtn" in studio_js
+    assert "inspectorOpenTreeFromSessionBtn" in studio_js
+    assert "ws-tree-promote-node-btn" in studio_js
+    assert "Promote →" in studio_js
+    assert "studioAdminNavSection" in studio_js
+    assert "after_value: memoryValue" in studio_js
+    assert "hydrateSessionFromUrlParam" in app_js
+    assert 'params.get("session_id")' in app_js
+
+    # Verify /api/studio/tree/stage preserves after_value and source_session_id
+    client = TestClient(api)
+    stage_res = client.post(
+        "/api/studio/tree/stage",
+        json={
+            "scope_type": "USER",
+            "scope_id": "user:ia-verify",
+            "memory_key": "quick_editor_stage_check",
+            "after_value": "uv run pytest",
+            "category": "technical",
+            "natural_language_belief": "quick_editor_stage_check: uv run pytest",
+            "source_session_id": "sess-ia-verify",
+            "confidence": 0.95,
+        },
+    )
+    assert stage_res.status_code == 200
+    staged_item = stage_res.json().get("staged_commit") or stage_res.json().get("staged") or {}
+    assert staged_item.get("after_value") == "uv run pytest"
+    if staged_item.get("staged_id"):
+        client.post("/api/studio/tree/discard", json={"staged_id": staged_item["staged_id"]})
+
+    # 5. CSS rules for Tree|Graph toggle, Provenance Graph, Session Log, and Shared Inspector
+    for selector in (
+        ".guide-section-card",
+        ".guide-flow-list",
+        ".guide-step-btn",
+        ".guide-btn-grid",
+        ".guide-action-row",
+        ".memories-view-toggle",
+        ".provenance-graph-grid",
+        ".ws-session-turn-row",
+        ".inspector-trace-box",
+    ):
+        assert selector in css_text, f"Missing CSS selector {selector} in style.css"
+
+
+def test_activity_pane_bounded_scroll_and_pagination() -> None:
+    """Verify the Stage 2 Activity pane is bounded vertically, paginates rows, and clamps long messages."""
+    static_dir = Path("src/ui_service/static")
+    index_html = (static_dir / "index.html").read_text(encoding="utf-8")
+    style_css = (static_dir / "style.css").read_text(encoding="utf-8")
+    app_js = (static_dir / "app.js").read_text(encoding="utf-8")
+
+    # 1. HTML bounded wrapper & pagination footer
+    assert 'class="table-wrapper activity-table-wrapper"' in index_html
+    for elem_id in (
+        'id="activityTableFooter"',
+        'id="activityCountStatus"',
+        'id="activityShowMoreBtn"',
+        'id="activityCollapseBtn"',
+    ):
+        assert elem_id in index_html, f"Missing {elem_id} in index.html"
+
+    # 2. CSS bounded scroll container & sticky table header
+    assert ".activity-table-wrapper" in style_css
+    assert "overflow-y: auto;" in style_css
+    assert ".activity-table-wrapper .data-table thead th" in style_css
+    assert "position: sticky;" in style_css
+    assert ".activity-msg-cell" in style_css
+    assert ".activity-msg-text" in style_css
+    assert "white-space: pre-wrap;" in style_css
+    assert ".activity-msg-text.is-expanded" in style_css
+    assert ".activity-msg-toggle" in style_css
+
+    # 3. JS pagination windowing, XSS escaping & per-row message clamping
+    assert "ACTIVITY_PAGE_SIZE = 50" in app_js
+    assert "ACTIVITY_MSG_PREVIEW_CHARS = 240" in app_js
+    assert "filtered.slice(0, visibleLogLimit)" in app_js
+    assert "formatActivityPreview" in app_js
+    assert "activity-msg-toggle" in app_js
+    assert "escapeHtml(targetSession)" in app_js
+    assert "escapeHtml(eventLabel)" in app_js
+    assert "wrapper.scrollTop = 0" in app_js
+
+
+def test_interactive_memory_graph_atom_and_cards_modes() -> None:
+    """Verify the Memories Graph implements interactive Atom (orbital/force) and Cards (layered DAG) modes with view options."""
+    static_dir = Path("src/ui_service/static")
+    studio_html = (static_dir / "studio.html").read_text(encoding="utf-8")
+    studio_js = (static_dir / "studio.js").read_text(encoding="utf-8")
+    graph_js = (static_dir / "memory_graph.js").read_text(encoding="utf-8")
+    style_css = (static_dir / "style.css").read_text(encoding="utf-8")
+
+    # 1. Script wiring
+    assert "memory_graph.js" in studio_html
+    assert "window.MemoryGraph.MemoryGraphController" in studio_js
+
+    # 2. Core layout & interaction primitives in memory_graph.js
+    for symbol in (
+        "buildMemoryGraphData",
+        "computeAtomLayout",
+        "computeCardsLayout",
+        "computeFitTransform",
+        "MemoryGraphController",
+        'data-graph-visual="atom"',
+        'data-graph-visual="cards"',
+        'id="esGraphViewPopover"',
+        'id="esGraphShowRings"',
+        'id="esGraphShowHubs"',
+        'data-label-density="auto"',
+        'data-label-density="minimal"',
+        'data-label-density="all"',
+        'id="esGraphZoomInBtn"',
+        'id="esGraphZoomOutBtn"',
+        'id="esGraphFitBtn"',
+        'id="esGraphResetBtn"',
+    ):
+        assert symbol in graph_js, f"Missing {symbol} in memory_graph.js"
+
+    # 3. CSS styles for canvas stage, floating toolbar, popover, and zoom controls
+    for selector in (
+        ".memory-graph-stage",
+        ".memory-graph-canvas",
+        ".graph-toolbar",
+        ".graph-view-popover",
+        ".atom-controls",
+        ".atom-tip",
+    ):
+        assert selector in style_css, f"Missing CSS selector {selector} in style.css"
+
+    # 4. Static asset served via FastAPI
+    client = TestClient(api)
+    res = client.get("/memory_graph.js")
+    assert res.status_code == 200
+    assert "computeAtomLayout" in res.text
+
+
+def test_benchmarks_intent_outcomes_and_flush_sticky_toolbar() -> None:
+    """Verify Benchmarks renders EvalCase intent/expected outcomes, deduplicates duplicates, all tabs explain purpose, and sticky toolbar has zero top bleed."""
+    static_dir = Path("src/ui_service/static")
+    studio_html = (static_dir / "studio.html").read_text(encoding="utf-8")
+    studio_js = (static_dir / "studio.js").read_text(encoding="utf-8")
+    style_css = (static_dir / "style.css").read_text(encoding="utf-8")
+
+    # 1. Benchmarks table columns focus on Intent & Prompt + What Should Happen
+    assert "<th>Intent &amp; Prompt</th>" in studio_html
+    assert "<th>What Should Happen</th>" in studio_html
+    assert "<th>Type / Source</th>" in studio_html
+
+    # 2. Every workspace tab has a concise one-line .ws-purpose orientation
+    assert studio_html.count('class="ws-purpose"') >= 10
+
+    # 3. studio.js reads real EvalCase fields (query_text, expected_facts, forbidden_facts, expected_winning_scope, scenario_type) and deduplicates
+    for token in (
+        "formatEvalCaseDisplay",
+        "c.query_text",
+        "c.expected_facts",
+        "c.forbidden_facts",
+        "c.expected_winning_scope",
+        "c.scenario_type",
+        "dedupeKey",
+        "unique ·",
+    ):
+        assert token in studio_js, f"Missing {token} in studio.js"
+
+    # 4. Flush sticky command bar prevents scrolled workspace titles from peeking above it
+    assert "padding: 0 16px 28px 16px;" in style_css
+    assert "scrollbar-gutter: stable;" in style_css
+    assert "overscroll-behavior: contain;" in style_css
+    assert "margin: 0 -16px 4px -16px;" in style_css
+    assert "border-radius: 0;" in style_css
+    assert "#wsEvalCasesTable" in style_css
+
+
+def test_left_nav_font_and_theme_consistency() -> None:
+    """Verify consistent Plus Jakarta Sans / JetBrains Mono typography, zero undefined CSS tokens, and light/dark theme parity across left nav and Memories graph."""
+    import re
+
+    static_dir = Path("src/ui_service/static")
+    style_css = (static_dir / "style.css").read_text(encoding="utf-8")
+    app_js = (static_dir / "app.js").read_text(encoding="utf-8")
+    memory_graph_js = (static_dir / "memory_graph.js").read_text(encoding="utf-8")
+
+    # 1. Zero undefined CSS custom properties in style.css
+    defined_vars = set(re.findall(r"(--[a-zA-Z0-9_-]+)\s*:", style_css))
+    used_vars = re.findall(r"var\((--[a-zA-Z0-9_-]+)", style_css)
+    undefined_vars = sorted({v for v in used_vars if v not in defined_vars})
+    assert undefined_vars == [], f"Undefined CSS variables in style.css: {undefined_vars}"
+
+    # 2. Form controls inherit Plus Jakarta Sans and code elements use JetBrains Mono
+    assert "button,\ninput,\nselect,\ntextarea {\n  font-family: inherit;\n}" in style_css
+    assert "code,\npre,\nkbd {\n  font-family: var(--font-mono);\n}" in style_css
+
+    # 3. Left nav headers, section labels, memory nodes, badges, and active states use Observatory tokens consistently
+    assert ".nav-title,\n.left-nav-title,\n.rail-section-title {" in style_css
+    assert "background: var(--color-primary-soft);" in style_css
+    for selector_re in (
+        r"\.left-nav-item\.active\s*\{[^}]+\}",
+        r"\.studio-workspace-nav-btn\.active\s*\{[^}]+\}",
+    ):
+        match = re.search(selector_re, style_css)
+        assert match and "var(--color-primary-soft)" in match.group(0)
+        assert match and "var(--color-primary)" in match.group(0)
+
+    for selector_re in (
+        r"\.left-memory-node\s*\{[^}]+\}",
+        r"\.left-memory-node:hover\s*\{[^}]+\}",
+        r"\.left-memory-node\.active\s*\{[^}]+\}",
+        r"\.left-nav-item \.nav-tool-icon\s*\{[^}]+\}",
+        r"\.scope-badge-team,\s*\.badge-teal\s*\{[^}]+\}",
+        r"\.scope-badge-user,\s*\.badge-slate\s*\{[^}]+\}",
+    ):
+        match = re.search(selector_re, style_css)
+        assert match, f"Missing selector block for {selector_re}"
+        block = match.group(0)
+        for bad_hex in ("#ffffff", "#f8fafc", "#eff6ff", "#f0fdfa", "#f1f5f9", "rgba(28, 61, 90"):
+            assert bad_hex not in block, f"Hardcoded light color {bad_hex} found in {selector_re}"
+
+    left_mem_key = re.search(r"\.left-mem-node-key\s*\{[^}]+\}", style_css)
+    assert left_mem_key and "font-family: var(--font-mono);" in left_mem_key.group(0)
+
+    # 4. All HTML pages share color-scheme meta, pre-paint theme restore, and unified style.css?v=3.9
+    for page in ("index.html", "studio.html", "how-it-works.html", "login.html"):
+        html = (static_dir / page).read_text(encoding="utf-8")
+        assert '<meta name="color-scheme" content="light dark">' in html, f"Missing color-scheme meta in {page}"
+        assert 'localStorage.getItem("sheep-theme") === "dark"' in html, f"Missing pre-paint theme restore in {page}"
+        assert 'href="style.css?v=3.9"' in html, f"Outdated style.css version in {page}"
+
+    # 5. app.js binds theme toggle once using sheep-theme (no duplicate electric_sheep_theme double-toggle)
+    assert "electric_sheep_theme" not in app_js
+    assert app_js.count('document.querySelectorAll("[data-toggle-theme]").forEach') == 2  # sync + single click handler
+
+    # 6. memory_graph.js uses Plus Jakarta Sans and adapts nodes, edges, and legend to dark mode
+    assert '"Inter"' not in memory_graph_js
+    assert '"Plus Jakarta Sans"' in memory_graph_js
+    assert "getThemePalette()" in memory_graph_js
+    assert "DARK_NODE_PALETTE" in memory_graph_js
+    assert "syncLegendColors()" in memory_graph_js
+    assert 'attributeFilter: ["data-theme"]' in memory_graph_js
+
+
+def test_studio_context_picker_and_inline_tier_filter() -> None:
+    """Verify Top-Bar Active Context Picker (Working as dropdowns) and inline Memories tier filter."""
+    static_dir = Path("src/ui_service/static")
+    studio_html = (static_dir / "studio.html").read_text(encoding="utf-8")
+    studio_js = (static_dir / "studio.js").read_text(encoding="utf-8")
+    graph_js = (static_dir / "memory_graph.js").read_text(encoding="utf-8")
+
+    # 1. Top-Bar Active Context Picker uses select dropdowns + signed-in readout, without dead telemetry
+    popover_start = studio_html.index('id="scopeMenuPopover"')
+    popover_end = studio_html.index('id="cmdBarStagedSyncBadge"')
+    popover_block = studio_html[popover_start:popover_end]
+    assert 'id="activeSignedInUserBadge"' in popover_block
+    assert '<select id="teamIdInput"' in popover_block
+    assert '<select id="agentIdInput"' in popover_block
+    assert 'id="contextManageScopesBtn"' in popover_block
+    assert 'id="scopeIdsDisclosure"' in popover_block
+    assert 'id="scopeIdsDisclosure" open' not in popover_block
+    assert 'id="railMemoryCountText"' not in studio_html
+    assert "0 mem · 0 evals" not in studio_html
+    assert 'id="leftScopePillsContainer"' not in popover_block
+
+    # 2. Inline Memories tier filter sits inside #wsMemoriesTreeCard with All / Org / Team / Agent / Personal
+    tree_card_start = studio_html.index('id="wsMemoriesTreeCard"')
+    tree_card_end = studio_html.index('id="wsTreeProposalsSection"')
+    tree_toolbar_block = studio_html[tree_card_start:tree_card_end]
+    assert 'id="leftScopePillsContainer"' in tree_toolbar_block
+    for label in ("All", "Org", "Team", "Agent", "Personal"):
+        assert label in tree_toolbar_block
+
+    # 3. JS wires entity dropdown population, scoped pill selectors, and tier filtering across Tree + Graph
+    for token in (
+        "populateContextEntitySelects",
+        "getActiveContextFilters",
+        "scopeFilter",
+        "visibleTiers",
+    ):
+        assert token in studio_js or token in graph_js
+
+    # Scope pill selector must be scoped to #leftScopePillsContainer so it does not collide with Jobs category pills
+    assert 'querySelectorAll("#leftScopePillsContainer .left-scope-pill[data-scope-filter]")' in studio_js
+    assert 'querySelectorAll(".left-scope-pill")' not in studio_js
+
+    # applyScopesPayload must not overwrite the Memories toolbar's leftCountScope* counts
+    apply_start = studio_js.index("function applyScopesPayload(data)")
+    apply_end = studio_js.index("function renderScopeMemoryCards()")
+    apply_block = studio_js[apply_start:apply_end]
+    assert "leftCountScope" not in apply_block
+
+    # 4. API endpoints normalize canonical scope IDs, tree memory values, and optional context filtering
+    client = TestClient(api)
+    ent_res = client.get("/api/studio/entities")
+    assert ent_res.status_code == 200
+    ent_json = ent_res.json()
+    assert "authenticated_email" in ent_json
+    scope_ids = {e["scope_id"] for e in ent_json["entities"]}
+    assert "team:platform-ml" in scope_ids
+    assert "agent:code-reviewer-agent" in scope_ids
+
+    full_tree_res = client.get("/api/studio/tree")
+    assert full_tree_res.status_code == 200
+    full_tree = full_tree_res.json()
+    org_nodes = full_tree["tree"]["ORG"]
+    assert any(n["memory_key"] == "hardware_offload" and n["memory_value"] for n in org_nodes)
+    assert len(full_tree["tree"]["TEAM"]) >= 1
+
+    filtered_tree_res = client.get("/api/studio/tree?team_id=team:robotics-cleanroom")
+    assert filtered_tree_res.status_code == 200
+    filtered_tree = filtered_tree_res.json()
+    assert all(n["scope_id"] == "team:robotics-cleanroom" for n in filtered_tree["tree"]["TEAM"])
+
+    # /api/studio/tree?user_id= behaves identically with and without user: prefix
+    user_prefixed = client.get("/api/studio/tree?user_id=user:developer").json()["tree"]["USER"]
+    user_bare = client.get("/api/studio/tree?user_id=developer").json()["tree"]["USER"]
+    assert len(user_prefixed) >= 1
+    assert user_prefixed == user_bare
+
+
+
+
+
+
+
 
 
 
